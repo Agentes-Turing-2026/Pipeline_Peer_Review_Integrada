@@ -1,0 +1,9 @@
+# Dependências do pipeline multiagente integrado.
+#
+# Modo Mock (offline) precisa apenas de:
+pydantic>=2.0
+python-dotenv>=1.0
+#
+# Modo API (chamadas reais ao Gemini) também precisa de:
+google-adk>=0.2
+google-genai>=0.3

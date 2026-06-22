@@ -1,0 +1,27 @@
+{
+  "revisor": "statistician",
+  "solidez_tecnica": {
+    "nota": 3,
+    "justificativa": "O desenho experimental é adequado e os testes estatísticos escolhidos (ANOVA de duas vias com correção de Bonferroni) são apropriados para o tipo de dado. Contudo, o tamanho amostral (n=24) limita o poder estatístico para os efeitos de interação relatados."
+  },
+  "originalidade": {
+    "nota": 2,
+    "justificativa": "A abordagem combina técnicas já consolidadas na literatura. A contribuição incremental existe, mas não há um diferencial metodológico claro em relação aos trabalhos de Silva et al. (2023) e Tanaka et al. (2024)."
+  },
+  "significancia": {
+    "nota": 3,
+    "justificativa": "Os resultados têm relevância prática para a área clínica e podem informar protocolos de tratamento, ainda que a generalização dependa de validação em coortes maiores."
+  },
+  "clareza": {
+    "nota": 4,
+    "justificativa": "O texto é bem organizado, as figuras são autoexplicativas e a seção de métodos descreve os procedimentos com detalhe suficiente para reprodução."
+  },
+  "nota_geral": {
+    "nota": 3,
+    "justificativa": "Aceitar com ressalvas: a solidez técnica e a clareza são fortes, mas a originalidade limitada e o tamanho amostral reduzido exigem que os autores ampliem a amostra ou justifiquem melhor o poder estatístico antes da aceitação definitiva."
+  },
+  "confianca": {
+    "nota": 3,
+    "justificativa": "O artigo está dentro da minha especialidade (bioestatística) e os pontos avaliados são objetivos e verificáveis no texto, o que me deixa confiante na avaliação."
+  }
+}

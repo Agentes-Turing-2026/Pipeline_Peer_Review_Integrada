@@ -1,0 +1,32 @@
+{
+  "verdict": "Minor Revision",
+  "weighted_score": 7.2,
+  "individual_scores": {
+    "statistician": 7,
+    "domain_expert": 7,
+    "copyeditor": 9
+  },
+  "summary": "Artigo tecnicamente sólido e bem escrito, com originalidade limitada e amostra reduzida; aceitável com pequenas revisões.",
+  "all_criticisms": [
+    {
+      "source": "statistician",
+      "type": "weakness",
+      "text": "Tamanho amostral (n=24) limita o poder estatístico."
+    },
+    {
+      "source": "statistician",
+      "type": "critical",
+      "text": "Ausência de validação externa e de intervalos de confiança."
+    },
+    {
+      "source": "domain_expert",
+      "type": "weakness",
+      "text": "Contribuição incremental sem diferencial metodológico claro."
+    }
+  ],
+  "recommendations_to_authors": [
+    "Ampliar a amostra ou justificar o poder estatístico.",
+    "Incluir validação externa.",
+    "Reportar intervalos de confiança."
+  ]
+}

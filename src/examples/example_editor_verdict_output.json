@@ -1,0 +1,32 @@
+{
+  "decisao": 3,
+  "justificativa": "Os pareceres convergem para uma contribuição tecnicamente sólida e bem escrita, porém com originalidade limitada e amostra reduzida. A decisão de aceitar com ressalvas reflete a necessidade de ampliar a validação antes da aceitação definitiva.",
+  "sintese": "Artigo propõe uma rede leve para triagem de retinopatia diabética, com bons resultados de eficiência e clareza, mas validado em um único hospital e sem intervalos de confiança.",
+  "notas_por_revisor": {
+    "statistician": 3,
+    "domain_expert": 3,
+    "copyeditor": 4
+  },
+  "criticas": [
+    {
+      "revisor": "statistician",
+      "tipo": "fraqueza",
+      "texto": "Tamanho amostral (n=24) limita o poder estatístico dos efeitos de interação relatados."
+    },
+    {
+      "revisor": "statistician",
+      "tipo": "critica",
+      "texto": "Ausência de intervalos de confiança e de validação externa compromete a generalização dos resultados."
+    },
+    {
+      "revisor": "domain_expert",
+      "tipo": "fraqueza",
+      "texto": "A contribuição é incremental frente a Silva et al. (2023) e Tanaka et al. (2024), sem diferencial metodológico claro."
+    }
+  ],
+  "recomendacoes_aos_autores": [
+    "Ampliar a amostra ou justificar formalmente o poder estatístico adotado.",
+    "Incluir validação externa em uma coorte de outro hospital.",
+    "Reportar intervalos de confiança para as métricas principais."
+  ]
+}

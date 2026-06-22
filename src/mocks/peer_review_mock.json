@@ -1,0 +1,110 @@
+{
+  "_comment": "Mock OFFLINE para o pipeline de peer review. Dados FICTÍCIOS, porém válidos contra os schemas oficiais (ReviewSchema, CrossReviewSchema, EditorVerdictSchema). Permite rodar `python pipeline.py mock` de ponta a ponta sem internet nem GOOGLE_API_KEY. Cada slice (phase1_reviews / phase2_cross_reviews / phase3_verdict) é lido pela fase correspondente e revalidado.",
+  "phase1_reviews": {
+    "statistician": {
+      "revisor": "statistician",
+      "solidez_tecnica": { "nota": 3, "justificativa": "O desenho experimental é adequado e os testes escolhidos são apropriados. Contudo, o tamanho amostral (n=24) limita o poder estatístico dos efeitos de interação." },
+      "originalidade": { "nota": 2, "justificativa": "A abordagem combina técnicas já consolidadas. A contribuição incremental existe, mas sem diferencial metodológico claro." },
+      "significancia": { "nota": 3, "justificativa": "Os resultados têm relevância prática para a área clínica. A generalização depende de validação em coortes maiores." },
+      "clareza": { "nota": 4, "justificativa": "O texto é bem organizado e a seção de métodos descreve os procedimentos com detalhe suficiente para reprodução. As figuras são autoexplicativas." },
+      "nota_geral": { "nota": 3, "justificativa": "Aceitar com ressalvas: solidez e clareza fortes, mas amostra reduzida exige ampliação antes da aceitação definitiva." },
+      "confianca": { "nota": 3, "justificativa": "O artigo está dentro da minha especialidade e os pontos avaliados são objetivos e verificáveis no texto." }
+    },
+    "domain_expert": {
+      "revisor": "domain_expert",
+      "solidez_tecnica": { "nota": 3, "justificativa": "Os métodos são razoáveis e bem fundamentados na literatura da área. A descrição permite acompanhar o raciocínio central." },
+      "originalidade": { "nota": 3, "justificativa": "A combinação proposta tem mérito e endereça uma lacuna real. A novidade é moderada frente ao estado da arte recente." },
+      "significancia": { "nota": 3, "justificativa": "O problema é relevante para a triagem clínica e o impacto potencial é concreto. A relevância cresce se confirmada em outros centros." },
+      "clareza": { "nota": 3, "justificativa": "A estrutura é clara, embora a discussão pudesse aprofundar comparações com trabalhos correlatos. A leitura é fluida." },
+      "nota_geral": { "nota": 3, "justificativa": "Aceitar com ressalvas: contribuição sólida, mas a discussão frente ao estado da arte precisa ser reforçada." },
+      "confianca": { "nota": 2, "justificativa": "Parte das afirmações metodológicas está fora do meu núcleo de especialidade, o que reduz moderadamente minha confiança." }
+    },
+    "copyeditor": {
+      "revisor": "copyeditor",
+      "solidez_tecnica": { "nota": 2, "justificativa": "Não avalio o mérito estatístico, mas há inconsistências na nomenclatura de variáveis entre seções. Isso dificulta a verificação por terceiros." },
+      "originalidade": { "nota": 2, "justificativa": "Do ponto de vista textual, a contribuição não é destacada com clareza no resumo. O diferencial fica diluído na introdução." },
+      "significancia": { "nota": 2, "justificativa": "A relevância é afirmada, mas não é amarrada a evidências no próprio texto. Faltam conexões explícitas entre objetivos e conclusões." },
+      "clareza": { "nota": 4, "justificativa": "A gramática e a ortografia estão corretas e o tom acadêmico é consistente. A coesão entre parágrafos é boa." },
+      "nota_geral": { "nota": 2, "justificativa": "Rejeitar com ressalvas: a escrita é competente, mas problemas de consistência terminológica e de destaque da contribuição precisam ser resolvidos." },
+      "confianca": { "nota": 3, "justificativa": "As questões que avalio (gramática, coesão, consistência) são diretamente verificáveis no texto, o que me deixa confiante." }
+    }
+  },
+  "phase2_cross_reviews": {
+    "statistician": {
+      "revisor": "statistician",
+      "parecer_revisado": {
+        "revisor": "statistician",
+        "solidez_tecnica": { "nota": 3, "justificativa": "O desenho experimental é adequado e os testes escolhidos são apropriados. Contudo, o tamanho amostral (n=24) limita o poder estatístico dos efeitos de interação." },
+        "originalidade": { "nota": 2, "justificativa": "A abordagem combina técnicas já consolidadas. A contribuição incremental existe, mas sem diferencial metodológico claro." },
+        "significancia": { "nota": 3, "justificativa": "Os resultados têm relevância prática para a área clínica. A generalização depende de validação em coortes maiores." },
+        "clareza": { "nota": 4, "justificativa": "O texto é bem organizado e a seção de métodos descreve os procedimentos com detalhe suficiente para reprodução. As figuras são autoexplicativas." },
+        "nota_geral": { "nota": 3, "justificativa": "Aceitar com ressalvas: solidez e clareza fortes, mas amostra reduzida exige ampliação antes da aceitação definitiva." },
+        "confianca": { "nota": 3, "justificativa": "O artigo está dentro da minha especialidade e os pontos avaliados são objetivos e verificáveis no texto." }
+      },
+      "mudou_posicao": false,
+      "mudancas": [],
+      "resposta_aos_pares": "Considerei o argumento do copyeditor sobre a consistência terminológica, mas isso não altera minha avaliação estatística. Mantenho minhas notas: o limite central continua sendo o tamanho amostral."
+    },
+    "domain_expert": {
+      "revisor": "domain_expert",
+      "parecer_revisado": {
+        "revisor": "domain_expert",
+        "solidez_tecnica": { "nota": 3, "justificativa": "Os métodos são razoáveis e bem fundamentados na literatura da área. A descrição permite acompanhar o raciocínio central." },
+        "originalidade": { "nota": 2, "justificativa": "Após o argumento do estatístico de que as técnicas já estão consolidadas e sem diferencial metodológico, revejo minha nota: a novidade é menor do que eu havia considerado." },
+        "significancia": { "nota": 3, "justificativa": "O problema é relevante para a triagem clínica e o impacto potencial é concreto. A relevância cresce se confirmada em outros centros." },
+        "clareza": { "nota": 3, "justificativa": "A estrutura é clara, embora a discussão pudesse aprofundar comparações com trabalhos correlatos. A leitura é fluida." },
+        "nota_geral": { "nota": 3, "justificativa": "Aceitar com ressalvas: contribuição sólida, mas a discussão frente ao estado da arte precisa ser reforçada." },
+        "confianca": { "nota": 2, "justificativa": "Parte das afirmações metodológicas está fora do meu núcleo de especialidade, o que reduz moderadamente minha confiança." }
+      },
+      "mudou_posicao": true,
+      "mudancas": [
+        {
+          "criterio": "originalidade",
+          "nota_anterior": 3,
+          "nota_nova": 2,
+          "argumento_decisivo": "O estatístico apontou que a abordagem apenas combina técnicas já consolidadas, sem um diferencial metodológico em relação aos trabalhos citados.",
+          "justificativa": "Esse ponto expôs que eu havia superestimado a novidade: a contribuição é mais incremental do que original, então reduzo a nota de 3 para 2."
+        }
+      ],
+      "resposta_aos_pares": "Acato o argumento do estatístico sobre a originalidade limitada e ajusto minha nota. Rejeito, porém, a leitura mais dura do copyeditor sobre significância: a relevância clínica está suficientemente fundamentada no texto."
+    },
+    "copyeditor": {
+      "revisor": "copyeditor",
+      "parecer_revisado": {
+        "revisor": "copyeditor",
+        "solidez_tecnica": { "nota": 2, "justificativa": "Não avalio o mérito estatístico, mas há inconsistências na nomenclatura de variáveis entre seções. Isso dificulta a verificação por terceiros." },
+        "originalidade": { "nota": 2, "justificativa": "Do ponto de vista textual, a contribuição não é destacada com clareza no resumo. O diferencial fica diluído na introdução." },
+        "significancia": { "nota": 2, "justificativa": "A relevância é afirmada, mas não é amarrada a evidências no próprio texto. Faltam conexões explícitas entre objetivos e conclusões." },
+        "clareza": { "nota": 4, "justificativa": "A gramática e a ortografia estão corretas e o tom acadêmico é consistente. A coesão entre parágrafos é boa." },
+        "nota_geral": { "nota": 2, "justificativa": "Rejeitar com ressalvas: a escrita é competente, mas problemas de consistência terminológica e de destaque da contribuição precisam ser resolvidos." },
+        "confianca": { "nota": 3, "justificativa": "As questões que avalio (gramática, coesão, consistência) são diretamente verificáveis no texto, o que me deixa confiante." }
+      },
+      "mudou_posicao": false,
+      "mudancas": [],
+      "resposta_aos_pares": "O domain_expert defende a significância como bem fundamentada, mas continuo vendo lacunas textuais entre objetivos e conclusões. Mantenho minhas notas; minha discordância é sobre o texto, não sobre o mérito científico."
+    }
+  },
+  "phase3_verdict": {
+    "decisao": 3,
+    "justificativa": "Dois dos três revisores convergem para 'Aceitar com ressalvas' (nota geral 3), enquanto o copyeditor recomenda 'Rejeitar com ressalvas' por problemas textuais que são corrigíveis, não bloqueantes. Como não há problema crítico insanável e a solidez metodológica se sustenta, a decisão é aceitar com ressalvas, condicionada à revisão dos pontos levantados.",
+    "sintese": "O artigo propõe uma rede leve para triagem de retinopatia diabética, com método sólido e boa clareza, porém originalidade limitada e amostra reduzida. As ressalvas são endereçáveis em uma rodada de revisão.",
+    "notas_por_revisor": {
+      "statistician": 3,
+      "domain_expert": 3,
+      "copyeditor": 2
+    },
+    "criticas": [
+      { "revisor": "statistician", "tipo": "fraqueza", "texto": "Tamanho amostral (n=24) limita o poder estatístico dos efeitos de interação relatados." },
+      { "revisor": "statistician", "tipo": "fraqueza", "texto": "Originalidade limitada: a abordagem combina técnicas já consolidadas sem diferencial metodológico claro." },
+      { "revisor": "domain_expert", "tipo": "fraqueza", "texto": "A discussão dos resultados frente ao estado da arte precisa ser reforçada." },
+      { "revisor": "copyeditor", "tipo": "critica", "texto": "Inconsistências na nomenclatura de variáveis entre seções dificultam a verificação por terceiros." },
+      { "revisor": "copyeditor", "tipo": "fraqueza", "texto": "A contribuição não é destacada com clareza no resumo, ficando diluída na introdução." }
+    ],
+    "recomendacoes_aos_autores": [
+      "Ampliar a amostra ou justificar formalmente o poder estatístico adotado.",
+      "Padronizar a nomenclatura de variáveis em todas as seções.",
+      "Destacar explicitamente a contribuição no resumo e reforçar a discussão frente ao estado da arte.",
+      "Incluir validação externa em uma coorte de outro centro."
+    ]
+  }
+}

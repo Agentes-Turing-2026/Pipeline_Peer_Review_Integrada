@@ -1,0 +1,19 @@
+Título: Detecção Precoce de Retinopatia Diabética com uma Rede Neural Convolucional Leve em Imagens de Fundo de Olho
+
+Resumo
+A retinopatia diabética (RD) é uma das principais causas de cegueira evitável em adultos. Propomos a LightRetinaNet, uma rede neural convolucional compacta (1,2 milhão de parâmetros) para classificar imagens de fundo de olho em "sem RD" e "com RD". Em um conjunto de 1.200 imagens coletadas em um único hospital, o modelo atingiu acurácia de 91,3% e sensibilidade de 88,7%. Os resultados sugerem que modelos leves podem viabilizar triagem automatizada em unidades de atenção primária com recursos computacionais limitados.
+
+1. Introdução
+A triagem de RD depende de oftalmologistas, recurso escasso em regiões remotas. Trabalhos anteriores usaram redes profundas (ResNet-50, Inception-v3) com bom desempenho, porém com alto custo computacional. A contribuição deste trabalho é mostrar que uma arquitetura enxuta pode aproximar esse desempenho a uma fração do custo, o que é relevante para implantação em dispositivos de baixo custo. Não encontramos na literatura revisada um modelo abaixo de 2 milhões de parâmetros avaliado especificamente para triagem binária de RD.
+
+2. Métodos
+Coletamos 1.200 imagens de fundo de olho de pacientes atendidos no Hospital X entre 2021 e 2022. As imagens foram rotuladas por um único oftalmologista como "sem RD" ou "com RD". Dividimos os dados em 80% para treino e 20% para teste de forma aleatória. A LightRetinaNet possui quatro blocos convolucionais seguidos de uma camada totalmente conectada. Treinamos por 50 épocas com otimizador Adam (taxa de aprendizado 0,001) e função de perda de entropia cruzada. Não foi utilizado conjunto de validação separado para ajuste de hiperparâmetros.
+
+3. Resultados
+No conjunto de teste (240 imagens), a LightRetinaNet obteve acurácia de 91,3%, sensibilidade de 88,7% e especificidade de 92,1%. A Tabela 1 compara o modelo com uma ResNet-50 treinada nos mesmos dados, que atingiu 93,0% de acurácia. O tempo de inferência por imagem foi de 12 ms em CPU. Não reportamos intervalos de confiança nem realizamos teste estatístico para a diferença de desempenho entre os modelos.
+
+4. Discussão
+Os resultados indicam que a LightRetinaNet alcança desempenho próximo ao de redes maiores com custo computacional muito menor. Isso favorece a triagem em campo. Reconhecemos como limitações o uso de dados de um único hospital, a rotulagem por um único especialista e a ausência de validação externa, o que pode comprometer a generalização. Trabalhos futuros devem incluir múltiplos centros e gradação de severidade da RD, além de uma análise estatística mais robusta das diferenças de desempenho.
+
+5. Conclusão
+Apresentamos um modelo leve e eficiente para triagem binária de retinopatia diabética. Embora os resultados sejam promissores, a validação em populações diversas ainda é necessária antes do uso clínico.

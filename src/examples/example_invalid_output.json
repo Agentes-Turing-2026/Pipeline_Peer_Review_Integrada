@@ -1,0 +1,26 @@
+{
+  "revisor": "domain_expert",
+  "solidez_tecnica": {
+    "nota": 3,
+    "justificativa": "Os métodos são razoáveis e bem fundamentados na literatura da área."
+  },
+  "originalidade": {
+    "nota": 5,
+    "justificativa": "Contribuição muito inovadora."
+  },
+  "significancia": {
+    "nota": 2,
+    "justificativa": "   "
+  },
+  "clareza": {
+    "nota": 3,
+    "justificativa": "Escrita clara e bem estruturada."
+  },
+  "nota_geral": {
+    "nota": 3,
+    "justificativa": "Aceitar com ressalvas."
+  },
+  "confianca": {
+    "nota": 0
+  }
+}

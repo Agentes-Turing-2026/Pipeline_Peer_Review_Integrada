@@ -1,0 +1,110 @@
+{
+  "_comentario": "Exemplo ILUSTRATIVO (escrito a mao, como example_valid_output.json) da saida da FASE 2 (leitura cruzada). Baseado nas notas da fase 1 em outputs/sample_run_output.json. Demonstra um revisor que MUDOU de posicao (statistician concede 'clareza' apos o argumento do copyeditor) e dois que RESISTIRAM (resistencia controlada, Du et al. 2023). Cada chave corresponde ao output_key gravado no state pelo agente da fase 2.",
+  "statistician_cross_review": {
+    "revisor": "statistician",
+    "parecer_revisado": {
+      "revisor": "statistician",
+      "solidez_tecnica": {
+        "nota": 2,
+        "justificativa": "Mantenho a nota: a ausencia de conjunto de validacao separado para ajuste de hiperparametros, a falta de intervalos de confianca e a ausencia de teste estatistico para comparar LightRetinaNet e ResNet-50 continuam sendo lacunas metodologicas centrais. Os argumentos dos colegas sobre o merito do modelo nao removem essas omissoes."
+      },
+      "originalidade": {
+        "nota": 3,
+        "justificativa": "Mantenho a nota: a proposta de uma CNN com 1,2 milhao de parametros para triagem binaria de RD, com a afirmacao de nao haver na literatura revisada modelo abaixo de 2 milhoes, confere novidade razoavel. Nenhum colega trouxe argumento que altere essa leitura."
+      },
+      "significancia": {
+        "nota": 3,
+        "justificativa": "Mantenho a nota: o problema de saude publica e relevante e o modelo leve tem potencial de impacto em atencao primaria, mas as limitacoes de generalizacao (dados de um unico hospital) reduzem o impacto clinico imediato. O argumento do domain_expert de significancia 'alta' nao me convence enquanto a validacao externa nao existir."
+      },
+      "clareza": {
+        "nota": 3,
+        "justificativa": "REVISEI de 2 para 3. Minha nota anterior penalizava a clareza por causa da falta de detalhe estatistico, mas o copyeditor argumentou, do ponto de vista textual, que a escrita e coesa, o tom academico e adequado e as limitacoes sao explicitamente reconhecidas na secao 4. Reconheco que clareza de escrita e completude estatistica sao dimensoes distintas; a primeira de fato merece 3."
+      },
+      "nota_geral": {
+        "nota": 2,
+        "justificativa": "Mantenho 'Rejeitar com ressalvas'. Embora eu tenha subido a clareza para 3, a solidez tecnica segue em 2 por omissoes estatisticas criticas (sem validacao, sem intervalos de confianca, sem teste de comparacao). Essas deficiencias exigem revisao substancial antes da aceitacao, entao a decisao geral nao muda."
+      },
+      "confianca": {
+        "nota": 3,
+        "justificativa": "Mantenho a confianca alta: como bioestatistico senior, as lacunas que apontei sao objetivas e verificaveis no texto, e a leitura dos colegas reforcou meu diagnostico metodologico em vez de o enfraquecer."
+      }
+    },
+    "mudou_posicao": true,
+    "mudancas": [
+      {
+        "criterio": "clareza",
+        "nota_anterior": 2,
+        "nota_nova": 3,
+        "argumento_decisivo": "O copyeditor argumentou que, do ponto de vista textual, a escrita e clara e coesa, o tom academico e adequado e as limitacoes sao explicitamente reconhecidas na secao 4 — separando clareza de ESCRITA de completude ESTATISTICA.",
+        "justificativa": "Eu havia misturado duas coisas: a falta de detalhe estatistico (que pertence a solidez tecnica) e a clareza do texto em si. O argumento do copyeditor me mostrou que a escrita, isoladamente, e boa; por isso subo clareza de 2 para 3, sem mexer na solidez tecnica."
+      }
+    ],
+    "resposta_aos_pares": "Acato o argumento do copyeditor sobre clareza textual e subo essa nota. Rejeito, porem, a leitura do domain_expert de que a significancia seria 'alta' e mantenho minha recomendacao geral de rejeitar com ressalvas: as omissoes estatisticas (validacao, intervalos de confianca, teste de comparacao) permanecem e sao decisivas para mim."
+  },
+  "domain_expert_cross_review": {
+    "revisor": "domain_expert",
+    "parecer_revisado": {
+      "revisor": "domain_expert",
+      "solidez_tecnica": {
+        "nota": 2,
+        "justificativa": "Mantenho a nota: ja havia penalizado a solidez por causa dos dados de um unico hospital, da rotulagem por um unico especialista e da ausencia de validacao. O argumento do statistician sobre intervalos de confianca e teste estatistico reforca, mas nao altera, uma nota que ja era 'Regular'."
+      },
+      "originalidade": {
+        "nota": 3,
+        "justificativa": "Mantenho a nota: a lacuna identificada (ausencia de modelos de RD binaria abaixo de 2 milhoes de parametros) e a proposta da LightRetinaNet constituem contribuicao original e bem posicionada frente ao estado da arte. Nenhum argumento dos colegas contesta isso."
+      },
+      "significancia": {
+        "nota": 4,
+        "justificativa": "Mantenho a nota e RESISTO ao argumento do statistician. A significancia avalia o impacto POTENCIAL do problema e da solucao para a saude publica, que e alto: triagem automatizada de RD em atencao primaria com baixo custo. As limitacoes de validacao que o statistician levanta sao reais, mas pertencem a solidez tecnica — nao rebaixam a relevancia do problema atacado."
+      },
+      "clareza": {
+        "nota": 3,
+        "justificativa": "Mantenho a nota: o texto e bem organizado, reconhece limitacoes na secao 4 e e acessivel, embora a descricao da arquitetura pudesse ser mais detalhada. Os colegas convergem nesse ponto."
+      },
+      "nota_geral": {
+        "nota": 3,
+        "justificativa": "Mantenho 'Aceitar com ressalvas': a significancia e a originalidade sustentam o valor do trabalho, e as fragilidades metodologicas, embora reais, sao enderecaveis em revisao. Os argumentos do statistician nao me levam a rejeitar."
+      },
+      "confianca": {
+        "nota": 3,
+        "justificativa": "Mantenho a confianca: a area de ML em imagens medicas e meu nucleo de especialidade e a leitura dos colegas nao introduziu duvida sobre a minha avaliacao."
+      }
+    },
+    "mudou_posicao": false,
+    "mudancas": [],
+    "resposta_aos_pares": "Concordo com o statistician quanto as lacunas de validacao, que ja estavam refletidas na minha nota de solidez tecnica. Discordo, no entanto, de usar essas lacunas para rebaixar a significancia: relevancia do problema e rigor metodologico sao dimensoes diferentes. Por isso mantenho todas as minhas notas."
+  },
+  "copyeditor_cross_review": {
+    "revisor": "copyeditor",
+    "parecer_revisado": {
+      "revisor": "copyeditor",
+      "solidez_tecnica": {
+        "nota": 2,
+        "justificativa": "Mantenho a nota: do que cabe ao meu escopo, as limitacoes de metodo (unico hospital, unico rotulador, sem validacao separada) estao no texto e justificam 'Regular'. O argumento do statistician e consistente com a minha leitura."
+      },
+      "originalidade": {
+        "nota": 3,
+        "justificativa": "Mantenho a nota: a contribuicao de um modelo enxuto (1,2 milhao de parametros) para triagem de RD esta bem enunciada no texto. Nenhum colega trouxe argumento textual que mude isso."
+      },
+      "significancia": {
+        "nota": 4,
+        "justificativa": "Mantenho a nota: a proposta de triagem automatizada de baixo custo tem alto impacto potencial, e o texto comunica bem essa relevancia. O statistician questiona a generalizacao, mas isso nao e do meu escopo de avaliacao."
+      },
+      "clareza": {
+        "nota": 3,
+        "justificativa": "Mantenho a nota: a escrita e clara, coesa e com tom academico adequado, com a ressalva de que a descricao da arquitetura da LightRetinaNet e curta. Foi exatamente esse argumento que apresentei aos colegas."
+      },
+      "nota_geral": {
+        "nota": 3,
+        "justificativa": "Mantenho 'Aceitar com ressalvas': a qualidade textual e boa e as limitacoes metodologicas, reconhecidas pelos autores, podem ser tratadas em revisao."
+      },
+      "confianca": {
+        "nota": 3,
+        "justificativa": "Mantenho a confianca dentro do meu escopo (gramatica, coesao, tom, organizacao); os aspectos tecnicos profundos estao fora do meu nucleo, o que ja estava refletido aqui."
+      }
+    },
+    "mudou_posicao": false,
+    "mudancas": [],
+    "resposta_aos_pares": "Fico satisfeito que o statistician tenha acatado meu argumento de que a clareza de ESCRITA e boa e distinta da completude estatistica. Nao mudo nenhuma das minhas notas: os argumentos dos colegas sao compativeis com a minha avaliacao textual."
+  }
+}
