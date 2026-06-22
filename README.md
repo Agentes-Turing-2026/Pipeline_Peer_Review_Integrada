@@ -36,6 +36,7 @@ orquestração.
 ```
 .
 ├── README.md                    # este arquivo
+├── main.py                      # ponto de entrada: roda TODO o pipeline
 ├── requirements.txt             # dependências Python
 ├── .env.example                 # template das variáveis de ambiente (modo API)
 ├── docs/
@@ -82,16 +83,16 @@ Roda as 4 fases lendo respostas pré-salvas de
 internet nem `GOOGLE_API_KEY`:
 
 ```bash
-python src/pipeline.py mock
+python main.py mock
 ```
 
 Equivalente via variável de ambiente:
 
 ```bash
 # Windows (PowerShell)
-$env:PIPELINE_MODE="mock"; python src/pipeline.py
+$env:PIPELINE_MODE="mock"; python main.py
 # Linux / macOS
-PIPELINE_MODE=mock python src/pipeline.py
+PIPELINE_MODE=mock python main.py
 ```
 
 ### 2.3 Modo API (chamadas reais ao Gemini)
@@ -111,9 +112,9 @@ PIPELINE_MODE=mock python src/pipeline.py
 2. Rode a demo:
 
    ```bash
-   python src/pipeline.py          # modo api é o default
+   python main.py          # modo api é o default
    # ou explicitamente:
-   python src/pipeline.py api
+   python main.py api
    ```
 
    Sem a chave configurada, o modo API interrompe com uma mensagem clara
@@ -131,7 +132,7 @@ Após rodar (em qualquer modo), em `src/outputs/` e `src/logs/` (ignorados pelo 
 
 ### 2.5 Como escolher o modo (precedência)
 
-1. **Flag** explícita: `python src/pipeline.py mock` / `run_demo(mode="mock")`;
+1. **Flag** explícita: `python main.py mock` / `run_demo(mode="mock")`;
 2. **Variável de ambiente** `PIPELINE_MODE` (`api` / `mock`, com sinônimos `local`, `offline`, `real`);
 3. **Default**: `api`.
 
@@ -269,10 +270,10 @@ mesmos.
 
 ```bash
 # Fluxo completo offline (sem chave):
-python src/pipeline.py mock
+python main.py mock
 
 # Fluxo completo com Gemini real (requer .env com GOOGLE_API_KEY):
-python src/pipeline.py api
+python main.py api
 
 # Demos isoladas de fases específicas (usam a API real):
 python src/reviewer_agent.py     # apenas a Fase 1 (avaliação independente)
