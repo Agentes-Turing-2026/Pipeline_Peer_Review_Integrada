@@ -1,0 +1,33 @@
+{
+  "revisor": "statistician",
+  "parecer_revisado": {
+    "revisor": "statistician",
+    "solidez_tecnica": {
+      "nota": 3,
+      "justificativa": "O desenho experimental é adequado e os testes estatísticos são apropriados para o tipo de dado."
+    },
+    "originalidade": {
+      "nota": 2,
+      "justificativa": "A abordagem combina técnicas já consolidadas na literatura sem diferencial metodológico claro."
+    },
+    "significancia": {
+      "nota": 3,
+      "justificativa": "Os resultados têm relevância prática para a área clínica e podem informar protocolos de tratamento."
+    },
+    "clareza": {
+      "nota": 3,
+      "justificativa": "O texto é bem organizado, as figuras são autoexplicativas e a seção de métodos é reprodutível."
+    },
+    "nota_geral": {
+      "nota": 3,
+      "justificativa": "Aceitar com ressalvas: a solidez técnica e a clareza são fortes, mas a originalidade limitada exige justificativa adicional."
+    },
+    "confianca": {
+      "nota": 3,
+      "justificativa": "O artigo está dentro da minha especialidade e os pontos avaliados são objetivos e verificáveis."
+    }
+  },
+  "mudou_posicao": true,
+  "mudancas": [],
+  "resposta_aos_pares": "   "
+}
