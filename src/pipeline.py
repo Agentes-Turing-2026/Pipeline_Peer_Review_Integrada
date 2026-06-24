@@ -45,6 +45,7 @@ from review_schema import (  # noqa: E402
     validar_editor_verdict,
     validar_review,
 )
+from validacao_retry import PipelineValidationError, validar_com_tentativas  # noqa: E402
 from reviewer_agent import MODEL, REVIEWERS, _require_api_key, _run_reviewers  # noqa: E402
 from cross_review import _run_cross_review  # noqa: E402
 from editor_agent import _run_editor  # noqa: E402
@@ -173,7 +174,9 @@ class IndependentReviewPhase(PipelinePhase[str, IndependentReviews]):
             for rid in REVIEWERS:
                 if rid not in payloads:
                     raise RuntimeError(f"Mock sem parecer de Fase 1 para '{rid}'.")
-                reviews[rid] = validar_review(payloads[rid])
+                resultado = validar_com_tentativas(payloads[rid], validar_review, mode, rid)
+                reviews[rid] = resultado.dados
+                logger.info("Validação Fase 1 '%s': tentativas=%d", rid, resultado.tentativas_usadas)
         else:
             article_text = data
             state = asyncio.run(_run_reviewers(article_text))
@@ -182,7 +185,9 @@ class IndependentReviewPhase(PipelinePhase[str, IndependentReviews]):
                 if raw is None:
                     raise RuntimeError(f"Revisor '{rid}' não produziu parecer na Fase 1.")
                 payload = raw if isinstance(raw, dict) else json.loads(raw)
-                reviews[rid] = validar_review(payload)
+                resultado = validar_com_tentativas(payload, validar_review, mode, rid)
+                reviews[rid] = resultado.dados
+                logger.info("Validação Fase 1 '%s': tentativas=%d", rid, resultado.tentativas_usadas)
 
         logger.info("Fase 1 (%s) concluída: %s pareceres validados.", mode.value, len(reviews))
         return IndependentReviews(reviews=reviews)
@@ -206,7 +211,9 @@ class CrossReviewPhase(PipelinePhase[IndependentReviews, CrossReviews]):
             for rid in REVIEWERS:
                 if rid not in payloads:
                     raise RuntimeError(f"Mock sem parecer de Fase 2 para '{rid}'.")
-                cross[rid] = validar_cross_review(payloads[rid])
+                resultado = validar_com_tentativas(payloads[rid], validar_cross_review, mode, rid)
+                cross[rid] = resultado.dados
+                logger.info("Validação Fase 2 '%s': tentativas=%d", rid, resultado.tentativas_usadas)
         else:
             article_text: str = context.initial_input
             # _run_cross_review espera os pareceres chaveados por output_key.
@@ -220,7 +227,9 @@ class CrossReviewPhase(PipelinePhase[IndependentReviews, CrossReviews]):
                 if raw is None:
                     raise RuntimeError(f"Revisor '{rid}' não produziu parecer na Fase 2.")
                 payload = raw if isinstance(raw, dict) else json.loads(raw)
-                cross[rid] = validar_cross_review(payload)
+                resultado = validar_com_tentativas(payload, validar_cross_review, mode, rid)
+                cross[rid] = resultado.dados
+                logger.info("Validação Fase 2 '%s': tentativas=%d", rid, resultado.tentativas_usadas)
 
         mudaram = [rid for rid, cr in cross.items() if cr.mudou_posicao]
         logger.info(
@@ -247,11 +256,15 @@ class EditorVerdictPhase(PipelinePhase[CrossReviews, EditorVerdictSchema]):
             payload = _load_mock(context).get("phase3_verdict")
             if payload is None:
                 raise RuntimeError("Mock sem veredito de Fase 3 ('phase3_verdict').")
-            verdict = validar_editor_verdict(payload)
+            resultado = validar_com_tentativas(payload, validar_editor_verdict, mode, "editor")
+            verdict = resultado.dados
+            logger.info("Validação Fase 3 'editor': tentativas=%d", resultado.tentativas_usadas)
         else:
             article_text: str = context.initial_input
             verdict_payload = asyncio.run(_run_editor(data.cross_reviews, article_text))
-            verdict = validar_editor_verdict(verdict_payload)
+            resultado = validar_com_tentativas(verdict_payload, validar_editor_verdict, mode, "editor")
+            verdict = resultado.dados
+            logger.info("Validação Fase 3 'editor': tentativas=%d", resultado.tentativas_usadas)
 
         logger.info(
             "Fase 3 (%s) concluída. Decisão: %s (%s).",

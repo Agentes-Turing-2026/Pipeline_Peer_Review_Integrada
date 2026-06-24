@@ -8,7 +8,8 @@ outros domínios** (ver [§5 Extensibilidade](#5-extensibilidade)).
 O sistema recebe um artigo, faz três revisores especializados avaliarem-no de
 forma independente, promove uma leitura cruzada entre eles, sintetiza um veredito
 editorial e emite um relatório final — sempre sob **contratos de dados validados**
-(schemas Pydantic).
+(schemas Pydantic) com **retry automático** e **bloqueio explícito** de dados
+inválidos entre fases.
 
 > Documentação técnica aprofundada dos schemas (tabelas de campos, regras de
 > validação e exemplos): [`docs/schema_reference.md`](docs/schema_reference.md).
@@ -49,9 +50,18 @@ orquestração.
     ├── cross_review.py           # Fase 2 — leitura cruzada
     ├── editor_agent.py           # Fase 3 — editor-chefe
     ├── legacy_adapter.py         # Adaptador de formatos legados -> schemas oficiais
+    ├── validacao_retry.py        # Grupo 1 — camada de validação, retry e confiabilidade
+    ├── demo_validacao.py         # Demo offline da camada de validação (sem API key)
     ├── mocks/                    # Respostas pré-salvas para o modo offline
     │   └── peer_review_mock.json
     └── examples/                 # Artigo de exemplo + exemplos de I/O dos schemas
+        ├── example_article.txt
+        ├── example_valid_output.json          # ReviewSchema válido
+        ├── example_invalid_output.json        # ReviewSchema inválido (viola notas e justificativas)
+        ├── example_cross_review_output.json   # CrossReviewSchema válido
+        ├── example_invalid_cross_review.json  # CrossReviewSchema inválido (mudou_posicao vs mudancas)
+        ├── example_editor_verdict_output.json # EditorVerdictSchema válido
+        └── example_invalid_editor_verdict.json # EditorVerdictSchema inválido (decisao, notas)
 ```
 
 > **Para outros grupos:** a fronteira entre os grupos são os **schemas** de
@@ -210,7 +220,93 @@ falha cedo e de forma explícita, em vez de se propagar silenciosamente.
 
 ---
 
-## 4. Mocks atuais (o que ainda está mockado)
+## 4. Validação, Retry e Confiabilidade (Grupo 1)
+
+A camada de validação/retry foi integrada ao pipeline pelo Grupo 1. O módulo
+central é [`src/validacao_retry.py`](src/validacao_retry.py).
+
+### Como funciona
+
+Após cada agente produzir uma saída, o pipeline chama `validar_com_tentativas()`
+antes de passar o dado para a próxima fase. Essa função:
+
+1. **Tentativa 1** — valida o dado bruto contra o schema oficial (Pydantic).
+   Se passar, retorna imediatamente.
+2. **Tentativas 2–N** — aplica um corrector automático e tenta validar novamente.
+   Cada tentativa é registrada no histórico.
+3. **Esgotamento** — se todas as tentativas falharem, levanta
+   `PipelineValidationError`. O dado **nunca passa silenciosamente** para a
+   próxima fase.
+
+```
+Saída bruta do agente
+        |
+        v
+validar_com_tentativas()
+  tentativa 1: schema_fn(dados)   ------> OK? retorna resultado
+  tentativa 2: corrector(dados) -> schema_fn(dados)  --> OK? retorna
+  tentativa 3: corrector(dados) -> schema_fn(dados)  --> OK? retorna
+        |
+        v  (todas falharam)
+PipelineValidationError (pipeline bloqueado)
+```
+
+### Comportamento de falha definido
+
+| Comportamento | Implementação |
+|---|---|
+| **Retry** | Até `MAX_TENTATIVAS = 3` vezes por agente |
+| **Registro de erro** | `ResultadoValidacao.historico` — uma entrada por tentativa com status e mensagem |
+| **Bloqueio** | `PipelineValidationError(RuntimeError)` — impede propagação silenciosa |
+| **Marcação para revisão humana** | O chamador pode capturar `PipelineValidationError` e registrar o `ResultadoValidacao` completo para triagem manual |
+
+### Correctors (quem conserta o dado antes do retry)
+
+| Modo | Corrector | Descrição |
+|---|---|---|
+| `mock` | `corrigir_saida_mock()` | Determinístico, offline, sem API key. Clampeia notas fora do range, injeta sentinel em campos vazios/ausentes, corrige incoerências `mudou_posicao/mudancas`. |
+| `api` | `corrigir_saida_api()` | Chama o Gemini com o JSON inválido + erro Pydantic + JSON Schema esperado e pede a correção. Importação lazy — não quebra o modo offline. |
+
+### Pontos de integração no pipeline
+
+A função `validar_com_tentativas()` substitui as chamadas diretas a
+`validar_*()` nas **6 fronteiras de fase** de [`src/pipeline.py`](src/pipeline.py):
+
+| Fase | Schema validado | Agentes cobertos |
+|---|---|---|
+| Fase 1 — Revisão Independente | `ReviewSchema` | `statistician`, `domain_expert`, `copyeditor` |
+| Fase 2 — Leitura Cruzada | `CrossReviewSchema` | `statistician`, `domain_expert`, `copyeditor` |
+| Fase 3 — Editor-Chefe | `EditorVerdictSchema` | `editor` |
+
+### Demo offline
+
+Roda **sem internet e sem `GOOGLE_API_KEY`**, demonstrando os 4 requisitos da spec:
+
+```bash
+python src/demo_validacao.py
+```
+
+| Cenário | O que demonstra |
+|---|---|
+| 1 | Parecer válido (`ReviewSchema`) passando na tentativa 1 |
+| 2 | Parecer inválido falhando com mensagem clara por campo |
+| 3 | Retry: tentativa 1 falha, corrector mock repara, tentativa 2 passa |
+| 4 | Esgotamento: `PipelineValidationError` capturada com histórico de 3 tentativas |
+| 5–6 | `CrossReviewSchema` válido e inválido |
+| 7–8 | `EditorVerdictSchema` válido e inválido |
+| 9 | Diagrama dos 6 pontos de integração no pipeline |
+
+### Exemplos versionados de JSON inválido
+
+| Arquivo | Schema | Violações documentadas |
+|---|---|---|
+| [`example_invalid_output.json`](src/examples/example_invalid_output.json) | `ReviewSchema` | `nota=5` (acima do máximo), `justificativa` só espaços, `confianca.nota=0` |
+| [`example_invalid_cross_review.json`](src/examples/example_invalid_cross_review.json) | `CrossReviewSchema` | `mudou_posicao=true` com `mudancas=[]`, `resposta_aos_pares` vazia |
+| [`example_invalid_editor_verdict.json`](src/examples/example_invalid_editor_verdict.json) | `EditorVerdictSchema` | `decisao=5`, `justificativa=""`, `notas_por_revisor={}`, recomendação vazia |
+
+---
+
+## 5. Mocks atuais (o que ainda está mockado)
 
 Seção transparente sobre o que **não** é "real" hoje:
 
@@ -219,7 +315,7 @@ Seção transparente sobre o que **não** é "real" hoje:
 | **Fases 1–3 no modo Mock** | Lidas de [`src/mocks/peer_review_mock.json`](src/mocks/peer_review_mock.json). No modo API, são chamadas reais ao Gemini. |
 | **Fase 4 (relatório)** | **Nunca** mockada — é pura formatação em Python, idêntica nos dois modos. |
 | **Entrada do artigo** | Usa um `.txt` de exemplo ([`src/examples/example_article.txt`](src/examples/example_article.txt)). **Ainda não há** ingestão/parse de PDF. |
-| **Validação & retry** | **Pendente** de integração. Hoje a validação é a do Pydantic na fronteira de cada fase; não há política de retry automático. |
+| **Validação & retry** | **Integrado** — ver [§4](#4-validação-retry-e-confiabilidade-grupo-1). Retry automático com corrector em modo Mock (offline) e API (Gemini). `PipelineValidationError` bloqueia propagação de dados inválidos. |
 | **Tools principais** | **Pendentes** de integração — os agentes ainda não usam ferramentas externas. |
 | **Adaptação de pareceres legados de revisor** | O [`src/legacy_adapter.py`](src/legacy_adapter.py) converte o **veredito do editor** legado; o parecer **de revisor** legado não tem as 4 dimensões e, por isso, **não** é adaptado automaticamente (exige nova revisão — limitação documentada). |
 
@@ -230,7 +326,7 @@ Seção transparente sobre o que **não** é "real" hoje:
 
 ---
 
-## 5. Extensibilidade
+## 6. Extensibilidade
 
 A separação **orquestração × domínio** permite reusar a mesma arquitetura de 4
 fases em outros problemas multiagentes. A receita conceitual:
@@ -274,6 +370,9 @@ python main.py mock
 
 # Fluxo completo com Gemini real (requer .env com GOOGLE_API_KEY):
 python main.py api
+
+# Demo offline da camada de validação/retry (sem API key):
+python src/demo_validacao.py
 
 # Demos isoladas de fases específicas (usam a API real):
 python src/reviewer_agent.py     # apenas a Fase 1 (avaliação independente)

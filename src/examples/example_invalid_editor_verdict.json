@@ -1,0 +1,17 @@
+{
+  "decisao": 5,
+  "justificativa": "",
+  "sintese": "Artigo avalia o impacto de intervenção clínica em pacientes com doenças crônicas.",
+  "notas_por_revisor": {},
+  "criticas": [
+    {
+      "revisor": "statistician",
+      "tipo": "fraqueza",
+      "texto": "Tamanho amostral pequeno limita o poder estatístico dos resultados relatados."
+    }
+  ],
+  "recomendacoes_aos_autores": [
+    "Ampliar a amostra ou justificar formalmente o poder estatístico adotado.",
+    ""
+  ]
+}
