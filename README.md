@@ -306,7 +306,73 @@ python src/demo_validacao.py
 
 ---
 
-## 5. Mocks atuais (o que ainda está mockado)
+## 5. Tools Determinísticas de Auditoria (Grupo 2)
+
+Tools **sem LLM** que auditam os schemas oficiais do pipeline. Vivem em
+[`src/tools/`](src/tools/) e operam sobre `dict` puro, usando apenas a
+biblioteca padrão — rodam offline em clone limpo.
+
+### As três tools
+
+| Tool | Arquivo | O que faz | Quando é chamada |
+|---|---|---|---|
+| `validar_completude` | [`tools/validar_completude.py`](src/tools/validar_completude.py) | Audita a **estrutura** de um parecer (`ReviewSchema`) ou veredito (`EditorVerdictSchema`): detecta campos faltando, notas fora da faixa e justificativas vazias; devolve `score_completude` (0–1). | **Fase 1** — após cada parecer de revisor ser validado pelo schema Pydantic. |
+| `checar_coerencia` | `tools/checar_coerencia.py` *(pendente — João Pedro Souza)* | Detecta **inconsistências semânticas** no veredito (ex.: `decisao=4` com notas baixas; crítica bloqueante junto de aceitação). | **Fase 3** — herdada por `auditar_decisao_final` quando o arquivo existir. |
+| `auditar_decisao_final` | [`tools/auditar_decisao_final.py`](src/tools/auditar_decisao_final.py) | Produz um **log de auditoria rastreável** do veredito do editor: agrega notas, conta críticas, herda inconsistências de `checar_coerencia` e decide `requer_revisao_humana`. | **Fase 3** — logo após o veredito ser validado, antes de passar à Fase 4. |
+
+### Pontos de integração no pipeline
+
+```
+Fase 1 · Revisão Independente
+  └─ para cada revisor: validar_completude(parecer)
+        → loga score_completude e flag completo
+
+Fase 3 · Editor-Chefe
+  └─ auditar_decisao_final(veredito)
+        → loga resumo_auditoria
+        → avisa se requer_revisao_humana = True
+        → inclui resultado em final_report.json["auditoria_veredito"]
+```
+
+As importações são **guardadas**: se um arquivo de tool ainda não existir, o
+pipeline continua sem ela (registra apenas a ausência no log).
+
+### Demo offline das tools
+
+Roda **sem internet e sem `GOOGLE_API_KEY`**, mostrando as três tools sobre
+exemplos versionados:
+
+```bash
+python src/tools/demo_tools.py
+```
+
+| Cenário | O que demonstra |
+|---|---|
+| 1 | `validar_completude` em parecer válido (`ReviewSchema`) — `score=1.0` |
+| 2 | `validar_completude` detectando campos faltando e notas inválidas |
+| 3 | `validar_completude` no veredito incompleto (`EditorVerdictSchema`) |
+| 4 | `checar_coerencia` — **PENDENTE** (João Pedro Souza) |
+| 5 | `auditar_decisao_final` sobre o veredito versionado |
+
+### Exemplos versionados de JSON para as tools
+
+| Arquivo | Usado por |
+|---|---|
+| [`example_valid_output.json`](src/examples/example_valid_output.json) | `validar_completude` — parecer válido (score 1.0) |
+| [`example_parecer_incompleto.json`](src/examples/example_parecer_incompleto.json) | `validar_completude` — campo faltando + notas inválidas |
+| [`example_veredito_incompleto.json`](src/examples/example_veredito_incompleto.json) | `validar_completude` — veredito com sintese/notas inválidas |
+| [`example_editor_verdict_output.json`](src/examples/example_editor_verdict_output.json) | `auditar_decisao_final` — veredito coerente (score ok) |
+
+### Testes
+
+```bash
+# Todos os testes das tools (19 no total, 100% passando)
+.venv/bin/pytest src/tools/tests/ -v
+```
+
+---
+
+## 6. Mocks atuais (o que ainda está mockado)
 
 Seção transparente sobre o que **não** é "real" hoje:
 
@@ -316,7 +382,7 @@ Seção transparente sobre o que **não** é "real" hoje:
 | **Fase 4 (relatório)** | **Nunca** mockada — é pura formatação em Python, idêntica nos dois modos. |
 | **Entrada do artigo** | Usa um `.txt` de exemplo ([`src/examples/example_article.txt`](src/examples/example_article.txt)). **Ainda não há** ingestão/parse de PDF. |
 | **Validação & retry** | **Integrado** — ver [§4](#4-validação-retry-e-confiabilidade-grupo-1). Retry automático com corrector em modo Mock (offline) e API (Gemini). `PipelineValidationError` bloqueia propagação de dados inválidos. |
-| **Tools principais** | **Pendentes** de integração — os agentes ainda não usam ferramentas externas. |
+| **Tools de auditoria** | **Integradas** — ver [§5](#5-tools-determinísticas-de-auditoria-grupo-2). `validar_completude` (Fase 1) e `auditar_decisao_final` (Fase 3) ativas. `checar_coerencia` pendente (João Pedro Souza). |
 | **Adaptação de pareceres legados de revisor** | O [`src/legacy_adapter.py`](src/legacy_adapter.py) converte o **veredito do editor** legado; o parecer **de revisor** legado não tem as 4 dimensões e, por isso, **não** é adaptado automaticamente (exige nova revisão — limitação documentada). |
 
 > O conteúdo do JSON de mock é **fictício**, porém **válido** contra os schemas —
@@ -371,8 +437,14 @@ python main.py mock
 # Fluxo completo com Gemini real (requer .env com GOOGLE_API_KEY):
 python main.py api
 
-# Demo offline da camada de validação/retry (sem API key):
+# Demo offline das tools de auditoria do Grupo 2 (sem API key):
+python src/tools/demo_tools.py
+
+# Demo offline da camada de validação/retry do Grupo 1 (sem API key):
 python src/demo_validacao.py
+
+# Testes das tools (Grupo 2):
+.venv/bin/pytest src/tools/tests/ -v
 
 # Demos isoladas de fases específicas (usam a API real):
 python src/reviewer_agent.py     # apenas a Fase 1 (avaliação independente)
@@ -381,4 +453,4 @@ python src/cross_review.py       # Fase 1 + Fase 2 (leitura cruzada)
 
 > As demos isoladas (`reviewer_agent.py`, `cross_review.py`) usam a API real e
 > exigem `GOOGLE_API_KEY`. Para um passo a passo offline de ponta a ponta, use
-> `python src/pipeline.py mock`.
+> `python main.py mock`.
