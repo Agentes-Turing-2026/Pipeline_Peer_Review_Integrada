@@ -1,0 +1,13 @@
+{
+  "decisao": 3,
+  "justificativa": "A decisão pondera os pareceres dos revisores e recomenda revisão antes da aceitação.",
+  "sintese": "",
+  "notas_por_revisor": {},
+  "criticas": [
+    {
+      "revisor": "statistician",
+      "tipo": "bloqueante",
+      "texto": "Ausência de validação externa."
+    }
+  ]
+}
