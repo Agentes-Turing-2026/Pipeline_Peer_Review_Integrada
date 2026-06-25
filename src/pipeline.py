@@ -50,6 +50,16 @@ from reviewer_agent import MODEL, REVIEWERS, _require_api_key, _run_reviewers  #
 from cross_review import _run_cross_review  # noqa: E402
 from editor_agent import _run_editor  # noqa: E402
 
+# Tools determinísticas do Grupo 2 (importação guardada: pipeline funciona sem elas).
+try:
+    from tools.validar_completude import validar_completude as _tool_completude
+except Exception:
+    _tool_completude = None  # type: ignore[assignment]
+try:
+    from tools.auditar_decisao_final import auditar_decisao_final as _tool_auditoria
+except Exception:
+    _tool_auditoria = None  # type: ignore[assignment]
+
 
 # ---------------------------------------------------------------------------
 # Logging do pipeline
@@ -189,6 +199,14 @@ class IndependentReviewPhase(PipelinePhase[str, IndependentReviews]):
                 reviews[rid] = resultado.dados
                 logger.info("Validação Fase 1 '%s': tentativas=%d", rid, resultado.tentativas_usadas)
 
+        if _tool_completude is not None:
+            for rid, review in reviews.items():
+                audit = _tool_completude(review.model_dump())
+                logger.info(
+                    "[completude] Fase 1 '%s': score=%.4f completo=%s",
+                    rid, audit["score_completude"], audit["completo"],
+                )
+
         logger.info("Fase 1 (%s) concluída: %s pareceres validados.", mode.value, len(reviews))
         return IndependentReviews(reviews=reviews)
 
@@ -272,6 +290,14 @@ class EditorVerdictPhase(PipelinePhase[CrossReviews, EditorVerdictSchema]):
             verdict.decisao,
             ESCALA_VEREDITO[verdict.decisao],
         )
+
+        if _tool_auditoria is not None:
+            auditoria = _tool_auditoria(verdict.model_dump())
+            logger.info("[auditoria] %s", auditoria["resumo_auditoria"])
+            if auditoria["requer_revisao_humana"]:
+                logger.warning("[auditoria] Veredito requer revisão humana.")
+            context.config["_auditoria_veredito"] = auditoria
+
         return verdict
 
 
@@ -365,6 +391,7 @@ class FinalReportPhase(PipelinePhase[EditorVerdictSchema, FinalReport]):
                 rid: c.model_dump() for rid, c in phase2.cross_reviews.items()
             },
             "phase3_verdict": verdict.model_dump(),
+            "auditoria_veredito": context.config.get("_auditoria_veredito"),
         }
         logger.info("Fase 4 concluída: relatório final gerado.")
         return FinalReport(markdown=markdown, data=structured)
