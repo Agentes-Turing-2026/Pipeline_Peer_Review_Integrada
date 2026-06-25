@@ -317,7 +317,7 @@ biblioteca padrão — rodam offline em clone limpo.
 | Tool | Arquivo | O que faz | Quando é chamada |
 |---|---|---|---|
 | `validar_completude` | [`tools/validar_completude.py`](src/tools/validar_completude.py) | Audita a **estrutura** de um parecer (`ReviewSchema`) ou veredito (`EditorVerdictSchema`): detecta campos faltando, notas fora da faixa e justificativas vazias; devolve `score_completude` (0–1). | **Fase 1** — após cada parecer de revisor ser validado pelo schema Pydantic. |
-| `checar_coerencia` | `tools/checar_coerencia.py` *(pendente — João Pedro Souza)* | Detecta **inconsistências semânticas** no veredito (ex.: `decisao=4` com notas baixas; crítica bloqueante junto de aceitação). | **Fase 3** — herdada por `auditar_decisao_final` quando o arquivo existir. |
+| `checar_coerencia` | [`tools/checar_coerencia.py`](src/tools/checar_coerencia.py) | Detecta **inconsistências semânticas** no veredito (ex.: `decisao=4` com notas baixas; crítica bloqueante junto de aceitação; crítica de revisor sem nota). | **Fase 3** — chamada por dentro de `auditar_decisao_final`, que herda as inconsistências detectadas. |
 | `auditar_decisao_final` | [`tools/auditar_decisao_final.py`](src/tools/auditar_decisao_final.py) | Produz um **log de auditoria rastreável** do veredito do editor: agrega notas, conta críticas, herda inconsistências de `checar_coerencia` e decide `requer_revisao_humana`. | **Fase 3** — logo após o veredito ser validado, antes de passar à Fase 4. |
 
 ### Pontos de integração no pipeline
@@ -351,7 +351,7 @@ python src/tools/demo_tools.py
 | 1 | `validar_completude` em parecer válido (`ReviewSchema`) — `score=1.0` |
 | 2 | `validar_completude` detectando campos faltando e notas inválidas |
 | 3 | `validar_completude` no veredito incompleto (`EditorVerdictSchema`) |
-| 4 | `checar_coerencia` — **PENDENTE** (João Pedro Souza) |
+| 4 | `checar_coerencia` detectando 3 inconsistências simultâneas no veredito incoerente |
 | 5 | `auditar_decisao_final` sobre o veredito versionado |
 
 ### Exemplos versionados de JSON para as tools
@@ -362,11 +362,12 @@ python src/tools/demo_tools.py
 | [`example_parecer_incompleto.json`](src/examples/example_parecer_incompleto.json) | `validar_completude` — campo faltando + notas inválidas |
 | [`example_veredito_incompleto.json`](src/examples/example_veredito_incompleto.json) | `validar_completude` — veredito com sintese/notas inválidas |
 | [`example_editor_verdict_output.json`](src/examples/example_editor_verdict_output.json) | `auditar_decisao_final` — veredito coerente (score ok) |
+| [`example_editor_verdict_incoerente.json`](src/examples/example_editor_verdict_incoerente.json) | `checar_coerencia` / `auditar_decisao_final` — 3 inconsistências simultâneas |
 
 ### Testes
 
 ```bash
-# Todos os testes das tools (19 no total, 100% passando)
+# Todos os testes das tools (33 no total, 100% passando)
 .venv/bin/pytest src/tools/tests/ -v
 ```
 
@@ -382,7 +383,7 @@ Seção transparente sobre o que **não** é "real" hoje:
 | **Fase 4 (relatório)** | **Nunca** mockada — é pura formatação em Python, idêntica nos dois modos. |
 | **Entrada do artigo** | Usa um `.txt` de exemplo ([`src/examples/example_article.txt`](src/examples/example_article.txt)). **Ainda não há** ingestão/parse de PDF. |
 | **Validação & retry** | **Integrado** — ver [§4](#4-validação-retry-e-confiabilidade-grupo-1). Retry automático com corrector em modo Mock (offline) e API (Gemini). `PipelineValidationError` bloqueia propagação de dados inválidos. |
-| **Tools de auditoria** | **Integradas** — ver [§5](#5-tools-determinísticas-de-auditoria-grupo-2). `validar_completude` (Fase 1) e `auditar_decisao_final` (Fase 3) ativas. `checar_coerencia` pendente (João Pedro Souza). |
+| **Tools de auditoria** | **Integradas** — ver [§5](#5-tools-determinísticas-de-auditoria-grupo-2). `validar_completude` (Fase 1), `checar_coerencia` (chamada por dentro da Fase 3) e `auditar_decisao_final` (Fase 3) — todas ativas. |
 | **Adaptação de pareceres legados de revisor** | O [`src/legacy_adapter.py`](src/legacy_adapter.py) converte o **veredito do editor** legado; o parecer **de revisor** legado não tem as 4 dimensões e, por isso, **não** é adaptado automaticamente (exige nova revisão — limitação documentada). |
 
 > O conteúdo do JSON de mock é **fictício**, porém **válido** contra os schemas —
