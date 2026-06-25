@@ -1,0 +1,23 @@
+{
+  "revisor": "domain_expert",
+  "solidez_tecnica": {
+    "nota": 3,
+    "justificativa": "O desenho metodológico é apropriado e os controles são adequados."
+  },
+  "originalidade": {
+    "nota": 2,
+    "justificativa": "A contribuição é incremental frente à literatura recente."
+  },
+  "clareza": {
+    "nota": 5,
+    "justificativa": "Texto bem escrito, mas a nota está fora da escala oficial (1-4)."
+  },
+  "nota_geral": {
+    "nota": 3,
+    "justificativa": "Aceitar com ressalvas, condicionado a validação adicional."
+  },
+  "confianca": {
+    "nota": 2,
+    "justificativa": ""
+  }
+}
