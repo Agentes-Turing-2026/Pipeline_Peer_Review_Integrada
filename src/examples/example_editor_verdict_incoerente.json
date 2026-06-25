@@ -1,0 +1,26 @@
+{
+  "decisao": 4,
+  "justificativa": "Decisão de aceitar baseada na avaliação positiva do especialista de domínio, desconsiderando as críticas bloqueantes do estatístico.",
+  "sintese": "Artigo sobre rede neural para triagem de retinopatia diabética com avaliações fortemente divergentes entre os revisores.",
+  "notas_por_revisor": {
+    "statistician": 1,
+    "domain_expert": 4,
+    "copyeditor": 3
+  },
+  "criticas": [
+    {
+      "revisor": "statistician",
+      "tipo": "critica",
+      "texto": "Metodologia estatística inválida: ausência de grupo controle e p-valores não reportados."
+    },
+    {
+      "revisor": "statistician",
+      "tipo": "critica",
+      "texto": "Amostra n=8 insuficiente para qualquer inferência estatística — resultados não generalizáveis."
+    }
+  ],
+  "recomendacoes_aos_autores": [
+    "Corrigir integralmente a metodologia estatística antes de resubmeter.",
+    "Ampliar a amostra para ao menos n=50 com grupo controle."
+  ]
+}
