@@ -15,13 +15,13 @@ antigo da Atividade 5 está documentada em ``docs/tools_reference.md``.
 from __future__ import annotations
 
 from .validar_completude import validar_completude
+from .checar_coerencia import checar_coerencia            # João Pedro Souza
 
-# As linhas abaixo são adicionadas pelos donos de cada tool (ver TODO_Grupo2.md):
-# from .checar_coerencia import checar_coerencia            # João Pedro Souza
+# A linha abaixo é adicionada pelo dono da tool (ver TODO_Grupo2.md):
 # from .auditar_decisao_final import auditar_decisao_final  # Giulio
 
 __all__ = [
     "validar_completude",
-    # "checar_coerencia",
+    "checar_coerencia",
     # "auditar_decisao_final",
 ]

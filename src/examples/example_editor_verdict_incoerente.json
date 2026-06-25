@@ -1,0 +1,31 @@
+{
+  "decisao": 4,
+  "justificativa": "O editor optou por aceitar o artigo sem ressalvas, considerando a clareza da escrita e a relevância do tema para a triagem de retinopatia diabética.",
+  "sintese": "Artigo propõe uma rede leve para triagem de retinopatia diabética; bem escrito e relevante, mas validado em um único hospital, com amostra reduzida e sem intervalos de confiança.",
+  "notas_por_revisor": {
+    "statistician": 2,
+    "domain_expert": 2,
+    "copyeditor": 3
+  },
+  "criticas": [
+    {
+      "revisor": "statistician",
+      "tipo": "critica",
+      "texto": "Ausência de validação externa e de intervalos de confiança compromete a generalização dos resultados; na forma atual o trabalho não deveria ser aceito sem ressalvas."
+    },
+    {
+      "revisor": "domain_expert",
+      "tipo": "fraqueza",
+      "texto": "A contribuição é incremental frente a Silva et al. (2023), sem diferencial metodológico claro."
+    },
+    {
+      "revisor": "external_referee",
+      "tipo": "fraqueza",
+      "texto": "A discussão poderia comparar com mais baselines recentes da literatura."
+    }
+  ],
+  "recomendacoes_aos_autores": [
+    "Incluir validação externa em uma coorte de outro hospital.",
+    "Reportar intervalos de confiança para as métricas principais."
+  ]
+}
