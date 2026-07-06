@@ -26,6 +26,7 @@ import json
 import logging
 import os
 import sys
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -525,18 +526,28 @@ def run_demo(mode: str | None = None) -> FinalReport:
     def _run_and_save() -> FinalReport:
         result = pipeline.run(initial_input=article_text, config=config, verbose=True)
         report_local: FinalReport = result.final
-        (out_dir / "final_report.md").write_text(report_local.markdown, encoding="utf-8")
-        (out_dir / "final_report.json").write_text(
-            json.dumps(report_local.data, indent=2, ensure_ascii=False), encoding="utf-8"
+        # A gravação em disco é um passo pós-pipeline: envolvemos num span "report"
+        # (irmão das fases, sob o run) para que "arquivos_gerados" fique ancorado
+        # nele — e não solto sob o <run>, como acontecia ao emitir depois que o
+        # span da fase 4 já havia fechado.
+        span_cm = (
+            tracer.span("relatorio_final", kind="report", phase="fase_4_relatorio_final")
+            if tracer is not None
+            else nullcontext()
         )
-        emit_event(
-            "arquivos_gerados", author="grupo3", phase="fase_4_relatorio_final", kind="report",
-            attributes={
-                "markdown": str(out_dir / "final_report.md"),
-                "json": str(out_dir / "final_report.json"),
-                "decisao": report_local.data.get("decisao"),
-            },
-        )
+        with span_cm:
+            (out_dir / "final_report.md").write_text(report_local.markdown, encoding="utf-8")
+            (out_dir / "final_report.json").write_text(
+                json.dumps(report_local.data, indent=2, ensure_ascii=False), encoding="utf-8"
+            )
+            emit_event(
+                "arquivos_gerados", author="grupo3", phase="fase_4_relatorio_final", kind="report",
+                attributes={
+                    "markdown": str(out_dir / "final_report.md"),
+                    "json": str(out_dir / "final_report.json"),
+                    "decisao": report_local.data.get("decisao"),
+                },
+            )
         return report_local
 
     if tracer is not None:
