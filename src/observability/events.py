@@ -29,7 +29,12 @@ from typing import Any
 
 
 class SpanKind(str, Enum):
-    """Nível na hierarquia do trace: run > phase > agent > call > tool > report."""
+    """Papel de um evento/span no trace.
+
+    Hoje só ``run`` e ``phase`` viram spans reais (início/fim, duração,
+    ``parent_span_id``); ``agent``/``call``/``tool``/``report`` entram como eventos
+    pontuais tipados, ancorados no span da fase corrente — não como spans aninhados.
+    """
 
     RUN = "run"          # a execução inteira
     PHASE = "phase"      # uma das 4 fases do pipeline
