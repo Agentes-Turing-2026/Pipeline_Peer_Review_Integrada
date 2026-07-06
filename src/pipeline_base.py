@@ -94,6 +94,7 @@ class Pipeline:
         phases: list[PipelinePhase],
         name: str = "pipeline",
         logger: logging.Logger | None = None,
+        tracer: Any | None = None,
     ):
         if not phases:
             raise ValueError("Um pipeline precisa de ao menos uma fase.")
@@ -103,6 +104,10 @@ class Pipeline:
         self.phases = list(phases)
         self.name = name
         self._logger = logger
+        # Tracer de observabilidade (opcional, duck-typed): se presente, cada fase
+        # roda dentro de um span. A orquestração continua agnóstica de domínio e
+        # NÃO depende do pacote de observabilidade — só usa .span() se existir.
+        self._tracer = tracer
 
     @property
     def phase_names(self) -> list[str]:
@@ -139,7 +144,18 @@ class Pipeline:
                 print(cabecalho + " ...")
             self._log(cabecalho)
 
-            data = phase.run(data, context)
+            if self._tracer is not None:
+                # Cada fase vira um span "phase" na linha do tempo (início, fim,
+                # duração e status são registrados automaticamente pelo tracer).
+                with self._tracer.span(
+                    phase.name,
+                    kind="phase",
+                    phase=phase.name,
+                    attributes={"indice": indice, "total": len(self.phases)},
+                ):
+                    data = phase.run(data, context)
+            else:
+                data = phase.run(data, context)
             context.record(phase.name, data)
 
         return PipelineResult(outputs=dict(context.artifacts), final=data)

@@ -60,6 +60,23 @@ try:
 except Exception:
     _tool_auditoria = None  # type: ignore[assignment]
 
+# Observabilidade / traces (Grupo 3). Instrumentação ADITIVA: importação guardada
+# para o pipeline continuar rodando mesmo se o pacote não estiver presente.
+try:
+    from observability import (  # noqa: E402
+        create_tracer,
+        emit_event,
+        get_current_tracer,
+    )
+except Exception:  # noqa: BLE001
+    create_tracer = None  # type: ignore[assignment]
+
+    def emit_event(*_a, **_k):  # type: ignore[misc]
+        return None
+
+    def get_current_tracer():  # type: ignore[misc]
+        return None
+
 
 # ---------------------------------------------------------------------------
 # Logging do pipeline
@@ -187,6 +204,10 @@ class IndependentReviewPhase(PipelinePhase[str, IndependentReviews]):
                 resultado = validar_com_tentativas(payloads[rid], validar_review, mode, rid)
                 reviews[rid] = resultado.dados
                 logger.info("Validação Fase 1 '%s': tentativas=%d", rid, resultado.tentativas_usadas)
+                emit_event(
+                    "parecer_validado", author=rid, phase=self.name, kind="agent",
+                    attributes={"tentativas": resultado.tentativas_usadas, "validado_por": "grupo1"},
+                )
         else:
             article_text = data
             state = asyncio.run(_run_reviewers(article_text))
@@ -198,6 +219,10 @@ class IndependentReviewPhase(PipelinePhase[str, IndependentReviews]):
                 resultado = validar_com_tentativas(payload, validar_review, mode, rid)
                 reviews[rid] = resultado.dados
                 logger.info("Validação Fase 1 '%s': tentativas=%d", rid, resultado.tentativas_usadas)
+                emit_event(
+                    "parecer_validado", author=rid, phase=self.name, kind="agent",
+                    attributes={"tentativas": resultado.tentativas_usadas, "validado_por": "grupo1"},
+                )
 
         if _tool_completude is not None:
             for rid, review in reviews.items():
@@ -206,8 +231,17 @@ class IndependentReviewPhase(PipelinePhase[str, IndependentReviews]):
                     "[completude] Fase 1 '%s': score=%.4f completo=%s",
                     rid, audit["score_completude"], audit["completo"],
                 )
+                emit_event(
+                    "completude", author="grupo2", phase=self.name, kind="tool",
+                    status="ok" if audit["completo"] else "alerta",
+                    attributes={"revisor": rid, "score": audit["score_completude"], "completo": audit["completo"]},
+                )
 
         logger.info("Fase 1 (%s) concluída: %s pareceres validados.", mode.value, len(reviews))
+        emit_event(
+            "revisao_independente_concluida", author="sistema", phase=self.name,
+            attributes={"pareceres": len(reviews), "revisores": list(reviews)},
+        )
         return IndependentReviews(reviews=reviews)
 
 
@@ -232,6 +266,10 @@ class CrossReviewPhase(PipelinePhase[IndependentReviews, CrossReviews]):
                 resultado = validar_com_tentativas(payloads[rid], validar_cross_review, mode, rid)
                 cross[rid] = resultado.dados
                 logger.info("Validação Fase 2 '%s': tentativas=%d", rid, resultado.tentativas_usadas)
+                emit_event(
+                    "cross_review_validado", author=rid, phase=self.name, kind="agent",
+                    attributes={"tentativas": resultado.tentativas_usadas, "validado_por": "grupo1"},
+                )
         else:
             article_text: str = context.initial_input
             # _run_cross_review espera os pareceres chaveados por output_key.
@@ -248,12 +286,20 @@ class CrossReviewPhase(PipelinePhase[IndependentReviews, CrossReviews]):
                 resultado = validar_com_tentativas(payload, validar_cross_review, mode, rid)
                 cross[rid] = resultado.dados
                 logger.info("Validação Fase 2 '%s': tentativas=%d", rid, resultado.tentativas_usadas)
+                emit_event(
+                    "cross_review_validado", author=rid, phase=self.name, kind="agent",
+                    attributes={"tentativas": resultado.tentativas_usadas, "validado_por": "grupo1"},
+                )
 
         mudaram = [rid for rid, cr in cross.items() if cr.mudou_posicao]
         logger.info(
             "Fase 2 (%s) concluída. Revisores que mudaram de posição: %s.",
             mode.value,
             mudaram or "nenhum",
+        )
+        emit_event(
+            "leitura_cruzada_concluida", author="sistema", phase=self.name,
+            attributes={"mudaram_de_posicao": mudaram or []},
         )
         return CrossReviews(cross_reviews=cross)
 
@@ -277,12 +323,20 @@ class EditorVerdictPhase(PipelinePhase[CrossReviews, EditorVerdictSchema]):
             resultado = validar_com_tentativas(payload, validar_editor_verdict, mode, "editor")
             verdict = resultado.dados
             logger.info("Validação Fase 3 'editor': tentativas=%d", resultado.tentativas_usadas)
+            emit_event(
+                "veredito_validado", author="editor", phase=self.name, kind="agent",
+                attributes={"tentativas": resultado.tentativas_usadas, "validado_por": "grupo1"},
+            )
         else:
             article_text: str = context.initial_input
             verdict_payload = asyncio.run(_run_editor(data.cross_reviews, article_text))
             resultado = validar_com_tentativas(verdict_payload, validar_editor_verdict, mode, "editor")
             verdict = resultado.dados
             logger.info("Validação Fase 3 'editor': tentativas=%d", resultado.tentativas_usadas)
+            emit_event(
+                "veredito_validado", author="editor", phase=self.name, kind="agent",
+                attributes={"tentativas": resultado.tentativas_usadas, "validado_por": "grupo1"},
+            )
 
         logger.info(
             "Fase 3 (%s) concluída. Decisão: %s (%s).",
@@ -297,6 +351,14 @@ class EditorVerdictPhase(PipelinePhase[CrossReviews, EditorVerdictSchema]):
             if auditoria["requer_revisao_humana"]:
                 logger.warning("[auditoria] Veredito requer revisão humana.")
             context.config["_auditoria_veredito"] = auditoria
+            emit_event(
+                "auditoria_veredito", author="grupo2", phase=self.name, kind="tool",
+                status="alerta" if auditoria["requer_revisao_humana"] else "ok",
+                attributes={
+                    "requer_revisao_humana": auditoria["requer_revisao_humana"],
+                    "resumo": auditoria["resumo_auditoria"],
+                },
+            )
 
         return verdict
 
@@ -384,6 +446,7 @@ class FinalReportPhase(PipelinePhase[EditorVerdictSchema, FinalReport]):
         structured = {
             "article_ref": article_ref,
             "model": MODEL,
+            "run_id": (get_current_tracer().run_id if get_current_tracer() is not None else None),
             "decisao": verdict.decisao,
             "decisao_rotulo": ESCALA_VEREDITO[verdict.decisao],
             "phase1_reviews": {rid: r.model_dump() for rid, r in phase1.reviews.items()},
@@ -394,6 +457,10 @@ class FinalReportPhase(PipelinePhase[EditorVerdictSchema, FinalReport]):
             "auditoria_veredito": context.config.get("_auditoria_veredito"),
         }
         logger.info("Fase 4 concluída: relatório final gerado.")
+        emit_event(
+            "relatorio_final_gerado", author="sistema", phase=self.name, kind="report",
+            attributes={"decisao": verdict.decisao, "rotulo": ESCALA_VEREDITO[verdict.decisao]},
+        )
         return FinalReport(markdown=markdown, data=structured)
 
 
@@ -401,8 +468,12 @@ class FinalReportPhase(PipelinePhase[EditorVerdictSchema, FinalReport]):
 # Builder do pipeline de peer review (as 4 fases, na ordem estrita)
 # ---------------------------------------------------------------------------
 
-def build_peer_review_pipeline() -> Pipeline:
-    """Monta o pipeline de peer review com as quatro fases, na ordem oficial."""
+def build_peer_review_pipeline(tracer=None) -> Pipeline:
+    """Monta o pipeline de peer review com as quatro fases, na ordem oficial.
+
+    ``tracer`` (opcional) liga a observabilidade: cada fase roda dentro de um
+    span. Sem tracer, o comportamento é idêntico ao anterior.
+    """
     return Pipeline(
         phases=[
             IndependentReviewPhase(),
@@ -412,6 +483,7 @@ def build_peer_review_pipeline() -> Pipeline:
         ],
         name="peer_review",
         logger=logger,
+        tracer=tracer,
     )
 
 
@@ -441,27 +513,51 @@ def run_demo(mode: str | None = None) -> FinalReport:
     article_path = HERE / "examples" / "example_article.txt"
     article_text = article_path.read_text(encoding="utf-8")
 
-    pipeline = build_peer_review_pipeline()
-    print(f"Pipeline '{pipeline.name}' [modo={resolved.value}] — fases: {pipeline.phase_names}")
+    # Observabilidade: cria uma execução identificável (run_id) e um trace local.
+    tracer = create_tracer(trace_dir=LOG_DIR / "traces") if create_tracer is not None else None
 
-    result = pipeline.run(
-        initial_input=article_text,
-        config=config,
-        verbose=True,
-    )
-    report: FinalReport = result.final
+    pipeline = build_peer_review_pipeline(tracer=tracer)
+    print(f"Pipeline '{pipeline.name}' [modo={resolved.value}] — fases: {pipeline.phase_names}")
 
     out_dir = HERE / "outputs"
     out_dir.mkdir(exist_ok=True)
-    (out_dir / "final_report.md").write_text(report.markdown, encoding="utf-8")
-    (out_dir / "final_report.json").write_text(
-        json.dumps(report.data, indent=2, ensure_ascii=False), encoding="utf-8"
-    )
+
+    def _run_and_save() -> FinalReport:
+        result = pipeline.run(initial_input=article_text, config=config, verbose=True)
+        report_local: FinalReport = result.final
+        (out_dir / "final_report.md").write_text(report_local.markdown, encoding="utf-8")
+        (out_dir / "final_report.json").write_text(
+            json.dumps(report_local.data, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+        emit_event(
+            "arquivos_gerados", author="grupo3", phase="fase_4_relatorio_final", kind="report",
+            attributes={
+                "markdown": str(out_dir / "final_report.md"),
+                "json": str(out_dir / "final_report.json"),
+                "decisao": report_local.data.get("decisao"),
+            },
+        )
+        return report_local
+
+    if tracer is not None:
+        # Delimita a execução inteira (run_start/run_end): tudo abaixo entra na
+        # mesma linha do tempo, inclusive os eventos dos Grupos 1 e 2.
+        with tracer.run(
+            name="peer_review",
+            attributes={"modo": resolved.value, "artigo": config["article_ref"]},
+        ):
+            report = _run_and_save()
+        trace_path = LOG_DIR / "traces" / f"{tracer.run_id}.jsonl"
+    else:
+        report = _run_and_save()
+        trace_path = None
 
     print("OK: pipeline concluído.")
     print(f"Relatório (markdown): {out_dir / 'final_report.md'}")
     print(f"Relatório (json):     {out_dir / 'final_report.json'}")
     print(f"Log do pipeline:      {LOG_DIR / 'pipeline.log'}")
+    if tracer is not None:
+        print(f"Trace (run_id={tracer.run_id}): {trace_path}")
     return report
 
 
