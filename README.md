@@ -419,6 +419,11 @@ A demo executa o pipeline completo e, ao final, **reconstrói a linha do tempo**
 a partir do trace gravado. Também é gerado automaticamente em qualquer
 `python main.py mock|api`.
 
+> Um trace de exemplo (uma execução em modo mock, 25 eventos) está versionado em
+> [`src/examples/example_trace.jsonl`](src/examples/example_trace.jsonl) — útil
+> para inspecionar o formato sem precisar rodar. Os traces reais gerados em
+> `src/logs/traces/<run_id>.jsonl` continuam **ignorados pelo git** (artefatos).
+
 ### O formato comum de evento
 
 Todo evento usa o mesmo `TraceEvent` ([`events.py`](src/observability/events.py)),
