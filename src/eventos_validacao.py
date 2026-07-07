@@ -46,11 +46,14 @@ Uso típico (dentro de `validacao_retry.py`):
 from __future__ import annotations
 
 import json
+import logging
 import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger("pipeline.validacao")
 
 HERE = Path(__file__).resolve().parent
 EVENTOS_DIR = HERE / "logs"
@@ -206,8 +209,10 @@ def emitir_evento(evento: EventoValidacao) -> None:
                 **({"requer_revisao_humana": True} if evento.requer_revisao_humana else {}),
             },
         )
-    except Exception:  # noqa: BLE001 - observabilidade nunca pode quebrar a validação
-        pass
+    except Exception as _exc:  # noqa: BLE001 - observabilidade nunca pode quebrar a validação
+        logger.debug(
+            "emitir_evento: espelhamento para observability falhou: %s", _exc
+        )
 
 
 # ---------------------------------------------------------------------------
