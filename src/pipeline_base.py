@@ -24,6 +24,7 @@ Princípios de projeto:
 from __future__ import annotations
 
 import logging
+import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Generic, TypeVar
@@ -39,12 +40,23 @@ class PipelineContext:
     livre (``config``) e o acúmulo de artefatos produzidos por cada fase
     (``artifacts``: ``nome_da_fase -> saída``). Fases podem ler artefatos de
     fases anteriores por aqui, sem depender da ordem de chamada.
+
+    Também carrega ``run_id``: um identificador único desta execução do
+    pipeline. É gerado automaticamente (``uuid4``) se não vier em
+    ``config["run_id"]``. Quando o ``Pipeline`` roda com um ``tracer`` do
+    Grupo 3 (observabilidade), ``Pipeline.run()`` sobrescreve este valor pelo
+    ``tracer.run_id`` logo após a criação do contexto, para que os eventos do
+    Grupo 1 (``eventos_validacao.py``) e o trace do Grupo 3 apontem para a
+    MESMA execução. Sem tracer (uso isolado do Grupo 1, demos, testes), o
+    ``uuid4`` gerado aqui continua sendo o identificador usado.
     """
 
     def __init__(self, initial_input: Any, config: dict[str, Any] | None = None):
         self.initial_input = initial_input
         self.config: dict[str, Any] = dict(config or {})
         self.artifacts: dict[str, Any] = {}
+        self.run_id: str = self.config.get("run_id") or str(uuid.uuid4())
+        self.config["run_id"] = self.run_id
 
     def record(self, phase_name: str, output: Any) -> None:
         """Registra a saída de uma fase sob o seu nome."""
@@ -80,6 +92,8 @@ class PipelineResult:
     outputs: dict[str, Any] = field(default_factory=dict)
     #: Saída da última fase (o produto final do pipeline).
     final: Any = None
+    #: Identificador (provisório) desta execução — ver ``PipelineContext.run_id``.
+    run_id: str | None = None
 
 
 class Pipeline:
@@ -136,7 +150,18 @@ class Pipeline:
             Se ``True``, imprime o progresso fase a fase.
         """
         context = PipelineContext(initial_input, config)
+        if self._tracer is not None:
+            # Unifica o identificador de execução com o tracer do Grupo 3: a
+            # partir daqui, context.run_id, os eventos do Grupo 1 e o trace
+            # gravado por ``self._tracer`` correlacionam pela MESMA chave.
+            context.run_id = self._tracer.run_id
+            context.config["run_id"] = context.run_id
         data: Any = initial_input
+
+        cabecalho_execucao = f"[{self.name}] run_id={context.run_id}"
+        if verbose:
+            print(cabecalho_execucao)
+        self._log(cabecalho_execucao)
 
         for indice, phase in enumerate(self.phases, start=1):
             cabecalho = f"[{self.name}] Fase {indice}/{len(self.phases)}: {phase.name}"
@@ -158,4 +183,4 @@ class Pipeline:
                 data = phase.run(data, context)
             context.record(phase.name, data)
 
-        return PipelineResult(outputs=dict(context.artifacts), final=data)
+        return PipelineResult(outputs=dict(context.artifacts), final=data, run_id=context.run_id)

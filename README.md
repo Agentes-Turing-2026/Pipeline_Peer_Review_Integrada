@@ -51,7 +51,11 @@ orquestração.
     ├── editor_agent.py           # Fase 3 — editor-chefe
     ├── legacy_adapter.py         # Adaptador de formatos legados -> schemas oficiais
     ├── validacao_retry.py        # Grupo 1 — camada de validação, retry e confiabilidade
+    ├── eventos_validacao.py      # Grupo 1 — eventos estruturados (JSONL) de validação/retry
     ├── demo_validacao.py         # Demo offline da camada de validação (sem API key)
+    ├── demo_eventos.py           # Demo offline dos eventos estruturados (sem API key)
+    ├── tests/
+    │   └── test_eventos_validacao.py
     ├── demo_observabilidade.py   # Grupo 3 — demo offline: roda o pipeline e reconstrói o trace
     ├── observability/            # Grupo 3 — base de observabilidade e traces
     │   ├── events.py             #   formato COMUM de evento (run_id, span_id, phase, author, status)
@@ -144,9 +148,10 @@ Após rodar (em qualquer modo), em `src/outputs/` e `src/logs/` (ignorados pelo 
 | Arquivo | Conteúdo |
 |---|---|
 | `src/outputs/final_report.md` | Relatório final legível (decisão, síntese, críticas, recomendações). |
-| `src/outputs/final_report.json` | Mesmo conteúdo em JSON estruturado, com as saídas de todas as fases. |
-| `src/logs/pipeline.log` | Log fase a fase da execução. |
-| `src/logs/traces/<run_id>.jsonl` | Trace de observabilidade da execução (um evento por linha) — ver [§7 Observabilidade](#7-observabilidade-e-traces-grupo-3). |
+| `src/outputs/final_report.json` | Mesmo conteúdo em JSON estruturado, com as saídas de todas as fases e o `run_id` **único** da execução (compartilhado com o trace do Grupo 3). |
+| `src/logs/pipeline.log` | Log fase a fase, em texto (orquestração + tools do Grupo 2). |
+| `src/logs/validacao_events.jsonl` | Eventos estruturados de validação/retry (Grupo 1) — ver [§4](#4-validação-retry-e-confiabilidade-grupo-1). |
+| `src/logs/traces/<run_id>.jsonl` | Trace de observabilidade da execução (um evento por linha), mesmo `run_id` do item acima — ver [§7 Observabilidade](#7-observabilidade-e-traces-grupo-3). |
 
 ### 2.5 Como escolher o modo (precedência)
 
@@ -312,6 +317,80 @@ python src/demo_validacao.py
 | [`example_invalid_cross_review.json`](src/examples/example_invalid_cross_review.json) | `CrossReviewSchema` | `mudou_posicao=true` com `mudancas=[]`, `resposta_aos_pares` vazia |
 | [`example_invalid_editor_verdict.json`](src/examples/example_invalid_editor_verdict.json) | `EditorVerdictSchema` | `decisao=5`, `justificativa=""`, `notas_por_revisor={}`, recomendação vazia |
 
+### Observabilidade estruturada: eventos de validação/retry
+
+Além do log em texto de sempre, cada tentativa de validação agora também gera
+um **evento estruturado** (JSON), em [`src/eventos_validacao.py`](src/eventos_validacao.py),
+respondendo diretamente à pergunta central desta parte do pipeline: *o dado
+passou, falhou ou foi corrigido por quê?*
+
+**Por que um arquivo separado (`src/logs/validacao_events.jsonl`) em vez de
+escrever no `pipeline.log` que já existe:** o `pipeline.log` já é usado, no
+mesmo formato de texto, pela orquestração e pelas tools do Grupo 2. Criar um
+arquivo próprio, em JSON Lines (uma linha = um evento = um JSON válido), evita
+disputar esse arquivo e deixa os eventos fáceis de consultar por qualquer
+ferramenta (jq, grep, pandas) sem parsing heurístico de texto.
+
+**Categorias de evento** (campo `categoria`), cobrindo os casos pedidos:
+
+| Categoria | Quando ocorre |
+|---|---|
+| `passou_de_primeira` | Validou na 1ª tentativa. |
+| `falhou_recuperavel` | Falhou, mas ainda há tentativas — retry a seguir. |
+| `corrigido` | O corrector (mock ou API) rodou; o evento carrega o **diff** dos campos alterados (`correcao_aplicada`). |
+| `passou_apos_correcao` | Validou numa tentativa ≥ 2, depois de correção. |
+| `bloqueado` | Esgotaram-se as tentativas (ou o corrector falhou) — `requer_revisao_humana=True`. |
+
+**`run_id` — agora unificado com o Grupo 3.** Antes desta integração, cada
+execução gerava um `run_id` (`uuid4`) próprio, sem relação com nenhum outro
+grupo. Com a base de observabilidade do Grupo 3 (`src/observability/`)
+presente, `Pipeline.run()` (em `pipeline_base.py`) passa a sobrescrever
+`context.run_id` pelo `tracer.run_id` assim que o contexto é criado — então o
+mesmo identificador aparece em `validacao_events.jsonl`, em
+`final_report.json` e no trace (`src/logs/traces/<run_id>.jsonl`). Sem o
+tracer (uso isolado do Grupo 1: `demo_eventos.py`, testes, ou o pacote
+`observability` ausente), o comportamento antigo continua valendo — um
+`uuid4` próprio é gerado e nada quebra.
+
+**Eventos também aparecem na timeline do Grupo 3.** `emitir_evento()` (em
+`eventos_validacao.py`), além de gravar `validacao_events.jsonl` como antes,
+repassa cada evento para `observability.emit_event()` — de forma guardada:
+se o pacote não existir, essa chamada é um no-op silencioso, e uma falha nela
+nunca derruba a validação (o evento já foi gravado no arquivo próprio antes
+dessa chamada). Assim, rodando `python main.py mock` com as duas camadas
+presentes, `python src/demo_observabilidade.py` mostra as tentativas, retries,
+correções e bloqueios do Grupo 1 na MESMA árvore reconstruída do trace.
+
+**Rodando a demo:**
+
+```bash
+python src/demo_eventos.py
+```
+
+A demo reaproveita os cenários de sucesso, retry-com-correção e esgotamento de
+`demo_validacao.py`, mas sob um único `run_id`, e ao final lê de volta o
+arquivo de eventos e imprime a linha do tempo da execução — é assim que se
+"abre o arquivo de eventos e entende o histórico de validação de uma
+execução". Rodada isoladamente (sem o pacote `observability`), funciona
+exatamente como antes da integração.
+
+**Rodando o pipeline completo** (`python main.py mock`), os eventos de todas
+as fases ficam em `src/logs/validacao_events.jsonl`, todos com o mesmo
+`run_id` impresso no console ao final da execução — e, se o tracer do Grupo 3
+estiver ativo, esse é também o `run_id` do trace.
+
+**Testes:** `src/tests/test_eventos_validacao.py` cobre o diff de correção, a
+validação de categorias, a leitura/filtragem por `run_id` e a sequência
+completa de eventos emitidos por `validar_com_tentativas()` nos três casos
+(sucesso, retry e bloqueio) — sem depender do pacote `observability` (que,
+quando ausente, faz o espelhamento virar no-op).
+
+**O que este item não faz (por escopo):** não recalcula nem substitui a
+validação/retry existente, e não captura eventos internos do ADK (isso é do
+Grupo 3, via `adk_bridge.py`). O identificador comum e a conexão com o trace,
+que antes ficavam como proposta em aberto, já estão integrados — ver
+[§7](#7-observabilidade-e-traces-grupo-3).
+
 ---
 
 ## 5. Tools Determinísticas de Auditoria (Grupo 2)
@@ -390,7 +469,7 @@ Seção transparente sobre o que **não** é "real" hoje:
 | **Fases 1–3 no modo Mock** | Lidas de [`src/mocks/peer_review_mock.json`](src/mocks/peer_review_mock.json). No modo API, são chamadas reais ao Gemini. |
 | **Fase 4 (relatório)** | **Nunca** mockada — é pura formatação em Python, idêntica nos dois modos. |
 | **Entrada do artigo** | Usa um `.txt` de exemplo ([`src/examples/example_article.txt`](src/examples/example_article.txt)). **Ainda não há** ingestão/parse de PDF. |
-| **Validação & retry** | **Integrado** — ver [§4](#4-validação-retry-e-confiabilidade-grupo-1). Retry automático com corrector em modo Mock (offline) e API (Gemini). `PipelineValidationError` bloqueia propagação de dados inválidos. |
+| **Validação & retry** | **Integrado** — ver [§4](#4-validação-retry-e-confiabilidade-grupo-1). Retry automático com corrector em modo Mock (offline) e API (Gemini). `PipelineValidationError` bloqueia propagação de dados inválidos. Eventos estruturados em `src/logs/validacao_events.jsonl`, com `run_id` **unificado** com o tracer do Grupo 3 quando presente, e espelhados em `observability.emit_event()` — ver [§7](#7-observabilidade-e-traces-grupo-3). |
 | **Tools de auditoria** | **Integradas** — ver [§5](#5-tools-determinísticas-de-auditoria-grupo-2). `validar_completude` (Fase 1), `checar_coerencia` (chamada por dentro da Fase 3) e `auditar_decisao_final` (Fase 3) — todas ativas. |
 | **Adaptação de pareceres legados de revisor** | O [`src/legacy_adapter.py`](src/legacy_adapter.py) converte o **veredito do editor** legado; o parecer **de revisor** legado não tem as 4 dimensões e, por isso, **não** é adaptado automaticamente (exige nova revisão — limitação documentada). |
 
@@ -474,6 +553,12 @@ Uma linha, sem acoplamento (no-op fora de uma execução):
 from observability import emit_event
 emit_event("validacao_ok", author="grupo1", attributes={"tentativas": 1})
 ```
+
+> **Já integrado com o Grupo 1:** `eventos_validacao.py` chama exatamente esse
+> `emit_event()` a partir de `emitir_evento()`, e `Pipeline.run()` sincroniza
+> `context.run_id` com `tracer.run_id` — ver [§4](#4-validação-retry-e-confiabilidade-grupo-1).
+> Rode `python src/demo_observabilidade.py` (ou `python main.py mock`) para ver
+> as tentativas/retries/correções do Grupo 1 na mesma árvore reconstruída aqui.
 
 ### Decisões de projeto (curtas)
 
@@ -562,11 +647,17 @@ python src/tools/demo_tools.py
 # Demo offline da camada de validação/retry do Grupo 1 (sem API key):
 python src/demo_validacao.py
 
+# Demo offline dos eventos estruturados de validação/retry do Grupo 1 (sem API key):
+python src/demo_eventos.py
+
 # Demo offline da observabilidade/traces do Grupo 3 (sem API key):
 python src/demo_observabilidade.py
 
 # Testes das tools (Grupo 2):
 .venv/bin/pytest src/tools/tests/ -v
+
+# Testes dos eventos estruturados (Grupo 1):
+.venv/bin/pytest src/tests/ -v
 
 # Testes da observabilidade (Grupo 3):
 .venv/bin/python -m pytest src/observability/tests/ -v
