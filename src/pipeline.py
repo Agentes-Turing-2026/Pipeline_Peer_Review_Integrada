@@ -462,11 +462,11 @@ class FinalReportPhase(PipelinePhase[EditorVerdictSchema, FinalReport]):
             cross=phase2.cross_reviews,
             verdict=verdict,
         )
+        _tracer_atual = get_current_tracer()
         structured = {
-            "run_id": context.run_id,
+            "run_id": _tracer_atual.run_id if _tracer_atual is not None else context.run_id,
             "article_ref": article_ref,
             "model": MODEL,
-            "run_id": (get_current_tracer().run_id if get_current_tracer() is not None else None),
             "decisao": verdict.decisao,
             "decisao_rotulo": ESCALA_VEREDITO[verdict.decisao],
             "phase1_reviews": {rid: r.model_dump() for rid, r in phase1.reviews.items()},
