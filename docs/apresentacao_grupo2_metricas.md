@@ -251,10 +251,3 @@ Onde olhar os resultados depois de rodar:
   `ResumoExecucao` mas seguem `None`, porque os módulos de agente não expõem
   esses dados hoje (ver §5).
 
----
-
-## 9. Créditos
-
-Grupo 2 — Giulio (métricas, integração, coordenação desta entrega), Pedro
-Santana e João Pedro Souza (tools de completude/coerência integradas em
-atividade anterior e reaproveitadas aqui).
