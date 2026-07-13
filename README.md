@@ -3,7 +3,7 @@
 Repositório **integrado** onde os grupos reúnem suas contribuições para um
 **pipeline multiagente em fases**. O caso de teste atual é **peer review** de
 artigos científicos, mas a arquitetura foi desenhada para ser **reaproveitável em
-outros domínios** (ver [§8 Extensibilidade](#8-extensibilidade)).
+outros domínios** (ver [§9 Extensibilidade](#9-extensibilidade)).
 
 O sistema recebe um artigo, faz três revisores especializados avaliarem-no de
 forma independente, promove uma leitura cruzada entre eles, sintetiza um veredito
@@ -52,6 +52,13 @@ orquestração.
     ├── legacy_adapter.py         # Adaptador de formatos legados -> schemas oficiais
     ├── validacao_retry.py        # Grupo 1 — camada de validação, retry e confiabilidade
     ├── demo_validacao.py         # Demo offline da camada de validação (sem API key)
+    ├── demo_observabilidade.py   # Grupo 3 — demo offline: roda o pipeline e reconstrói o trace
+    ├── observability/            # Grupo 3 — base de observabilidade e traces
+    │   ├── events.py             #   formato COMUM de evento (run_id, span_id, phase, author, status)
+    │   ├── tracer.py             #   ciclo de vida da execução + spans + storage local (JSONL)
+    │   ├── adk_bridge.py         #   captura os Event do Runner do ADK (invocation_id, author, tools)
+    │   ├── timeline.py           #   reconstrói a linha do tempo a partir do trace
+    │   └── tests/                #   testes offline do tracer (envelope, erro, ponte ADK)
     ├── mocks/                    # Respostas pré-salvas para o modo offline
     │   └── peer_review_mock.json
     └── examples/                 # Artigo de exemplo + exemplos de I/O dos schemas
@@ -139,6 +146,7 @@ Após rodar (em qualquer modo), em `src/outputs/` e `src/logs/` (ignorados pelo 
 | `src/outputs/final_report.md` | Relatório final legível (decisão, síntese, críticas, recomendações). |
 | `src/outputs/final_report.json` | Mesmo conteúdo em JSON estruturado, com as saídas de todas as fases. |
 | `src/logs/pipeline.log` | Log fase a fase da execução. |
+| `src/logs/traces/<run_id>.jsonl` | Trace de observabilidade da execução (um evento por linha) — ver [§8 Observabilidade](#8-observabilidade-e-traces-grupo-3). |
 
 ### 2.5 Como escolher o modo (precedência)
 
@@ -477,7 +485,117 @@ cat src/outputs/resumo_execucao.json
 
 ---
 
-## 8. Extensibilidade
+## 8. Observabilidade e Traces (Grupo 3)
+
+Base de observabilidade próxima do padrão **Google ADK** (eventos, sessões,
+traces). Responde à pergunta **"por onde a execução passou?"**: ao final de uma
+run é possível reconstruir, em ordem, quais fases rodaram, quais agentes
+participaram, o que deu certo, onde houve alerta e quais arquivos foram gerados.
+Vive em [`src/observability/`](src/observability) e é **aditiva** — não altera
+validação/retry (Grupo 1) nem as tools (Grupo 2).
+
+### Como rodar a demo (offline, sem chave)
+
+```bash
+python src/demo_observabilidade.py        # roda o pipeline em mock e imprime o trace
+```
+
+A demo executa o pipeline completo e, ao final, **reconstrói a linha do tempo**
+a partir do trace gravado. Também é gerado automaticamente em qualquer
+`python main.py mock|api`.
+
+> Um trace de exemplo (uma execução em modo mock, 25 eventos) está versionado em
+> [`src/examples/example_trace.jsonl`](src/examples/example_trace.jsonl) — útil
+> para inspecionar o formato sem precisar rodar. Os traces reais gerados em
+> `src/logs/traces/<run_id>.jsonl` continuam **ignorados pelo git** (artefatos).
+
+### O formato comum de evento
+
+Todo evento usa o mesmo `TraceEvent` ([`events.py`](src/observability/events.py)),
+com os campos que respondem às perguntas exigidas:
+
+| Campo | Responde |
+|---|---|
+| `run_id` | a QUAL execução pertence |
+| `invocation_id` | vínculo com a invocação do **ADK** (quando há chamada real) |
+| `phase` | em QUAL fase ocorreu |
+| `author` | QUEM gerou (agente, `grupo1`, `grupo2`, `sistema`) |
+| `status` | `ok` / `alerta` / `erro` / `em_andamento` |
+| `span_id` / `parent_span_id` | a HIERARQUIA de spans (run → fase) |
+| `kind` | o PAPEL do evento/span (`run`/`phase`/`agent`/`tool`/`report`) |
+| `attributes` | espaço livre para cada grupo anexar seus dados |
+
+> **Sobre a hierarquia:** hoje apenas a execução (`run`) e as fases viram *spans*
+> com início/fim, duração e `parent_span_id`. Agente, tool e relatório entram como
+> **eventos pontuais tipados** (via `kind`) ancorados no span da fase corrente —
+> não como spans aninhados. O `SpanKind` enumera todos esses papéis; transformar
+> agente/tool em spans reais é uma evolução natural, sem mudar o formato do evento.
+
+### Como entender o trace gerado
+
+A reconstrução imprime a árvore da execução, por exemplo:
+
+```
+✓ <run> peer_review [7 ms]
+  ✓ <phase> fase_1_revisao_independente [2 ms]
+    · ✓ parecer_validado [statistician] — tentativas=1, validado_por=grupo1
+    · ✓ completude [grupo2] — revisor=statistician, score=1.0, completo=True
+  ✓ <phase> fase_2_leitura_cruzada [1 ms]
+    · ✓ leitura_cruzada_concluida [sistema] — mudaram_de_posicao=['domain_expert']
+  ✓ <phase> fase_3_editor_chefe [0 ms]
+    · ✓ auditoria_veredito [grupo2] — requer_revisao_humana=False
+  ✓ <phase> fase_4_relatorio_final [1 ms]
+```
+
+O `final_report.json` passa a carregar o `run_id` que o gerou — o relatório
+**aponta para a execução** que o produziu.
+
+### Como os outros grupos entram na MESMA execução
+
+Uma linha, sem acoplamento (no-op fora de uma execução):
+
+```python
+from observability import emit_event
+emit_event("validacao_ok", author="grupo1", attributes={"tentativas": 1})
+```
+
+### Decisões de projeto (curtas)
+
+- **Instrumentação aditiva e à prova de falhas.** O tracer é opcional e engole
+  os próprios erros: se a observabilidade falhar, o pipeline continua rodando
+  (mesma política de importação guardada do Grupo 2). A demo básica não trava.
+- **Storage local agora, OpenTelemetry depois.** Grava JSONL local atrás de uma
+  interface `Exporter` trocável — os campos (`span_id`/`parent_span_id`/
+  `attributes`) mapeiam direto em spans OTel, então trocar para Cloud Trace/
+  Langfuse é plugar um exporter, sem reescrever o núcleo.
+- **Captura de eventos do ADK.** O consumo de `runner.run_async` que antes
+  descartava os eventos (`pass`) agora passa cada `Event` por
+  [`adk_bridge.py`](src/observability/adk_bridge.py), preservando `invocation_id`
+  e `author`.
+
+### Testes
+
+Suíte offline em [`src/observability/tests/`](src/observability/tests/) — usa o
+`MemoryExporter` (eventos em memória), então roda **sem chave e sem tocar o disco**:
+
+```bash
+.venv/bin/python -m pytest src/observability/tests/ -v
+```
+
+Cobre os pontos que a demo em modo mock não exercita:
+
+- **Envelope e hierarquia:** `run_start` → 4 spans de fase → `run_end`, cada fase
+  filha do `run` via `parent_span_id`, sem span pendurado.
+- **Caminho de erro:** uma exceção numa fase vira evento `error`, marca span e
+  execução como `erro` e é re-levantada; e a falha do `Exporter` **não** derruba o
+  pipeline (a decisão de projeto acima, agora verificada).
+- **Captura do ADK sem API:** um `Event` falso passa por `trace_adk_event` e
+  confirma-se que `author`, `invocation_id` e as tool calls são preservados —
+  validando a ponte ADK offline, sem o Runner real.
+
+---
+
+## 9. Extensibilidade
 
 A separação **orquestração × domínio** permite reusar a mesma arquitetura de 4
 fases em outros problemas multiagentes. A receita conceitual:
@@ -528,8 +646,14 @@ python src/tools/demo_tools.py
 # Demo offline da camada de validação/retry do Grupo 1 (sem API key):
 python src/demo_validacao.py
 
+# Demo offline da observabilidade/traces do Grupo 3 (sem API key):
+python src/demo_observabilidade.py
+
 # Testes das tools (Grupo 2):
 .venv/bin/pytest src/tools/tests/ -v
+
+# Testes da observabilidade (Grupo 3):
+.venv/bin/python -m pytest src/observability/tests/ -v
 
 # Demos isoladas de fases específicas (usam a API real):
 python src/reviewer_agent.py     # apenas a Fase 1 (avaliação independente)

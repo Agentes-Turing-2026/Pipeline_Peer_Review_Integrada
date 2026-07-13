@@ -7,3 +7,6 @@ python-dotenv>=1.0
 # Modo API (chamadas reais ao Gemini) também precisa de:
 google-adk>=0.2
 google-genai>=0.3
+#
+# Testes automatizados:
+pytest>=8.0

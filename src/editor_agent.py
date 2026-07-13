@@ -190,10 +190,16 @@ async def _run_editor(
         role="user",
         parts=[types.Part.from_text(text="Sintetize os pareceres em um veredito final.")],
     )
-    async for _ in runner.run_async(
+    try:
+        from observability import trace_adk_event
+    except Exception:  # noqa: BLE001
+        trace_adk_event = None  # type: ignore[assignment]
+
+    async for event in runner.run_async(
         user_id=USER_ID, session_id=session.id, new_message=trigger
     ):
-        pass
+        if trace_adk_event is not None:
+            trace_adk_event(event, phase="fase_3_editor_chefe")
 
     updated = await runner.session_service.get_session(
         app_name=APP_NAME, user_id=USER_ID, session_id=session.id

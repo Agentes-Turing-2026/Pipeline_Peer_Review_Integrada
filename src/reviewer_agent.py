@@ -238,10 +238,17 @@ async def _run_reviewers(article_text: str) -> dict:
         parts=[types.Part.from_text(text="Avalie o artigo fornecido.")],
     )
 
-    async for _ in runner.run_async(
+    # Observabilidade: capturamos cada Event do ADK em vez de descartá-lo (pass).
+    try:
+        from observability import trace_adk_event
+    except Exception:  # noqa: BLE001
+        trace_adk_event = None  # type: ignore[assignment]
+
+    async for event in runner.run_async(
         user_id=USER_ID, session_id=session.id, new_message=trigger
     ):
-        pass
+        if trace_adk_event is not None:
+            trace_adk_event(event, phase="fase_1_revisao_independente")
 
     updated = await runner.session_service.get_session(
         app_name=APP_NAME, user_id=USER_ID, session_id=session.id
