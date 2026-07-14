@@ -111,6 +111,51 @@ if not logger.handlers:
 DEFAULT_MOCK_FILE = HERE / "mocks" / "peer_review_mock.json"
 
 
+import time
+from contextlib import nullcontext
+
+# Métricas de execução do Grupo 2 (importação guardada: pipeline funciona sem elas).
+try:
+    from metrics.coletor import ExecutionCollector
+    from metrics.resumo import gerar_resumo
+    from metrics.exportar import imprimir_resumo, salvar_resumo_json
+except ImportError:
+    ExecutionCollector = None
+    gerar_resumo = None
+    imprimir_resumo = None
+    salvar_resumo_json = None
+
+
+def _fase_medida(coletor: ExecutionCollector | None, nome: str):
+    """Context manager: mede a fase via coletor.fase(nome); no-op se coletor for None."""
+    return coletor.fase(nome) if coletor is not None else nullcontext()
+
+
+def _registrar_validacao(coletor: ExecutionCollector | None, *, fase: str, agente: str, resultado) -> None:
+    """Traduz um ResultadoValidacao (validacao_retry.py) em eventos de métricas.
+
+    Registra um evento tipo="validacao" (sempre), um evento tipo="retry" para
+    cada tentativa além da primeira, e um evento tipo="falha" se todas as
+    tentativas se esgotaram sem sucesso. Não faz nada se coletor for None
+    (execução sem métricas configuradas — não deve travar o pipeline).
+    """
+    if coletor is None:
+        return
+
+    coletor.registrar(
+        fase=fase, tipo="validacao", nome=agente,
+        status="sucesso" if resultado.sucesso else "falha",
+        agente=agente, tentativas_usadas=resultado.tentativas_usadas,
+    )
+    for _ in range(resultado.tentativas_usadas - 1):
+        coletor.registrar(fase=fase, tipo="retry", nome=agente, status="sucesso", agente=agente)
+    if not resultado.sucesso:
+        coletor.registrar(
+            fase=fase, tipo="falha", nome=agente, status="falha",
+            agente=agente, erro_final=resultado.erro_final,
+        )
+
+
 class RunMode(str, Enum):
     """Modos de execução do pipeline."""
 
@@ -194,62 +239,75 @@ class IndependentReviewPhase(PipelinePhase[str, IndependentReviews]):
     name = "fase_1_revisao_independente"
 
     def run(self, data: str, context: PipelineContext) -> IndependentReviews:
-        mode = resolve_mode(context.config)
-        reviews: dict[str, ReviewSchema] = {}
+        coletor: ExecutionCollector | None = context.config.get("_metrics_collector")
+        with _fase_medida(coletor, self.name):
+            mode = resolve_mode(context.config)
+            reviews: dict[str, ReviewSchema] = {}
 
-        if mode is RunMode.MOCK:
-            payloads = _load_mock(context).get("phase1_reviews", {})
-            for rid in REVIEWERS:
-                if rid not in payloads:
-                    raise RuntimeError(f"Mock sem parecer de Fase 1 para '{rid}'.")
-                resultado = validar_com_tentativas(
-                    payloads[rid], validar_review, mode, rid,
-                    run_id=context.run_id, fase=self.name,
-                )
-                reviews[rid] = resultado.dados
-                logger.info("Validação Fase 1 '%s': tentativas=%d", rid, resultado.tentativas_usadas)
-                emit_event(
-                    "parecer_validado", author=rid, phase=self.name, kind="agent",
-                    attributes={"tentativas": resultado.tentativas_usadas, "validado_por": "grupo1"},
-                )
-        else:
-            article_text = data
-            state = asyncio.run(_run_reviewers(article_text))
-            for rid, cfg in REVIEWERS.items():
-                raw = state.get(cfg["output_key"])
-                if raw is None:
-                    raise RuntimeError(f"Revisor '{rid}' não produziu parecer na Fase 1.")
-                payload = raw if isinstance(raw, dict) else json.loads(raw)
-                resultado = validar_com_tentativas(
-                    payload, validar_review, mode, rid,
-                    run_id=context.run_id, fase=self.name,
-                )
-                reviews[rid] = resultado.dados
-                logger.info("Validação Fase 1 '%s': tentativas=%d", rid, resultado.tentativas_usadas)
-                emit_event(
-                    "parecer_validado", author=rid, phase=self.name, kind="agent",
-                    attributes={"tentativas": resultado.tentativas_usadas, "validado_por": "grupo1"},
-                )
+            if mode is RunMode.MOCK:
+                payloads = _load_mock(context).get("phase1_reviews", {})
+                for rid in REVIEWERS:
+                    if rid not in payloads:
+                        raise RuntimeError(f"Mock sem parecer de Fase 1 para '{rid}'.")
+                    resultado = validar_com_tentativas(
+                        payloads[rid], validar_review, mode, rid,
+                        run_id=context.run_id, fase=self.name,
+                    )
+                    reviews[rid] = resultado.dados
+                    logger.info("Validação Fase 1 '%s': tentativas=%d", rid, resultado.tentativas_usadas)
+                    _registrar_validacao(coletor, fase=self.name, agente=rid, resultado=resultado)
+                    emit_event(
+                        "parecer_validado", author=rid, phase=self.name, kind="agent",
+                        attributes={"tentativas": resultado.tentativas_usadas, "validado_por": "grupo1"},
+                    )
+            else:
+                article_text = data
+                state = asyncio.run(_run_reviewers(article_text))
+                for rid, cfg in REVIEWERS.items():
+                    raw = state.get(cfg["output_key"])
+                    if raw is None:
+                        raise RuntimeError(f"Revisor '{rid}' não produziu parecer na Fase 1.")
+                    payload = raw if isinstance(raw, dict) else json.loads(raw)
+                    resultado = validar_com_tentativas(
+                        payload, validar_review, mode, rid,
+                        run_id=context.run_id, fase=self.name,
+                    )
+                    reviews[rid] = resultado.dados
+                    logger.info("Validação Fase 1 '%s': tentativas=%d", rid, resultado.tentativas_usadas)
+                    _registrar_validacao(coletor, fase=self.name, agente=rid, resultado=resultado)
+                    emit_event(
+                        "parecer_validado", author=rid, phase=self.name, kind="agent",
+                        attributes={"tentativas": resultado.tentativas_usadas, "validado_por": "grupo1"},
+                    )
 
-        if _tool_completude is not None:
-            for rid, review in reviews.items():
-                audit = _tool_completude(review.model_dump())
-                logger.info(
-                    "[completude] Fase 1 '%s': score=%.4f completo=%s",
-                    rid, audit["score_completude"], audit["completo"],
-                )
-                emit_event(
-                    "completude", author="grupo2", phase=self.name, kind="tool",
-                    status="ok" if audit["completo"] else "alerta",
-                    attributes={"revisor": rid, "score": audit["score_completude"], "completo": audit["completo"]},
-                )
+            if _tool_completude is not None:
+                for rid, review in reviews.items():
+                    inicio = time.perf_counter()
+                    audit = _tool_completude(review.model_dump())
+                    duracao_ms = (time.perf_counter() - inicio) * 1000
+                    logger.info(
+                        "[completude] Fase 1 '%s': score=%.4f completo=%s",
+                        rid, audit["score_completude"], audit["completo"],
+                    )
+                    if coletor is not None:
+                        coletor.registrar(
+                            fase=self.name, tipo="tool", nome="validar_completude",
+                            status="sucesso", duracao_ms=duracao_ms,
+                            agente=rid, score_completude=audit["score_completude"],
+                            completo=audit["completo"],
+                        )
+                    emit_event(
+                        "completude", author="grupo2", phase=self.name, kind="tool",
+                        status="ok" if audit["completo"] else "alerta",
+                        attributes={"revisor": rid, "score": audit["score_completude"], "completo": audit["completo"]},
+                    )
 
-        logger.info("Fase 1 (%s) concluída: %s pareceres validados.", mode.value, len(reviews))
-        emit_event(
-            "revisao_independente_concluida", author="sistema", phase=self.name,
-            attributes={"pareceres": len(reviews), "revisores": list(reviews)},
-        )
-        return IndependentReviews(reviews=reviews)
+            logger.info("Fase 1 (%s) concluída: %s pareceres validados.", mode.value, len(reviews))
+            emit_event(
+                "revisao_independente_concluida", author="sistema", phase=self.name,
+                attributes={"pareceres": len(reviews), "revisores": list(reviews)},
+            )
+            return IndependentReviews(reviews=reviews)
 
 
 # ---------------------------------------------------------------------------
@@ -262,59 +320,63 @@ class CrossReviewPhase(PipelinePhase[IndependentReviews, CrossReviews]):
     name = "fase_2_leitura_cruzada"
 
     def run(self, data: IndependentReviews, context: PipelineContext) -> CrossReviews:
-        mode = resolve_mode(context.config)
-        cross: dict[str, CrossReviewSchema] = {}
+        coletor: ExecutionCollector | None = context.config.get("_metrics_collector")
+        with _fase_medida(coletor, self.name):
+            mode = resolve_mode(context.config)
+            cross: dict[str, CrossReviewSchema] = {}
 
-        if mode is RunMode.MOCK:
-            payloads = _load_mock(context).get("phase2_cross_reviews", {})
-            for rid in REVIEWERS:
-                if rid not in payloads:
-                    raise RuntimeError(f"Mock sem parecer de Fase 2 para '{rid}'.")
-                resultado = validar_com_tentativas(
-                    payloads[rid], validar_cross_review, mode, rid,
-                    run_id=context.run_id, fase=self.name,
-                )
-                cross[rid] = resultado.dados
-                logger.info("Validação Fase 2 '%s': tentativas=%d", rid, resultado.tentativas_usadas)
-                emit_event(
-                    "cross_review_validado", author=rid, phase=self.name, kind="agent",
-                    attributes={"tentativas": resultado.tentativas_usadas, "validado_por": "grupo1"},
-                )
-        else:
-            article_text: str = context.initial_input
-            # _run_cross_review espera os pareceres chaveados por output_key.
-            phase1_by_key = {
-                REVIEWERS[rid]["output_key"]: review.model_dump()
-                for rid, review in data.reviews.items()
-            }
-            state = asyncio.run(_run_cross_review(phase1_by_key, article_text))
-            for rid in REVIEWERS:
-                raw = state.get(f"{rid}_cross_review")
-                if raw is None:
-                    raise RuntimeError(f"Revisor '{rid}' não produziu parecer na Fase 2.")
-                payload = raw if isinstance(raw, dict) else json.loads(raw)
-                resultado = validar_com_tentativas(
-                    payload, validar_cross_review, mode, rid,
-                    run_id=context.run_id, fase=self.name,
-                )
-                cross[rid] = resultado.dados
-                logger.info("Validação Fase 2 '%s': tentativas=%d", rid, resultado.tentativas_usadas)
-                emit_event(
-                    "cross_review_validado", author=rid, phase=self.name, kind="agent",
-                    attributes={"tentativas": resultado.tentativas_usadas, "validado_por": "grupo1"},
-                )
+            if mode is RunMode.MOCK:
+                payloads = _load_mock(context).get("phase2_cross_reviews", {})
+                for rid in REVIEWERS:
+                    if rid not in payloads:
+                        raise RuntimeError(f"Mock sem parecer de Fase 2 para '{rid}'.")
+                    resultado = validar_com_tentativas(
+                        payloads[rid], validar_cross_review, mode, rid,
+                        run_id=context.run_id, fase=self.name,
+                    )
+                    cross[rid] = resultado.dados
+                    logger.info("Validação Fase 2 '%s': tentativas=%d", rid, resultado.tentativas_usadas)
+                    _registrar_validacao(coletor, fase=self.name, agente=rid, resultado=resultado)
+                    emit_event(
+                        "cross_review_validado", author=rid, phase=self.name, kind="agent",
+                        attributes={"tentativas": resultado.tentativas_usadas, "validado_por": "grupo1"},
+                    )
+            else:
+                article_text: str = context.initial_input
+                # _run_cross_review espera os pareceres chaveados por output_key.
+                phase1_by_key = {
+                    REVIEWERS[rid]["output_key"]: review.model_dump()
+                    for rid, review in data.reviews.items()
+                }
+                state = asyncio.run(_run_cross_review(phase1_by_key, article_text))
+                for rid in REVIEWERS:
+                    raw = state.get(f"{rid}_cross_review")
+                    if raw is None:
+                        raise RuntimeError(f"Revisor '{rid}' não produziu parecer na Fase 2.")
+                    payload = raw if isinstance(raw, dict) else json.loads(raw)
+                    resultado = validar_com_tentativas(
+                        payload, validar_cross_review, mode, rid,
+                        run_id=context.run_id, fase=self.name,
+                    )
+                    cross[rid] = resultado.dados
+                    logger.info("Validação Fase 2 '%s': tentativas=%d", rid, resultado.tentativas_usadas)
+                    _registrar_validacao(coletor, fase=self.name, agente=rid, resultado=resultado)
+                    emit_event(
+                        "cross_review_validado", author=rid, phase=self.name, kind="agent",
+                        attributes={"tentativas": resultado.tentativas_usadas, "validado_por": "grupo1"},
+                    )
 
-        mudaram = [rid for rid, cr in cross.items() if cr.mudou_posicao]
-        logger.info(
-            "Fase 2 (%s) concluída. Revisores que mudaram de posição: %s.",
-            mode.value,
-            mudaram or "nenhum",
-        )
-        emit_event(
-            "leitura_cruzada_concluida", author="sistema", phase=self.name,
-            attributes={"mudaram_de_posicao": mudaram or []},
-        )
-        return CrossReviews(cross_reviews=cross)
+            mudaram = [rid for rid, cr in cross.items() if cr.mudou_posicao]
+            logger.info(
+                "Fase 2 (%s) concluída. Revisores que mudaram de posição: %s.",
+                mode.value,
+                mudaram or "nenhum",
+            )
+            emit_event(
+                "leitura_cruzada_concluida", author="sistema", phase=self.name,
+                attributes={"mudaram_de_posicao": mudaram or []},
+            )
+            return CrossReviews(cross_reviews=cross)
 
 
 # ---------------------------------------------------------------------------
@@ -327,59 +389,71 @@ class EditorVerdictPhase(PipelinePhase[CrossReviews, EditorVerdictSchema]):
     name = "fase_3_editor_chefe"
 
     def run(self, data: CrossReviews, context: PipelineContext) -> EditorVerdictSchema:
-        mode = resolve_mode(context.config)
+        coletor: ExecutionCollector | None = context.config.get("_metrics_collector")
+        with _fase_medida(coletor, self.name):
+            mode = resolve_mode(context.config)
 
-        if mode is RunMode.MOCK:
-            payload = _load_mock(context).get("phase3_verdict")
-            if payload is None:
-                raise RuntimeError("Mock sem veredito de Fase 3 ('phase3_verdict').")
-            resultado = validar_com_tentativas(
-                payload, validar_editor_verdict, mode, "editor",
-                run_id=context.run_id, fase=self.name,
-            )
-            verdict = resultado.dados
-            logger.info("Validação Fase 3 'editor': tentativas=%d", resultado.tentativas_usadas)
-            emit_event(
-                "veredito_validado", author="editor", phase=self.name, kind="agent",
-                attributes={"tentativas": resultado.tentativas_usadas, "validado_por": "grupo1"},
-            )
-        else:
-            article_text: str = context.initial_input
-            verdict_payload = asyncio.run(_run_editor(data.cross_reviews, article_text))
-            resultado = validar_com_tentativas(
-                verdict_payload, validar_editor_verdict, mode, "editor",
-                run_id=context.run_id, fase=self.name,
-            )
-            verdict = resultado.dados
-            logger.info("Validação Fase 3 'editor': tentativas=%d", resultado.tentativas_usadas)
-            emit_event(
-                "veredito_validado", author="editor", phase=self.name, kind="agent",
-                attributes={"tentativas": resultado.tentativas_usadas, "validado_por": "grupo1"},
-            )
+            if mode is RunMode.MOCK:
+                payload = _load_mock(context).get("phase3_verdict")
+                if payload is None:
+                    raise RuntimeError("Mock sem veredito de Fase 3 ('phase3_verdict').")
+                resultado = validar_com_tentativas(
+                    payload, validar_editor_verdict, mode, "editor",
+                    run_id=context.run_id, fase=self.name,
+                )
+                verdict = resultado.dados
+                logger.info("Validação Fase 3 'editor': tentativas=%d", resultado.tentativas_usadas)
+                _registrar_validacao(coletor, fase=self.name, agente="editor", resultado=resultado)
+                emit_event(
+                    "veredito_validado", author="editor", phase=self.name, kind="agent",
+                    attributes={"tentativas": resultado.tentativas_usadas, "validado_por": "grupo1"},
+                )
+            else:
+                article_text: str = context.initial_input
+                verdict_payload = asyncio.run(_run_editor(data.cross_reviews, article_text))
+                resultado = validar_com_tentativas(
+                    verdict_payload, validar_editor_verdict, mode, "editor",
+                    run_id=context.run_id, fase=self.name,
+                )
+                verdict = resultado.dados
+                logger.info("Validação Fase 3 'editor': tentativas=%d", resultado.tentativas_usadas)
+                _registrar_validacao(coletor, fase=self.name, agente="editor", resultado=resultado)
+                emit_event(
+                    "veredito_validado", author="editor", phase=self.name, kind="agent",
+                    attributes={"tentativas": resultado.tentativas_usadas, "validado_por": "grupo1"},
+                )
 
-        logger.info(
-            "Fase 3 (%s) concluída. Decisão: %s (%s).",
-            mode.value,
-            verdict.decisao,
-            ESCALA_VEREDITO[verdict.decisao],
-        )
-
-        if _tool_auditoria is not None:
-            auditoria = _tool_auditoria(verdict.model_dump())
-            logger.info("[auditoria] %s", auditoria["resumo_auditoria"])
-            if auditoria["requer_revisao_humana"]:
-                logger.warning("[auditoria] Veredito requer revisão humana.")
-            context.config["_auditoria_veredito"] = auditoria
-            emit_event(
-                "auditoria_veredito", author="grupo2", phase=self.name, kind="tool",
-                status="alerta" if auditoria["requer_revisao_humana"] else "ok",
-                attributes={
-                    "requer_revisao_humana": auditoria["requer_revisao_humana"],
-                    "resumo": auditoria["resumo_auditoria"],
-                },
+            logger.info(
+                "Fase 3 (%s) concluída. Decisão: %s (%s).",
+                mode.value,
+                verdict.decisao,
+                ESCALA_VEREDITO[verdict.decisao],
             )
 
-        return verdict
+            if _tool_auditoria is not None:
+                inicio = time.perf_counter()
+                auditoria = _tool_auditoria(verdict.model_dump())
+                duracao_ms = (time.perf_counter() - inicio) * 1000
+                logger.info("[auditoria] %s", auditoria["resumo_auditoria"])
+                if auditoria["requer_revisao_humana"]:
+                    logger.warning("[auditoria] Veredito requer revisão humana.")
+                context.config["_auditoria_veredito"] = auditoria
+                if coletor is not None:
+                    coletor.registrar(
+                        fase=self.name, tipo="tool", nome="auditar_decisao_final",
+                        status="sucesso", duracao_ms=duracao_ms,
+                        requer_revisao_humana=auditoria["requer_revisao_humana"],
+                    )
+                emit_event(
+                    "auditoria_veredito", author="grupo2", phase=self.name, kind="tool",
+                    status="alerta" if auditoria["requer_revisao_humana"] else "ok",
+                    attributes={
+                        "requer_revisao_humana": auditoria["requer_revisao_humana"],
+                        "resumo": auditoria["resumo_auditoria"],
+                    },
+                )
+
+            return verdict
 
 
 # ---------------------------------------------------------------------------
@@ -451,37 +525,50 @@ class FinalReportPhase(PipelinePhase[EditorVerdictSchema, FinalReport]):
     name = "fase_4_relatorio_final"
 
     def run(self, data: EditorVerdictSchema, context: PipelineContext) -> FinalReport:
-        verdict = data
-        phase1: IndependentReviews = context.get("fase_1_revisao_independente")
-        phase2: CrossReviews = context.get("fase_2_leitura_cruzada")
-        article_ref: str = context.config.get("article_ref", "entrada")
+        coletor: ExecutionCollector | None = context.config.get("_metrics_collector")
+        with _fase_medida(coletor, self.name):
+            verdict = data
+            phase1: IndependentReviews = context.get("fase_1_revisao_independente")
+            phase2: CrossReviews = context.get("fase_2_leitura_cruzada")
+            article_ref: str = context.config.get("article_ref", "entrada")
 
-        markdown = _render_report_md(
-            article_ref=article_ref,
-            reviews=phase1.reviews,
-            cross=phase2.cross_reviews,
-            verdict=verdict,
-        )
-        _tracer_atual = get_current_tracer()
-        structured = {
-            "run_id": _tracer_atual.run_id if _tracer_atual is not None else context.run_id,
-            "article_ref": article_ref,
-            "model": MODEL,
-            "decisao": verdict.decisao,
-            "decisao_rotulo": ESCALA_VEREDITO[verdict.decisao],
-            "phase1_reviews": {rid: r.model_dump() for rid, r in phase1.reviews.items()},
-            "phase2_cross_reviews": {
-                rid: c.model_dump() for rid, c in phase2.cross_reviews.items()
-            },
-            "phase3_verdict": verdict.model_dump(),
-            "auditoria_veredito": context.config.get("_auditoria_veredito"),
-        }
-        logger.info("Fase 4 concluída: relatório final gerado.")
-        emit_event(
-            "relatorio_final_gerado", author="sistema", phase=self.name, kind="report",
-            attributes={"decisao": verdict.decisao, "rotulo": ESCALA_VEREDITO[verdict.decisao]},
-        )
-        return FinalReport(markdown=markdown, data=structured)
+            markdown = _render_report_md(
+                article_ref=article_ref,
+                reviews=phase1.reviews,
+                cross=phase2.cross_reviews,
+                verdict=verdict,
+            )
+            _tracer_atual = get_current_tracer()
+            auditoria_veredito = context.config.get("_auditoria_veredito")
+            structured = {
+                "run_id": _tracer_atual.run_id if _tracer_atual is not None else context.run_id,
+                "article_ref": article_ref,
+                "model": MODEL,
+                "decisao": verdict.decisao,
+                "decisao_rotulo": ESCALA_VEREDITO[verdict.decisao],
+                "phase1_reviews": {rid: r.model_dump() for rid, r in phase1.reviews.items()},
+                "phase2_cross_reviews": {
+                    rid: c.model_dump() for rid, c in phase2.cross_reviews.items()
+                },
+                "phase3_verdict": verdict.model_dump(),
+                "auditoria_veredito": auditoria_veredito,
+            }
+
+            if coletor is not None:
+                coletor.registrar(
+                    fase=self.name, tipo="decisao_final", nome="veredito_final",
+                    status="sucesso", decisao=verdict.decisao,
+                    requer_revisao_humana=bool(
+                        auditoria_veredito and auditoria_veredito.get("requer_revisao_humana")
+                    ),
+                )
+
+            logger.info("Fase 4 concluída: relatório final gerado.")
+            emit_event(
+                "relatorio_final_gerado", author="sistema", phase=self.name, kind="report",
+                attributes={"decisao": verdict.decisao, "rotulo": ESCALA_VEREDITO[verdict.decisao]},
+            )
+            return FinalReport(markdown=markdown, data=structured)
 
 
 # ---------------------------------------------------------------------------
@@ -530,6 +617,12 @@ def run_demo(mode: str | None = None) -> FinalReport:
     if resolved is RunMode.API:
         _require_api_key()
 
+    # Métricas de execução (Grupo 2): coletor guardado — se metrics/ não
+    # existir por algum motivo, o pipeline roda normalmente, sem instrumentação.
+    coletor: ExecutionCollector | None = ExecutionCollector() if ExecutionCollector is not None else None
+    if coletor is not None:
+        config["_metrics_collector"] = coletor
+
     article_path = HERE / "examples" / "example_article.txt"
     article_text = article_path.read_text(encoding="utf-8")
 
@@ -539,12 +632,20 @@ def run_demo(mode: str | None = None) -> FinalReport:
     pipeline = build_peer_review_pipeline(tracer=tracer)
     print(f"Pipeline '{pipeline.name}' [modo={resolved.value}] — fases: {pipeline.phase_names}")
 
+    resumo = None
+
     out_dir = HERE / "outputs"
     out_dir.mkdir(exist_ok=True)
 
     def _run_and_save() -> FinalReport:
+        nonlocal resumo
         result = pipeline.run(initial_input=article_text, config=config, verbose=True)
         report_local: FinalReport = result.final
+        # Grupo 2 — agrega as métricas de execução (eventos, duração, retries) no
+        # relatório, para que o JSON salvo já inclua o resumo auditável.
+        if coletor is not None and gerar_resumo is not None:
+            resumo = gerar_resumo(coletor.eventos, run_id=coletor.run_id)
+            report_local.data["resumo_execucao"] = resumo.to_dict()
         # A gravação em disco é um passo pós-pipeline: envolvemos num span "report"
         # (irmão das fases, sob o run) para que "arquivos_gerados" fique ancorado
         # nele — e não solto sob o <run>, como acontecia ao emitir depois que o
@@ -592,6 +693,10 @@ def run_demo(mode: str | None = None) -> FinalReport:
     print(f"Relatório (json):     {out_dir / 'final_report.json'}")
     print(f"Log do pipeline:      {LOG_DIR / 'pipeline.log'}")
     print(f"Eventos de validação: {LOG_DIR / 'validacao_events.jsonl'}")
+    if resumo is not None:
+        imprimir_resumo(resumo)
+        resumo_path = salvar_resumo_json(resumo)
+        print(f"Resumo de execução:   {resumo_path}")
     if tracer is not None:
         print(f"Trace (run_id={tracer.run_id}): {trace_path}")
     return report

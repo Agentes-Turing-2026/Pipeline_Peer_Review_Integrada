@@ -3,7 +3,7 @@
 Repositório **integrado** onde os grupos reúnem suas contribuições para um
 **pipeline multiagente em fases**. O caso de teste atual é **peer review** de
 artigos científicos, mas a arquitetura foi desenhada para ser **reaproveitável em
-outros domínios** (ver [§8 Extensibilidade](#8-extensibilidade)).
+outros domínios** (ver [§9 Extensibilidade](#9-extensibilidade)).
 
 O sistema recebe um artigo, faz três revisores especializados avaliarem-no de
 forma independente, promove uma leitura cruzada entre eles, sintetiza um veredito
@@ -151,7 +151,7 @@ Após rodar (em qualquer modo), em `src/outputs/` e `src/logs/` (ignorados pelo 
 | `src/outputs/final_report.json` | Mesmo conteúdo em JSON estruturado, com as saídas de todas as fases e o `run_id` **único** da execução (compartilhado com o trace do Grupo 3). |
 | `src/logs/pipeline.log` | Log fase a fase, em texto (orquestração + tools do Grupo 2). |
 | `src/logs/validacao_events.jsonl` | Eventos estruturados de validação/retry (Grupo 1) — ver [§4](#4-validação-retry-e-confiabilidade-grupo-1). |
-| `src/logs/traces/<run_id>.jsonl` | Trace de observabilidade da execução (um evento por linha), mesmo `run_id` do item acima — ver [§7 Observabilidade](#7-observabilidade-e-traces-grupo-3). |
+| `src/logs/traces/<run_id>.jsonl` | Trace de observabilidade da execução (um evento por linha), mesmo `run_id` do item acima — ver [§8 Observabilidade](#8-observabilidade-e-traces-grupo-3). |
 
 ### 2.5 Como escolher o modo (precedência)
 
@@ -389,7 +389,7 @@ quando ausente, faz o espelhamento virar no-op).
 validação/retry existente, e não captura eventos internos do ADK (isso é do
 Grupo 3, via `adk_bridge.py`). O identificador comum e a conexão com o trace,
 que antes ficavam como proposta em aberto, já estão integrados — ver
-[§7](#7-observabilidade-e-traces-grupo-3).
+[§8](#8-observabilidade-e-traces-grupo-3).
 
 ---
 
@@ -469,7 +469,7 @@ Seção transparente sobre o que **não** é "real" hoje:
 | **Fases 1–3 no modo Mock** | Lidas de [`src/mocks/peer_review_mock.json`](src/mocks/peer_review_mock.json). No modo API, são chamadas reais ao Gemini. |
 | **Fase 4 (relatório)** | **Nunca** mockada — é pura formatação em Python, idêntica nos dois modos. |
 | **Entrada do artigo** | Usa um `.txt` de exemplo ([`src/examples/example_article.txt`](src/examples/example_article.txt)). **Ainda não há** ingestão/parse de PDF. |
-| **Validação & retry** | **Integrado** — ver [§4](#4-validação-retry-e-confiabilidade-grupo-1). Retry automático com corrector em modo Mock (offline) e API (Gemini). `PipelineValidationError` bloqueia propagação de dados inválidos. Eventos estruturados em `src/logs/validacao_events.jsonl`, com `run_id` **unificado** com o tracer do Grupo 3 quando presente, e espelhados em `observability.emit_event()` — ver [§7](#7-observabilidade-e-traces-grupo-3). |
+| **Validação & retry** | **Integrado** — ver [§4](#4-validação-retry-e-confiabilidade-grupo-1). Retry automático com corrector em modo Mock (offline) e API (Gemini). `PipelineValidationError` bloqueia propagação de dados inválidos. Eventos estruturados em `src/logs/validacao_events.jsonl`, com `run_id` **unificado** com o tracer do Grupo 3 quando presente, e espelhados em `observability.emit_event()` — ver [§8](#8-observabilidade-e-traces-grupo-3). |
 | **Tools de auditoria** | **Integradas** — ver [§5](#5-tools-determinísticas-de-auditoria-grupo-2). `validar_completude` (Fase 1), `checar_coerencia` (chamada por dentro da Fase 3) e `auditar_decisao_final` (Fase 3) — todas ativas. |
 | **Adaptação de pareceres legados de revisor** | O [`src/legacy_adapter.py`](src/legacy_adapter.py) converte o **veredito do editor** legado; o parecer **de revisor** legado não tem as 4 dimensões e, por isso, **não** é adaptado automaticamente (exige nova revisão — limitação documentada). |
 
@@ -480,7 +480,91 @@ Seção transparente sobre o que **não** é "real" hoje:
 
 ---
 
-## 7. Observabilidade e Traces (Grupo 3)
+## 7. Métricas de Execução e Resumo Auditável (Grupo 2)
+
+Além das três tools de auditoria (ver seção de Tools Determinísticas), o
+Grupo 2 também instrumenta a EXECUÇÃO do pipeline: cada rodada gera um
+conjunto de eventos estruturados e um resumo agregado, pensados para evoluir
+depois para métricas ADK/OpenTelemetry sem depender de parsing de texto solto.
+
+### O que foi adicionado
+
+Vive em [`src/metrics/`](src/metrics/), sem dependências externas:
+
+| Arquivo | O que é |
+|---|---|
+| `eventos.py` | `ExecutionEvent` — evento atômico (fase, tipo, nome, status, duração, detalhes). |
+| `coletor.py` | `ExecutionCollector` — acumula eventos de uma execução; dois context managers (`fase()`, `tool()`) medem duração e registram sucesso/falha automaticamente. |
+| `resumo.py` | `gerar_resumo()` — agrega os eventos em um `ResumoExecucao`: duração total, duração por fase, nº validações/retries/falhas, tools chamadas, decisão final, status final, alertas. |
+| `exportar.py` | `imprimir_resumo()` (tabela no terminal) e `salvar_resumo_json()`. |
+
+### Como se integra ao pipeline
+
+Importação guardada, no mesmo padrão das tools: se `src/metrics/` não
+existir, o pipeline roda normalmente, sem instrumentação. Quando existe,
+`run_demo()` cria um `ExecutionCollector` e o pendura em
+`context.config["_metrics_collector"]` — a mesma convenção de chave "privada"
+já usada por `_auditoria_veredito` e `_mock_cache`. Cada fase mede sua própria
+duração com `coletor.fase(self.name)`; cada chamada de tool é medida junto do
+seu evento de tool; cada validação (`validar_com_tentativas`) é traduzida em
+eventos de validação/retry/falha a partir do `ResultadoValidacao` já retornado.
+
+O resumo é montado em `run_demo()`, depois que `pipeline.run()` retorna (assim
+inclui a duração da própria Fase 4). Ele é incluído em
+`final_report.json["resumo_execucao"]` e também salvo separadamente em
+`src/outputs/resumo_execucao.json`.
+
+### Exemplo de resumo gerado (modo mock)
+
+```
+Status final:        sucesso
+Decisão final:       3
+Revisão humana:      não recomendada
+Duração total:       4.02 ms
+Validações: 7    Retries: 0    Falhas: 0
+Tools chamadas:
+  validar_completude                       3x
+  auditar_decisao_final                    1x
+```
+
+### Como rodar
+
+```bash
+# Testes das métricas (offline, sem API key)
+.venv/bin/pytest src/metrics/tests/ -v
+
+# Pipeline completo em modo mock — imprime o resumo no final
+.venv/bin/python main.py mock
+cat src/outputs/resumo_execucao.json
+```
+
+### Decisões de projeto
+
+- **Por que `context.config` e não um novo atributo em `PipelineContext`?**
+  Para não alterar `pipeline_base.py` (orquestração genérica, fora do escopo
+  do Grupo 2) — `config` já é usado como "estado interno de execução" por
+  outras partes do sistema.
+- **Por que medir a fase por dentro do `run()` de cada fase, e não com um
+  hook em `Pipeline.run()`?** Porque `pipeline_base.py` não tem
+  `on_phase_start`/`on_phase_end` hoje, e criar um não é responsabilidade
+  desta atividade.
+- **Campos placeholder** (`tokens_totais`, `custo_estimado`, `modelo_usado`,
+  `chamadas_llm`) existem em `ResumoExecucao` mas não são preenchidos ainda —
+  ver documentação detalhada em
+  [`docs/metricas_reference.md`](docs/metricas_reference.md) para o caminho
+  de evolução até ADK/OpenTelemetry.
+
+### O que ficou fora desta etapa
+
+- Nenhuma hierarquia de span/parent_span nem bridge com o `Runner` do ADK
+  (território do Grupo 3).
+- `duracao_total_ms` assume fases sequenciais (soma simples); se o pipeline
+  passar a rodar fases em paralelo, esse cálculo precisa mudar para usar
+  timestamps de início/fim em vez de soma.
+
+---
+
+## 8. Observabilidade e Traces (Grupo 3)
 
 Base de observabilidade próxima do padrão **Google ADK** (eventos, sessões,
 traces). Responde à pergunta **"por onde a execução passou?"**: ao final de uma
@@ -596,7 +680,7 @@ Cobre os pontos que a demo em modo mock não exercita:
 
 ---
 
-## 8. Extensibilidade
+## 9. Extensibilidade
 
 A separação **orquestração × domínio** permite reusar a mesma arquitetura de 4
 fases em outros problemas multiagentes. A receita conceitual:
