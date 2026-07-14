@@ -46,9 +46,9 @@ def main() -> None:
     print(render_timeline(trace_path))
     print("=" * 72)
     print(
-        "Legenda: <kind> nome (autor) [duração] · eventos pontuais.\n"
-        "Status: ✓ ok · ! alerta · ✗ erro · … em andamento."
-    )
+            "Legenda: <kind> nome (autor) [duração] - eventos pontuais.\n"
+            "Status: OK ok - ! alerta - ERR erro - ... em andamento."
+        )
 
 
 if __name__ == "__main__":

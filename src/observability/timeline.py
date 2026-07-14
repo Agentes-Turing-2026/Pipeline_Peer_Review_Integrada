@@ -68,10 +68,10 @@ def build_timeline(eventos: list[TraceEvent]) -> dict[str, Any]:
 
 
 _ICONE_STATUS = {
-    Status.OK.value: "✓",
-    Status.ERROR.value: "✗",
+    Status.OK.value: "OK",
+    Status.ERROR.value: "ERR",
     Status.WARNING.value: "!",
-    Status.RUNNING.value: "…",
+    Status.RUNNING.value: "...",
 }
 
 

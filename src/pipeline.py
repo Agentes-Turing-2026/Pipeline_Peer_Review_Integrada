@@ -249,7 +249,10 @@ class IndependentReviewPhase(PipelinePhase[str, IndependentReviews]):
                 for rid in REVIEWERS:
                     if rid not in payloads:
                         raise RuntimeError(f"Mock sem parecer de Fase 1 para '{rid}'.")
-                    resultado = validar_com_tentativas(payloads[rid], validar_review, mode, rid)
+                    resultado = validar_com_tentativas(
+                        payloads[rid], validar_review, mode, rid,
+                        run_id=context.run_id, fase=self.name,
+                    )
                     reviews[rid] = resultado.dados
                     logger.info("Validação Fase 1 '%s': tentativas=%d", rid, resultado.tentativas_usadas)
                     _registrar_validacao(coletor, fase=self.name, agente=rid, resultado=resultado)
@@ -265,7 +268,10 @@ class IndependentReviewPhase(PipelinePhase[str, IndependentReviews]):
                     if raw is None:
                         raise RuntimeError(f"Revisor '{rid}' não produziu parecer na Fase 1.")
                     payload = raw if isinstance(raw, dict) else json.loads(raw)
-                    resultado = validar_com_tentativas(payload, validar_review, mode, rid)
+                    resultado = validar_com_tentativas(
+                        payload, validar_review, mode, rid,
+                        run_id=context.run_id, fase=self.name,
+                    )
                     reviews[rid] = resultado.dados
                     logger.info("Validação Fase 1 '%s': tentativas=%d", rid, resultado.tentativas_usadas)
                     _registrar_validacao(coletor, fase=self.name, agente=rid, resultado=resultado)
@@ -324,7 +330,10 @@ class CrossReviewPhase(PipelinePhase[IndependentReviews, CrossReviews]):
                 for rid in REVIEWERS:
                     if rid not in payloads:
                         raise RuntimeError(f"Mock sem parecer de Fase 2 para '{rid}'.")
-                    resultado = validar_com_tentativas(payloads[rid], validar_cross_review, mode, rid)
+                    resultado = validar_com_tentativas(
+                        payloads[rid], validar_cross_review, mode, rid,
+                        run_id=context.run_id, fase=self.name,
+                    )
                     cross[rid] = resultado.dados
                     logger.info("Validação Fase 2 '%s': tentativas=%d", rid, resultado.tentativas_usadas)
                     _registrar_validacao(coletor, fase=self.name, agente=rid, resultado=resultado)
@@ -345,7 +354,10 @@ class CrossReviewPhase(PipelinePhase[IndependentReviews, CrossReviews]):
                     if raw is None:
                         raise RuntimeError(f"Revisor '{rid}' não produziu parecer na Fase 2.")
                     payload = raw if isinstance(raw, dict) else json.loads(raw)
-                    resultado = validar_com_tentativas(payload, validar_cross_review, mode, rid)
+                    resultado = validar_com_tentativas(
+                        payload, validar_cross_review, mode, rid,
+                        run_id=context.run_id, fase=self.name,
+                    )
                     cross[rid] = resultado.dados
                     logger.info("Validação Fase 2 '%s': tentativas=%d", rid, resultado.tentativas_usadas)
                     _registrar_validacao(coletor, fase=self.name, agente=rid, resultado=resultado)
@@ -385,7 +397,10 @@ class EditorVerdictPhase(PipelinePhase[CrossReviews, EditorVerdictSchema]):
                 payload = _load_mock(context).get("phase3_verdict")
                 if payload is None:
                     raise RuntimeError("Mock sem veredito de Fase 3 ('phase3_verdict').")
-                resultado = validar_com_tentativas(payload, validar_editor_verdict, mode, "editor")
+                resultado = validar_com_tentativas(
+                    payload, validar_editor_verdict, mode, "editor",
+                    run_id=context.run_id, fase=self.name,
+                )
                 verdict = resultado.dados
                 logger.info("Validação Fase 3 'editor': tentativas=%d", resultado.tentativas_usadas)
                 _registrar_validacao(coletor, fase=self.name, agente="editor", resultado=resultado)
@@ -396,7 +411,10 @@ class EditorVerdictPhase(PipelinePhase[CrossReviews, EditorVerdictSchema]):
             else:
                 article_text: str = context.initial_input
                 verdict_payload = asyncio.run(_run_editor(data.cross_reviews, article_text))
-                resultado = validar_com_tentativas(verdict_payload, validar_editor_verdict, mode, "editor")
+                resultado = validar_com_tentativas(
+                    verdict_payload, validar_editor_verdict, mode, "editor",
+                    run_id=context.run_id, fase=self.name,
+                )
                 verdict = resultado.dados
                 logger.info("Validação Fase 3 'editor': tentativas=%d", resultado.tentativas_usadas)
                 _registrar_validacao(coletor, fase=self.name, agente="editor", resultado=resultado)
@@ -520,11 +538,12 @@ class FinalReportPhase(PipelinePhase[EditorVerdictSchema, FinalReport]):
                 cross=phase2.cross_reviews,
                 verdict=verdict,
             )
+            _tracer_atual = get_current_tracer()
             auditoria_veredito = context.config.get("_auditoria_veredito")
             structured = {
+                "run_id": _tracer_atual.run_id if _tracer_atual is not None else context.run_id,
                 "article_ref": article_ref,
                 "model": MODEL,
-                "run_id": (get_current_tracer().run_id if get_current_tracer() is not None else None),
                 "decisao": verdict.decisao,
                 "decisao_rotulo": ESCALA_VEREDITO[verdict.decisao],
                 "phase1_reviews": {rid: r.model_dump() for rid, r in phase1.reviews.items()},
@@ -664,10 +683,16 @@ def run_demo(mode: str | None = None) -> FinalReport:
         report = _run_and_save()
         trace_path = None
 
+    # run_id único da execução: vem de report.data (preenchido pela Fase 4 a
+    # partir de context.run_id), que fica sincronizado com tracer.run_id quando
+    # há tracer (ver Pipeline.run() em pipeline_base.py) — não use a variável
+    # `result` aqui, ela só existe dentro de `_run_and_save()`.
     print("OK: pipeline concluído.")
+    print(f"run_id:                {report.data['run_id']}")
     print(f"Relatório (markdown): {out_dir / 'final_report.md'}")
     print(f"Relatório (json):     {out_dir / 'final_report.json'}")
     print(f"Log do pipeline:      {LOG_DIR / 'pipeline.log'}")
+    print(f"Eventos de validação: {LOG_DIR / 'validacao_events.jsonl'}")
     if resumo is not None:
         imprimir_resumo(resumo)
         resumo_path = salvar_resumo_json(resumo)

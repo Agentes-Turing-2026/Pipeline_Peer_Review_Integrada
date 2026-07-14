@@ -11,6 +11,12 @@ Comportamento de falha definido:
   - Marcação para revisão humana: o chamador pode capturar PipelineValidationError
     e registrar o resultado como item que necessita intervenção humana.
 
+Observabilidade estruturada (Grupo 1 — ver ``eventos_validacao.py``):
+  Cada tentativa/correção/bloqueio, além de logado como texto (como antes),
+  também é emitido como evento estruturado em ``src/logs/validacao_events.jsonl``,
+  correlacionado por ``run_id``. Isso é aditivo: não muda o comportamento nem a
+  assinatura padrão desta função (``run_id``/``fase`` são opcionais).
+
 Uso típico (integrado ao pipeline.py):
 
     from validacao_retry import validar_com_tentativas, PipelineValidationError
@@ -35,6 +41,18 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from pydantic import ValidationError
+
+from eventos_validacao import (
+    CATEGORIA_BLOQUEADO,
+    CATEGORIA_CORRIGIDO,
+    CATEGORIA_FALHOU_RECUPERAVEL,
+    CATEGORIA_PASSOU_APOS_CORRECAO,
+    CATEGORIA_PASSOU_DE_PRIMEIRA,
+    EventoValidacao,
+    diff_correcao,
+    emitir_evento,
+    gerar_run_id,
+)
 
 logger = logging.getLogger("pipeline.validacao")
 
@@ -323,6 +341,8 @@ def validar_com_tentativas(
     modo: Any,
     nome_agente: str,
     max_tentativas: int = MAX_TENTATIVAS,
+    run_id: str | None = None,
+    fase: str | None = None,
 ) -> ResultadoValidacao:
     """Valida dados_brutos contra schema_fn, com retry e correção automática.
 
@@ -341,6 +361,16 @@ def validar_com_tentativas(
         Identificador do agente (para logs e mensagens de erro).
     max_tentativas:
         Número máximo de tentativas (padrão MAX_TENTATIVAS = 3).
+    run_id:
+        Identificador da execução do pipeline, para correlacionar os eventos
+        estruturados emitidos por esta chamada (ver ``eventos_validacao.py``).
+        Se omitido (ex.: uso isolado em demos/testes), um id provisório é
+        gerado só para esta chamada — não recomendado para uso real, onde o
+        ideal é propagar o mesmo ``run_id`` do início ao fim de uma execução.
+    fase:
+        Nome da fase do pipeline que está chamando (ex.:
+        ``fase_1_revisao_independente``), anexado aos eventos para dar
+        contexto. Opcional.
 
     Returns
     -------
@@ -355,6 +385,8 @@ def validar_com_tentativas(
     historico: list[dict] = []
     dados_atuais = copy.deepcopy(dados_brutos)
     erro_atual: str | None = None
+    run_id = run_id or gerar_run_id()
+    nome_schema = getattr(schema_fn, "__name__", str(schema_fn))
 
     # Determina qual corrector usar com base no modo.
     usar_mock = True
@@ -373,6 +405,14 @@ def validar_com_tentativas(
                 "[validacao] '%s' PASSOU na tentativa %d/%d.",
                 nome_agente, tentativa, max_tentativas,
             )
+            categoria = (
+                CATEGORIA_PASSOU_DE_PRIMEIRA if tentativa == 1 else CATEGORIA_PASSOU_APOS_CORRECAO
+            )
+            emitir_evento(EventoValidacao(
+                run_id=run_id, fase=fase, agente=nome_agente, schema=nome_schema,
+                tentativa=tentativa, max_tentativas=max_tentativas,
+                categoria=categoria, status="sucesso",
+            ))
             return ResultadoValidacao(
                 sucesso=True,
                 dados=validado,
@@ -387,12 +427,22 @@ def validar_com_tentativas(
                 "[validacao] '%s' FALHOU na tentativa %d/%d: %s",
                 nome_agente, tentativa, max_tentativas, erro_atual,
             )
+            ultima_tentativa = tentativa == max_tentativas
+            emitir_evento(EventoValidacao(
+                run_id=run_id, fase=fase, agente=nome_agente, schema=nome_schema,
+                tentativa=tentativa, max_tentativas=max_tentativas,
+                categoria=CATEGORIA_BLOQUEADO if ultima_tentativa else CATEGORIA_FALHOU_RECUPERAVEL,
+                status="bloqueado" if ultima_tentativa else "falha",
+                erro=erro_atual,
+                requer_revisao_humana=ultima_tentativa,
+            ))
 
-            if tentativa == max_tentativas:
+            if ultima_tentativa:
                 break
 
             # Aplica correção antes da próxima tentativa.
             try:
+                dados_antes = copy.deepcopy(dados_atuais)
                 if usar_mock:
                     dados_atuais = corrigir_saida_mock(dados_atuais, erro_atual)
                     logger.info(
@@ -405,11 +455,24 @@ def validar_com_tentativas(
                         "[validacao] '%s' — correção via API aplicada (tentativa %d -> %d).",
                         nome_agente, tentativa, tentativa + 1,
                     )
+                emitir_evento(EventoValidacao(
+                    run_id=run_id, fase=fase, agente=nome_agente, schema=nome_schema,
+                    tentativa=tentativa, max_tentativas=max_tentativas,
+                    categoria=CATEGORIA_CORRIGIDO, status="correcao_aplicada",
+                    correcao_aplicada=diff_correcao(dados_antes, dados_atuais) or None,
+                ))
             except Exception as exc_correcao:
                 logger.error(
                     "[validacao] '%s' — falha no corrector na tentativa %d: %s",
                     nome_agente, tentativa, exc_correcao,
                 )
+                emitir_evento(EventoValidacao(
+                    run_id=run_id, fase=fase, agente=nome_agente, schema=nome_schema,
+                    tentativa=tentativa, max_tentativas=max_tentativas,
+                    categoria=CATEGORIA_BLOQUEADO, status="bloqueado",
+                    erro=f"corrector falhou: {exc_correcao}",
+                    requer_revisao_humana=True,
+                ))
                 break
 
     resultado = ResultadoValidacao(
