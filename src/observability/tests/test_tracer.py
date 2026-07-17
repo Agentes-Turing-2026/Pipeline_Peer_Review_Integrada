@@ -92,7 +92,7 @@ def test_run_end_carrega_status_ok_e_duracao():
     fim = exp.events[-1]
     assert fim.event_type == EventType.RUN_END.value
     assert fim.status == Status.OK.value
-    assert fim.duration_ms is not None
+    assert fim.duration_s is not None
 
 
 def test_todo_span_aberto_e_fechado():

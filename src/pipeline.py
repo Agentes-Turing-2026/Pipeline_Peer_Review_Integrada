@@ -50,6 +50,7 @@ from validacao_retry import PipelineValidationError, validar_com_tentativas  # n
 from reviewer_agent import MODEL, REVIEWERS, _require_api_key, _run_reviewers  # noqa: E402
 from cross_review import _run_cross_review  # noqa: E402
 from editor_agent import _run_editor  # noqa: E402
+from extraction import ExtractedDocument, PdfExtractor, get_default_extractor  # noqa: E402
 
 # Tools determinísticas do Grupo 2 (importação guardada: pipeline funciona sem elas).
 try:
@@ -465,12 +466,31 @@ def _render_report_md(
     reviews: dict[str, ReviewSchema],
     cross: dict[str, CrossReviewSchema],
     verdict: EditorVerdictSchema,
+    run_id: str | None = None,
+    document_meta: dict | None = None,
 ) -> str:
-    """Monta o relatório final em Markdown a partir das saídas das três fases."""
+    """Monta o relatório final em Markdown a partir das saídas das três fases.
+
+    ``run_id`` e ``document_meta`` (contrato do documento extraído, SEM o texto
+    completo) fazem o relatório apontar para a execução e o documento que o
+    geraram — rastreabilidade pedida pela atividade do Grupo 3.
+    """
     linhas: list[str] = []
     linhas.append("# Relatório Final do Peer Review")
     linhas.append("")
     linhas.append(f"- **Artigo:** {article_ref}")
+    if run_id:
+        linhas.append(f"- **Execução (run_id):** {run_id}")
+    if document_meta:
+        linhas.append(
+            f"- **Documento:** {document_meta.get('document_id')} "
+            f"({document_meta.get('filename')}, {document_meta.get('num_pages')} página(s), "
+            f"extraído por {document_meta.get('extractor')} "
+            f"{document_meta.get('extractor_version')} em "
+            f"{document_meta.get('extraction_duration_s', 0):.2f} s)"
+        )
+        if document_meta.get("warnings"):
+            linhas.append(f"- **Avisos da extração:** {'; '.join(document_meta['warnings'])}")
     linhas.append(f"- **Modelo:** {MODEL}")
     linhas.append(
         f"- **Decisão editorial:** {verdict.decisao} — {ESCALA_VEREDITO[verdict.decisao]}"
@@ -531,18 +551,23 @@ class FinalReportPhase(PipelinePhase[EditorVerdictSchema, FinalReport]):
             phase1: IndependentReviews = context.get("fase_1_revisao_independente")
             phase2: CrossReviews = context.get("fase_2_leitura_cruzada")
             article_ref: str = context.config.get("article_ref", "entrada")
+            document_meta: dict | None = context.config.get("document_meta")
 
+            _tracer_atual = get_current_tracer()
+            run_id = _tracer_atual.run_id if _tracer_atual is not None else context.run_id
             markdown = _render_report_md(
                 article_ref=article_ref,
                 reviews=phase1.reviews,
                 cross=phase2.cross_reviews,
                 verdict=verdict,
+                run_id=run_id,
+                document_meta=document_meta,
             )
-            _tracer_atual = get_current_tracer()
             auditoria_veredito = context.config.get("_auditoria_veredito")
             structured = {
-                "run_id": _tracer_atual.run_id if _tracer_atual is not None else context.run_id,
+                "run_id": run_id,
                 "article_ref": article_ref,
+                "document": document_meta,
                 "model": MODEL,
                 "decisao": verdict.decisao,
                 "decisao_rotulo": ESCALA_VEREDITO[verdict.decisao],
@@ -595,11 +620,75 @@ def build_peer_review_pipeline(tracer=None) -> Pipeline:
 
 
 # ---------------------------------------------------------------------------
+# Extração de PDF (fase 0, determinística) — Grupo 3
+# ---------------------------------------------------------------------------
+
+EXTRACTION_PHASE = "fase_0_extracao_pdf"
+
+
+def extract_pdf_input(
+    pdf_path: str | Path,
+    extractor: PdfExtractor | None = None,
+    tracer=None,
+) -> ExtractedDocument:
+    """Extrai um PDF real como etapa DETERMINÍSTICA do pipeline (fase 0).
+
+    Não depende de decisão de LLM: é sempre chamada quando a entrada é um PDF.
+    A extração entra na MESMA linha do tempo das demais fases (span de fase,
+    com início/fim, status, extrator, páginas e duração em segundos). Avisos de
+    qualidade viram eventos de alerta — a camada de validação (Grupo 1) decide
+    se bloqueia ou encaminha; a ausência total de texto é erro claro aqui.
+    """
+    extractor = extractor or get_default_extractor()
+    span_cm = (
+        tracer.span(
+            EXTRACTION_PHASE,
+            kind="phase",
+            phase=EXTRACTION_PHASE,
+            author="grupo3",
+            attributes={"pdf": str(pdf_path), "extrator": extractor.name},
+        )
+        if tracer is not None
+        else nullcontext()
+    )
+    with span_cm:
+        doc = extractor.extract(pdf_path)
+        logger.info(
+            "Fase 0 concluída: '%s' extraído por %s %s (%d página(s), %.2f s, %d aviso(s)).",
+            doc.filename, doc.extractor, doc.extractor_version,
+            doc.num_pages, doc.extraction_duration_s, len(doc.warnings),
+        )
+        emit_event(
+            "documento_extraido", author="grupo3", phase=EXTRACTION_PHASE, kind="tool",
+            status="alerta" if doc.warnings else "ok",
+            attributes=doc.to_metadata(),
+        )
+        for aviso in doc.warnings:
+            logger.warning("[extracao] %s", aviso)
+            emit_event(
+                "aviso_extracao", author="grupo3", phase=EXTRACTION_PHASE, kind="tool",
+                status="alerta", attributes={"aviso": aviso, "document_id": doc.document_id},
+            )
+        if not doc.has_text:
+            raise RuntimeError(
+                f"A extração de '{doc.filename}' não produziu texto utilizável "
+                f"({'; '.join(doc.warnings) or 'sem detalhes'}). Não é possível "
+                "alimentar os agentes — forneça um PDF com texto digital ou "
+                "habilite OCR no extrator."
+            )
+    return doc
+
+
+# ---------------------------------------------------------------------------
 # Demonstração ponta a ponta
 # ---------------------------------------------------------------------------
 
-def run_demo(mode: str | None = None) -> FinalReport:
-    """Roda o pipeline completo sobre o artigo de exemplo e salva os resultados.
+def run_demo(
+    mode: str | None = None,
+    pdf_path: str | Path | None = None,
+    extractor: PdfExtractor | None = None,
+) -> FinalReport:
+    """Roda o pipeline completo (PDF real ou artigo de exemplo) e salva os resultados.
 
     Parameters
     ----------
@@ -607,10 +696,22 @@ def run_demo(mode: str | None = None) -> FinalReport:
         Modo de execução: ``"api"`` (Gemini real) ou ``"mock"`` (JSONs locais,
         offline). Se ``None``, cai para a variável de ambiente ``PIPELINE_MODE``
         e, na ausência dela, para ``"api"``.
+    pdf_path:
+        Caminho de um PDF real. Quando informado, a fase 0 (extração
+        determinística) roda antes dos agentes e o texto extraído alimenta o
+        pipeline. Quando omitido, usa o artigo de exemplo em texto puro
+        (comportamento anterior, preservado para o modo mock/CI).
+    extractor:
+        Implementação de :class:`~extraction.PdfExtractor` a usar. ``None``
+        usa o extrator padrão (LiteParse) — ponto de troca sem reescrever nada.
     """
-    config: dict = {"article_ref": "examples/example_article.txt"}
+    config: dict = {}
     if mode is not None:
         config["mode"] = mode
+    if pdf_path is not None:
+        config["article_ref"] = str(pdf_path)
+    else:
+        config["article_ref"] = "examples/example_article.txt"
 
     resolved = resolve_mode(config)
     # A chave de API só é exigida no modo que de fato chama o Gemini.
@@ -623,22 +724,42 @@ def run_demo(mode: str | None = None) -> FinalReport:
     if coletor is not None:
         config["_metrics_collector"] = coletor
 
-    article_path = HERE / "examples" / "example_article.txt"
-    article_text = article_path.read_text(encoding="utf-8")
-
     # Observabilidade: cria uma execução identificável (run_id) e um trace local.
     tracer = create_tracer(trace_dir=LOG_DIR / "traces") if create_tracer is not None else None
+
+    # run_id único da execução — usado também para organizar os artefatos de
+    # saída em outputs/<run_id>/, evitando que uma execução sobrescreva
+    # silenciosamente a anterior.
+    run_id = tracer.run_id if tracer is not None else PipelineContext(None).run_id
+    config["run_id"] = run_id
 
     pipeline = build_peer_review_pipeline(tracer=tracer)
     print(f"Pipeline '{pipeline.name}' [modo={resolved.value}] — fases: {pipeline.phase_names}")
 
     resumo = None
 
-    out_dir = HERE / "outputs"
-    out_dir.mkdir(exist_ok=True)
+    out_dir = HERE / "outputs" / run_id
+    out_dir.mkdir(parents=True, exist_ok=True)
 
     def _run_and_save() -> FinalReport:
         nonlocal resumo
+        # Fase 0 (apenas com PDF): extração determinística, dentro da mesma
+        # linha do tempo (mesmo run_id) das demais fases.
+        if pdf_path is not None:
+            doc = extract_pdf_input(pdf_path, extractor=extractor, tracer=tracer)
+            article_text = doc.text
+            config["article_ref"] = doc.filename
+            config["document_meta"] = doc.to_metadata()
+            print(
+                f"[peer_review] Fase 0: '{doc.filename}' extraído por {doc.extractor} "
+                f"{doc.extractor_version} — {doc.num_pages} página(s) em "
+                f"{doc.extraction_duration_s:.2f} s"
+                + (f" — AVISOS: {'; '.join(doc.warnings)}" if doc.warnings else "")
+            )
+        else:
+            article_path = HERE / "examples" / "example_article.txt"
+            article_text = article_path.read_text(encoding="utf-8")
+
         result = pipeline.run(initial_input=article_text, config=config, verbose=True)
         report_local: FinalReport = result.final
         # Grupo 2 — agrega as métricas de execução (eventos, duração, retries) no
@@ -672,7 +793,8 @@ def run_demo(mode: str | None = None) -> FinalReport:
 
     if tracer is not None:
         # Delimita a execução inteira (run_start/run_end): tudo abaixo entra na
-        # mesma linha do tempo, inclusive os eventos dos Grupos 1 e 2.
+        # mesma linha do tempo, inclusive a fase 0 (extração) e os eventos dos
+        # Grupos 1 e 2.
         with tracer.run(
             name="peer_review",
             attributes={"modo": resolved.value, "artigo": config["article_ref"]},
@@ -683,19 +805,16 @@ def run_demo(mode: str | None = None) -> FinalReport:
         report = _run_and_save()
         trace_path = None
 
-    # run_id único da execução: vem de report.data (preenchido pela Fase 4 a
-    # partir de context.run_id), que fica sincronizado com tracer.run_id quando
-    # há tracer (ver Pipeline.run() em pipeline_base.py) — não use a variável
-    # `result` aqui, ela só existe dentro de `_run_and_save()`.
     print("OK: pipeline concluído.")
     print(f"run_id:                {report.data['run_id']}")
+    print(f"Artefatos da execução: {out_dir}")
     print(f"Relatório (markdown): {out_dir / 'final_report.md'}")
     print(f"Relatório (json):     {out_dir / 'final_report.json'}")
     print(f"Log do pipeline:      {LOG_DIR / 'pipeline.log'}")
     print(f"Eventos de validação: {LOG_DIR / 'validacao_events.jsonl'}")
     if resumo is not None:
         imprimir_resumo(resumo)
-        resumo_path = salvar_resumo_json(resumo)
+        resumo_path = salvar_resumo_json(resumo, caminho=out_dir / "resumo_execucao.json")
         print(f"Resumo de execução:   {resumo_path}")
     if tracer is not None:
         print(f"Trace (run_id={tracer.run_id}): {trace_path}")
@@ -704,5 +823,6 @@ def run_demo(mode: str | None = None) -> FinalReport:
 
 if __name__ == "__main__":
     # Permite escolher o modo pela linha de comando: `python pipeline.py mock`.
+    # Para entrada por PDF, prefira o ponto de entrada oficial: `python main.py --pdf caminho.pdf`.
     cli_mode = sys.argv[1] if len(sys.argv) > 1 else None
     run_demo(mode=cli_mode)

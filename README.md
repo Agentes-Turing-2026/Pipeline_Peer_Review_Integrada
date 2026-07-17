@@ -22,9 +22,10 @@ inválidos entre fases.
 |---|---|
 | **Objetivo** | Orquestrar agentes em fases sequenciais, com contratos de dados estáveis. |
 | **Caso de teste** | Peer review (revisão por pares de um artigo). |
-| **Contratos oficiais** | `ReviewSchema`, `CrossReviewSchema`, `EditorVerdictSchema`. |
-| **Modos de execução** | **API** (Gemini real) · **Mock** (JSONs locais, offline). |
-| **Saída** | Relatório final em Markdown + JSON estruturado. |
+| **Entrada** | **PDF real** (extraído localmente) ou artigo de exemplo em texto. |
+| **Contratos oficiais** | `ReviewSchema`, `CrossReviewSchema`, `EditorVerdictSchema`, `ExtractedDocument`. |
+| **Modos de execução** | **API** (Gemini real via ADK) · **Mock** (JSONs locais, offline). |
+| **Saída** | Relatório final em Markdown + JSON estruturado, organizados por `run_id`. |
 
 Princípio central: a **orquestração é genérica e agnóstica de domínio**
 ([`src/pipeline_base.py`](src/pipeline_base.py)); a **lógica de peer review**
@@ -57,6 +58,10 @@ orquestração.
     ├── tests/
     │   └── test_eventos_validacao.py
     ├── demo_observabilidade.py   # Grupo 3 — demo offline: roda o pipeline e reconstrói o trace
+    ├── extraction/               # Grupo 3 — entrada real por PDF (contrato + extratores substituíveis)
+    │   ├── document.py           #   contrato ExtractedDocument (id, texto, páginas, extrator, duração em s, avisos)
+    │   ├── extractor.py          #   interface PdfExtractor + LiteParseExtractor (extrator padrão)
+    │   └── tests/                #   testes do contrato e do extrator (PDF digital e "escaneado")
     ├── observability/            # Grupo 3 — base de observabilidade e traces
     │   ├── events.py             #   formato COMUM de evento (run_id, span_id, phase, author, status)
     │   ├── tracer.py             #   ciclo de vida da execução + spans + storage local (JSONL)
@@ -67,6 +72,7 @@ orquestração.
     │   └── peer_review_mock.json
     └── examples/                 # Artigo de exemplo + exemplos de I/O dos schemas
         ├── example_article.txt
+        ├── example_extracted_document.json    # contrato ExtractedDocument (entrada por PDF, Grupo 3)
         ├── example_valid_output.json          # ReviewSchema válido
         ├── example_invalid_output.json        # ReviewSchema inválido (viola notas e justificativas)
         ├── example_cross_review_output.json   # CrossReviewSchema válido
@@ -95,7 +101,10 @@ orquestração.
   ```
 
   > O **modo Mock** (offline) precisa apenas de `pydantic` e `python-dotenv`.
-  > O **modo API** também precisa de `google-adk` e `google-genai`.
+  > O **modo API** também precisa de `google-adk` e `google-genai`; a **entrada
+  > por PDF** precisa de `liteparse`. As versões usadas nos testes desta
+  > atividade estão **fixadas** no `requirements.txt`: `google-adk==1.27.5`,
+  > `google-genai==1.67.0` e `liteparse==2.6.0`.
 
 ### 2.2 Modo Local / Mock (offline, sem chave) — recomendado para testar o fluxo
 
@@ -141,19 +150,70 @@ PIPELINE_MODE=mock python main.py
    Sem a chave configurada, o modo API interrompe com uma mensagem clara
    (o sistema **não** usa fallback silencioso).
 
-### 2.4 Saídas geradas
+### 2.4 Entrada real por PDF (Grupo 3)
 
-Após rodar (em qualquer modo), em `src/outputs/` e `src/logs/` (ignorados pelo git):
+O pipeline aceita um **artigo real em PDF**. A extração é uma etapa
+**determinística obrigatória** (fase 0) que roda ANTES dos agentes — ela não
+depende de decisão de LLM — e entra na **mesma linha do tempo** (mesmo `run_id`)
+das demais fases:
+
+```bash
+# Execução completa: PDF -> extração -> agentes ADK -> relatório (requer .env)
+python main.py --pdf caminho/do/artigo.pdf
+
+# Extração real do PDF + fases dos agentes com respostas mock (offline)
+python main.py mock --pdf caminho/do/artigo.pdf
+```
+
+**Contrato do documento extraído** — qualquer extrator devolve um
+`ExtractedDocument` ([`src/extraction/document.py`](src/extraction/document.py)),
+independente de biblioteca (exemplo versionado em
+[`src/examples/example_extracted_document.json`](src/examples/example_extracted_document.json)):
+
+| Campo | Conteúdo |
+|---|---|
+| `document_id` | identificador estável do documento (hash do conteúdo) |
+| `filename` | nome do arquivo original |
+| `text` | texto extraído (alimenta os agentes) |
+| `num_pages` | número de páginas |
+| `extractor` / `extractor_version` | extrator utilizado e sua versão |
+| `extraction_duration_s` | duração da extração em **segundos** |
+| `warnings` | avisos de qualidade (ex.: PDF possivelmente escaneado) |
+
+**Extrator substituível** — o pipeline conhece apenas a interface `PdfExtractor`
+([`src/extraction/extractor.py`](src/extraction/extractor.py)). O extrator padrão é o
+[LiteParse](https://pypi.org/project/liteparse/) (`liteparse==2.6.0`, local, leve);
+trocá-lo no futuro = escrever outra subclasse (ou injetar via
+`run_demo(extractor=...)`), **sem reescrever o pipeline**.
+
+**Qualidade e limitações (primeira versão):**
+
+- PDFs com **texto digital** são o caso suportado. OCR vem **desligado** por
+  padrão (`LiteParseExtractor(ocr_enabled=True)` habilita, exigindo Tesseract).
+- PDF **escaneado/complexo** não derruba o pipeline na extração: gera `warnings`
+  no contrato e eventos de **alerta** no trace, para a camada de validação
+  (Grupo 1) decidir se bloqueia ou encaminha para revisão. Se **nenhum** texto
+  for extraído, a execução falha com **erro claro** (não há o que revisar).
+- Baixa densidade de texto (< 200 caracteres/página, em média) também gera aviso.
+- Não coloque PDFs de acesso restrito no repositório; os testes geram PDFs
+  mínimos em memória.
+
+### 2.5 Saídas geradas
+
+Após rodar (em qualquer modo), em `src/outputs/` e `src/logs/` (ignorados pelo git).
+Os artefatos de cada execução ficam em `src/outputs/<run_id>/` — uma execução
+**não sobrescreve** silenciosamente a anterior:
 
 | Arquivo | Conteúdo |
 |---|---|
-| `src/outputs/final_report.md` | Relatório final legível (decisão, síntese, críticas, recomendações). |
-| `src/outputs/final_report.json` | Mesmo conteúdo em JSON estruturado, com as saídas de todas as fases e o `run_id` **único** da execução (compartilhado com o trace do Grupo 3). |
+| `src/outputs/<run_id>/final_report.md` | Relatório final legível (decisão, síntese, críticas, recomendações), apontando para o **documento** e a **execução** que o geraram. |
+| `src/outputs/<run_id>/final_report.json` | Mesmo conteúdo em JSON estruturado, com as saídas de todas as fases, os metadados do documento extraído (sem o texto completo) e o `run_id` **único** da execução (compartilhado com o trace do Grupo 3). |
+| `src/outputs/<run_id>/resumo_execucao.json` | Resumo auditável de métricas da execução (Grupo 2). |
 | `src/logs/pipeline.log` | Log fase a fase, em texto (orquestração + tools do Grupo 2). |
 | `src/logs/validacao_events.jsonl` | Eventos estruturados de validação/retry (Grupo 1) — ver [§4](#4-validação-retry-e-confiabilidade-grupo-1). |
 | `src/logs/traces/<run_id>.jsonl` | Trace de observabilidade da execução (um evento por linha), mesmo `run_id` do item acima — ver [§8 Observabilidade](#8-observabilidade-e-traces-grupo-3). |
 
-### 2.5 Como escolher o modo (precedência)
+### 2.6 Como escolher o modo (precedência)
 
 1. **Flag** explícita: `python main.py mock` / `run_demo(mode="mock")`;
 2. **Variável de ambiente** `PIPELINE_MODE` (`api` / `mock`, com sinônimos `local`, `offline`, `real`);
@@ -612,19 +672,26 @@ com os campos que respondem às perguntas exigidas:
 
 ### Como entender o trace gerado
 
-A reconstrução imprime a árvore da execução, por exemplo:
+A reconstrução imprime a árvore da execução (durações em **segundos**), por exemplo:
 
 ```
-✓ <run> peer_review [7 ms]
-  ✓ <phase> fase_1_revisao_independente [2 ms]
+✓ <run> peer_review [0.05 s]
+  ✓ <phase> fase_0_extracao_pdf (autor: grupo3) [0.48 s]
+    · ✓ documento_extraido [grupo3] — document_id=doc_3a1f9c2e8b7d4a05, num_pages=8, extractor=liteparse
+  ✓ <phase> fase_1_revisao_independente [0.02 s]
     · ✓ parecer_validado [statistician] — tentativas=1, validado_por=grupo1
     · ✓ completude [grupo2] — revisor=statistician, score=1.0, completo=True
-  ✓ <phase> fase_2_leitura_cruzada [1 ms]
+  ✓ <phase> fase_2_leitura_cruzada [0.01 s]
     · ✓ leitura_cruzada_concluida [sistema] — mudaram_de_posicao=['domain_expert']
-  ✓ <phase> fase_3_editor_chefe [0 ms]
+  ✓ <phase> fase_3_editor_chefe [0.01 s]
     · ✓ auditoria_veredito [grupo2] — requer_revisao_humana=False
-  ✓ <phase> fase_4_relatorio_final [1 ms]
+  ✓ <phase> fase_4_relatorio_final [0.01 s]
 ```
+
+> **Durações em segundos:** o campo `duration_s` do evento (e a apresentação da
+> timeline) usa **segundos**. Traces antigos com `duration_ms` continuam legíveis:
+> `TraceEvent.from_dict` converte o valor automaticamente. A fase 0 (extração de
+> PDF) entra na mesma árvore quando a entrada é um PDF real.
 
 O `final_report.json` passa a carregar o `run_id` que o gerou — o relatório
 **aponta para a execução** que o produziu.
@@ -725,6 +792,12 @@ python main.py mock
 # Fluxo completo com Gemini real (requer .env com GOOGLE_API_KEY):
 python main.py api
 
+# PDF REAL de ponta a ponta (extração + agentes ADK + relatório; requer .env):
+python main.py --pdf caminho/do/artigo.pdf
+
+# Extração real do PDF + fases dos agentes offline (mock):
+python main.py mock --pdf caminho/do/artigo.pdf
+
 # Demo offline das tools de auditoria do Grupo 2 (sem API key):
 python src/tools/demo_tools.py
 
@@ -745,6 +818,9 @@ python src/demo_observabilidade.py
 
 # Testes da observabilidade (Grupo 3):
 .venv/bin/python -m pytest src/observability/tests/ -v
+
+# Testes da entrada por PDF (contrato + extrator + modo mock preservado, Grupo 3):
+.venv/bin/python -m pytest src/extraction/tests/ src/tests/test_extracao_e_mock.py -v
 
 # Demos isoladas de fases específicas (usam a API real):
 python src/reviewer_agent.py     # apenas a Fase 1 (avaliação independente)

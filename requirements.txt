@@ -1,12 +1,20 @@
 # Dependências do pipeline multiagente integrado.
 #
+# Versões FIXADAS (==) nas dependências principais: são as versões usadas nos
+# testes desta atividade (ver README, seção "Entrada real por PDF").
+# Alterações neste arquivo são responsabilidade do Grupo 3 — os demais grupos
+# comunicam novas dependências em vez de editar em paralelo.
+#
 # Modo Mock (offline) precisa apenas de:
 pydantic>=2.0
 python-dotenv>=1.0
 #
-# Modo API (chamadas reais ao Gemini) também precisa de:
-google-adk>=0.2
-google-genai>=0.3
+# Modo API (chamadas reais ao Gemini via ADK) também precisa de:
+google-adk==1.27.5
+google-genai==1.67.0
+#
+# Entrada real por PDF (extração local, substituível):
+liteparse==2.6.0
 #
 # Testes automatizados:
 pytest>=8.0

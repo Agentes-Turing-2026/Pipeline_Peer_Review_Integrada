@@ -95,7 +95,7 @@ class TraceEvent:
     status: str = Status.OK.value     # qual o status
     invocation_id: str | None = None  # invocation_id do ADK (quando houver)
     timestamp: float = field(default_factory=time.time)
-    duration_ms: float | None = None  # duração (preenchida em span_end/run_end)
+    duration_s: float | None = None   # duração em SEGUNDOS (span_end/run_end)
     attributes: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -106,6 +106,13 @@ class TraceEvent:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "TraceEvent":
-        """Reconstrói um ``TraceEvent`` a partir de um dict (ignora campos extras)."""
+        """Reconstrói um ``TraceEvent`` a partir de um dict (ignora campos extras).
+
+        Compatibilidade: traces antigos gravavam ``duration_ms`` (milissegundos);
+        aqui o valor é convertido para ``duration_s`` (segundos) quando presente.
+        """
         campos = {f for f in cls.__dataclass_fields__}  # noqa: SIM118
-        return cls(**{k: v for k, v in data.items() if k in campos})
+        payload = {k: v for k, v in data.items() if k in campos}
+        if payload.get("duration_s") is None and data.get("duration_ms") is not None:
+            payload["duration_s"] = data["duration_ms"] / 1000
+        return cls(**payload)
