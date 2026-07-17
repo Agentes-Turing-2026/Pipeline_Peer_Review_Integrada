@@ -718,12 +718,6 @@ def run_demo(
     if resolved is RunMode.API:
         _require_api_key()
 
-    # Métricas de execução (Grupo 2): coletor guardado — se metrics/ não
-    # existir por algum motivo, o pipeline roda normalmente, sem instrumentação.
-    coletor: ExecutionCollector | None = ExecutionCollector() if ExecutionCollector is not None else None
-    if coletor is not None:
-        config["_metrics_collector"] = coletor
-
     # Observabilidade: cria uma execução identificável (run_id) e um trace local.
     tracer = create_tracer(trace_dir=LOG_DIR / "traces") if create_tracer is not None else None
 
@@ -732,6 +726,16 @@ def run_demo(
     # silenciosamente a anterior.
     run_id = tracer.run_id if tracer is not None else PipelineContext(None).run_id
     config["run_id"] = run_id
+
+    # Métricas de execução (Grupo 2): coletor guardado — se metrics/ não
+    # existir por algum motivo, o pipeline roda normalmente, sem instrumentação.
+    # O coletor herda o run_id da execução: métricas, trace, eventos de
+    # validação e relatório compartilham o MESMO identificador.
+    coletor: ExecutionCollector | None = (
+        ExecutionCollector(run_id=run_id) if ExecutionCollector is not None else None
+    )
+    if coletor is not None:
+        config["_metrics_collector"] = coletor
 
     pipeline = build_peer_review_pipeline(tracer=tracer)
     print(f"Pipeline '{pipeline.name}' [modo={resolved.value}] — fases: {pipeline.phase_names}")
