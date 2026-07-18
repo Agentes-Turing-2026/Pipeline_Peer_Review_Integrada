@@ -105,11 +105,17 @@ _STATUS_OBSERVABILIDADE_GRUPO3 = {
 
 
 def gerar_run_id() -> str:
-    """Gera um identificador de execução provisório (uuid4).
+    """Gera um identificador de execução local (uuid4) — apenas fallback.
 
-    Provisório porque ainda não existe um identificador comum acordado entre
-    os grupos do pipeline (ver README §4). Quando existir, o chamador deve
-    passar esse valor em vez de gerar um novo aqui.
+    O identificador comum do pipeline JÁ EXISTE desde a integração dos
+    grupos: ``Pipeline.run()`` (em ``pipeline_base.py``) sincroniza
+    ``context.run_id`` com o ``tracer.run_id`` do Grupo 3, e as fases
+    repassam esse valor a ``validar_com_tentativas()`` — é ele que deve ser
+    propagado sempre que houver uma execução do pipeline em andamento.
+
+    Este uuid4 local só é usado em contextos isolados, onde não existe um
+    ``run_id`` de execução para herdar: ``demo_eventos.py``, testes, ou uma
+    chamada avulsa de ``validar_com_tentativas()`` sem ``run_id``.
     """
     return str(uuid.uuid4())
 
