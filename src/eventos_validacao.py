@@ -82,6 +82,11 @@ CATEGORIA_PASSOU_APOS_CORRECAO = "passou_apos_correcao"
 CATEGORIA_FALHOU_RECUPERAVEL = "falhou_recuperavel"
 CATEGORIA_CORRIGIDO = "corrigido"
 CATEGORIA_BLOQUEADO = "bloqueado"
+# "alerta": o dado SEGUE no pipeline, mas com ressalvas que pedem revisão
+# humana. Introduzida pela validação de entrada por PDF (Grupo 1): um documento
+# utilizável, porém suspeito (texto curto, avisos do extrator, baixa densidade),
+# não é bloqueado nem tratado como sucesso limpo — é encaminhado com alerta.
+CATEGORIA_ALERTA = "alerta"
 
 CATEGORIAS_VALIDAS = frozenset(
     {
@@ -90,6 +95,7 @@ CATEGORIAS_VALIDAS = frozenset(
         CATEGORIA_FALHOU_RECUPERAVEL,
         CATEGORIA_CORRIGIDO,
         CATEGORIA_BLOQUEADO,
+        CATEGORIA_ALERTA,
     }
 )
 
@@ -101,6 +107,7 @@ _STATUS_OBSERVABILIDADE_GRUPO3 = {
     CATEGORIA_FALHOU_RECUPERAVEL: "alerta",
     CATEGORIA_CORRIGIDO: "alerta",
     CATEGORIA_BLOQUEADO: "erro",
+    CATEGORIA_ALERTA: "alerta",
 }
 
 
@@ -280,6 +287,7 @@ _ROTULOS_CATEGORIA = {
     CATEGORIA_FALHOU_RECUPERAVEL: "FALHOU (recuperável, retry a seguir)",
     CATEGORIA_CORRIGIDO: "CORRIGIDO (corrector aplicado)",
     CATEGORIA_BLOQUEADO: "BLOQUEADO (esgotou tentativas)",
+    CATEGORIA_ALERTA: "ALERTA (segue, requer revisão humana)",
 }
 
 

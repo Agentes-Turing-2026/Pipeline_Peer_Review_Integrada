@@ -1,0 +1,11 @@
+{
+  "_comentario": "Exemplo do contrato ExtractedDocument (src/extraction/document.py) para o cenário de EXTRAÇÃO INSUFICIENTE — texto presente porém muito curto e com aviso do extrator. A validação do Grupo 1 (validacao_entrada.classificar_documento_extraido) classifica como ALERTA: segue, mas requer revisão humana.",
+  "document_id": "doc_insuficiente_0001",
+  "filename": "artigo_incompleto.pdf",
+  "text": "Título do artigo. Resumo indisponível nesta extração.",
+  "num_pages": 6,
+  "extractor": "liteparse",
+  "extractor_version": "2.6.0",
+  "extraction_duration_s": 0.2113,
+  "warnings": ["baixa densidade de texto (9 caracteres/página em 6 página(s)): partes do PDF podem ser escaneadas ou a extração pode estar incompleta"]
+}

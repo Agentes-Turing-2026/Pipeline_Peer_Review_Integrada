@@ -28,6 +28,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from pipeline import run_demo  # noqa: E402
+from validacao_entrada import EntradaInvalidaError  # noqa: E402
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -55,7 +56,18 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main() -> None:
     """Roda o pipeline completo, com modo e PDF opcionais vindos da linha de comando."""
     args = _parse_args()
-    run_demo(mode=args.mode, pdf_path=args.pdf)
+    try:
+        run_demo(mode=args.mode, pdf_path=args.pdf)
+    except EntradaInvalidaError as exc:
+        # Entrada bloqueada pela validação do Grupo 1: mensagem clara (não um
+        # traceback), e código de saída != 0 — a falha não passa despercebida.
+        print(f"\n[ENTRADA BLOQUEADA] {exc}", file=sys.stderr)
+        print(
+            "O documento não entra no pipeline. Verifique o arquivo/extração e "
+            "consulte src/logs/validacao_events.jsonl para o evento registrado.",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
 
 
 if __name__ == "__main__":

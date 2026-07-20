@@ -1,0 +1,11 @@
+{
+  "_comentario": "Exemplo do contrato ExtractedDocument (src/extraction/document.py) para o cenário de FALHA RECUPERÁVEL/BLOQUEANTE — PDF escaneado, sem texto digital. A validação do Grupo 1 classifica como RETRY (permite_retry=True): com uma estratégia de reextração (OCR) o conteúdo pode ser recuperado; sem ela, vira BLOQUEIO com motivo claro (a entrada nunca é aceita em silêncio).",
+  "document_id": "doc_escaneado_0001",
+  "filename": "artigo_escaneado.pdf",
+  "text": "",
+  "num_pages": 8,
+  "extractor": "liteparse",
+  "extractor_version": "2.6.0",
+  "extraction_duration_s": 0.3502,
+  "warnings": ["extração não produziu texto: o PDF pode ser escaneado (imagem) ou protegido; considere OCR ou outra fonte do documento"]
+}

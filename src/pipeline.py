@@ -52,6 +52,14 @@ from cross_review import _run_cross_review  # noqa: E402
 from editor_agent import _run_editor  # noqa: E402
 from extraction import ExtractedDocument, PdfExtractor, get_default_extractor  # noqa: E402
 
+# Validação e resiliência da entrada por PDF (Grupo 1). Decide se o arquivo e o
+# texto extraído podem entrar no pipeline (segue / alerta / bloqueia), emitindo
+# eventos na mesma trilha de validacao_events.jsonl e do trace do Grupo 3.
+from validacao_entrada import (  # noqa: E402
+    validar_arquivo_pdf,
+    validar_documento_extraido,
+)
+
 # Tools determinísticas do Grupo 2 (importação guardada: pipeline funciona sem elas).
 try:
     from tools.validar_completude import validar_completude as _tool_completude
@@ -630,14 +638,21 @@ def extract_pdf_input(
     pdf_path: str | Path,
     extractor: PdfExtractor | None = None,
     tracer=None,
+    run_id: str | None = None,
 ) -> ExtractedDocument:
     """Extrai um PDF real como etapa DETERMINÍSTICA do pipeline (fase 0).
 
     Não depende de decisão de LLM: é sempre chamada quando a entrada é um PDF.
     A extração entra na MESMA linha do tempo das demais fases (span de fase,
     com início/fim, status, extrator, páginas e duração em segundos). Avisos de
-    qualidade viram eventos de alerta — a camada de validação (Grupo 1) decide
-    se bloqueia ou encaminha; a ausência total de texto é erro claro aqui.
+    qualidade viram eventos de alerta.
+
+    Após a extração, a camada de validação do Grupo 1
+    (``validar_documento_extraido``) decide se o texto pode seguir, se segue com
+    alerta (revisão humana) ou se é bloqueado — registrando um evento
+    estruturado ligado ao ``run_id``. Texto vazio/irrecuperável levanta
+    ``EntradaInvalidaError`` (subclasse de ``RuntimeError``): a entrada nunca é
+    aceita em silêncio.
     """
     extractor = extractor or get_default_extractor()
     span_cm = (
@@ -669,13 +684,9 @@ def extract_pdf_input(
                 "aviso_extracao", author="grupo3", phase=EXTRACTION_PHASE, kind="tool",
                 status="alerta", attributes={"aviso": aviso, "document_id": doc.document_id},
             )
-        if not doc.has_text:
-            raise RuntimeError(
-                f"A extração de '{doc.filename}' não produziu texto utilizável "
-                f"({'; '.join(doc.warnings) or 'sem detalhes'}). Não é possível "
-                "alimentar os agentes — forneça um PDF com texto digital ou "
-                "habilite OCR no extrator."
-            )
+        # Grupo 1 — valida o documento extraído. Segue (ok/alerta) ou bloqueia
+        # (EntradaInvalidaError), sempre deixando um evento estruturado.
+        validar_documento_extraido(doc, run_id=run_id, fase=EXTRACTION_PHASE, exigir=True)
     return doc
 
 
@@ -746,7 +757,10 @@ def run_demo(
         # Fase 0 (apenas com PDF): extração determinística, dentro da mesma
         # linha do tempo (mesmo run_id) das demais fases.
         if pdf_path is not None:
-            doc = extract_pdf_input(pdf_path, extractor=extractor, tracer=tracer)
+            # Grupo 1 — validação do ARQUIVO antes de extrair (inexistente,
+            # formato incorreto, corrompido, protegido). Bloqueia sem retry.
+            validar_arquivo_pdf(pdf_path, run_id=run_id, fase=EXTRACTION_PHASE, exigir=True)
+            doc = extract_pdf_input(pdf_path, extractor=extractor, tracer=tracer, run_id=run_id)
             article_text = doc.text
             config["article_ref"] = doc.filename
             config["document_meta"] = doc.to_metadata()
