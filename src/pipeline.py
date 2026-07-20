@@ -56,6 +56,8 @@ from extraction import ExtractedDocument, PdfExtractor, get_default_extractor  #
 # texto extraído podem entrar no pipeline (segue / alerta / bloqueia), emitindo
 # eventos na mesma trilha de validacao_events.jsonl e do trace do Grupo 3.
 from validacao_entrada import (  # noqa: E402
+    DecisaoEntrada,
+    EntradaInvalidaError,
     registrar_falha_extracao,
     validar_arquivo_pdf,
     validar_documento_extraido,
@@ -640,6 +642,7 @@ def extract_pdf_input(
     extractor: PdfExtractor | None = None,
     tracer=None,
     run_id: str | None = None,
+    coletor: "ExecutionCollector | None" = None,
 ) -> ExtractedDocument:
     """Extrai um PDF real como etapa DETERMINÍSTICA do pipeline (fase 0).
 
@@ -654,6 +657,13 @@ def extract_pdf_input(
     estruturado ligado ao ``run_id``. Texto vazio/irrecuperável levanta
     ``EntradaInvalidaError`` (subclasse de ``RuntimeError``): a entrada nunca é
     aceita em silêncio.
+
+    ``coletor`` (Grupo 2, opcional): quando a validação gera alerta, também
+    registra um evento ``tipo="validacao", status="aviso"`` no
+    ``ExecutionCollector`` — é o mesmo gatilho que ``metrics/resumo.py`` usa
+    para popular a seção "Alertas" do resumo final. Sem isso, o alerta ficava
+    só em ``validacao_events.jsonl``/trace e nunca aparecia no resumo impresso
+    ao fim de ``python main.py``.
     """
     extractor = extractor or get_default_extractor()
     span_cm = (
@@ -674,9 +684,15 @@ def extract_pdf_input(
         try:
             doc = extractor.extract(pdf_path)
         except Exception as exc:  # noqa: BLE001 - registra e re-levanta como bloqueio de entrada
-            raise registrar_falha_extracao(
+            erro_extracao = registrar_falha_extracao(
                 pdf_path, exc, run_id=run_id, fase=EXTRACTION_PHASE
-            ) from exc
+            )
+            if coletor is not None:
+                coletor.registrar(
+                    fase=EXTRACTION_PHASE, tipo="falha", nome="entrada_pdf",
+                    status="falha", erro_final=str(exc),
+                )
+            raise erro_extracao from exc
         logger.info(
             "Fase 0 concluída: '%s' extraído por %s %s (%d página(s), %.2f s, %d aviso(s)).",
             doc.filename, doc.extractor, doc.extractor_version,
@@ -695,7 +711,24 @@ def extract_pdf_input(
             )
         # Grupo 1 — valida o documento extraído. Segue (ok/alerta) ou bloqueia
         # (EntradaInvalidaError), sempre deixando um evento estruturado.
-        validar_documento_extraido(doc, run_id=run_id, fase=EXTRACTION_PHASE, exigir=True)
+        try:
+            resultado_validacao = validar_documento_extraido(
+                doc, run_id=run_id, fase=EXTRACTION_PHASE, exigir=True,
+            )
+        except EntradaInvalidaError as exc:
+            if coletor is not None:
+                coletor.registrar(
+                    fase=EXTRACTION_PHASE, tipo="falha", nome="entrada_pdf",
+                    status="falha", erro_final=str(exc),
+                )
+            raise
+        if coletor is not None and resultado_validacao.decisao is DecisaoEntrada.ALERTA:
+            coletor.registrar(
+                fase=EXTRACTION_PHASE, tipo="validacao", nome="entrada_pdf",
+                status="aviso",
+                mensagem="; ".join(resultado_validacao.motivos),
+                requer_revisao_humana=resultado_validacao.requer_revisao_humana,
+            )
     return doc
 
 
@@ -738,12 +771,6 @@ def run_demo(
     if resolved is RunMode.API:
         _require_api_key()
 
-    # Métricas de execução (Grupo 2): coletor guardado — se metrics/ não
-    # existir por algum motivo, o pipeline roda normalmente, sem instrumentação.
-    coletor: ExecutionCollector | None = ExecutionCollector() if ExecutionCollector is not None else None
-    if coletor is not None:
-        config["_metrics_collector"] = coletor
-
     # Observabilidade: cria uma execução identificável (run_id) e um trace local.
     tracer = create_tracer(trace_dir=LOG_DIR / "traces") if create_tracer is not None else None
 
@@ -752,6 +779,16 @@ def run_demo(
     # silenciosamente a anterior.
     run_id = tracer.run_id if tracer is not None else PipelineContext(None).run_id
     config["run_id"] = run_id
+
+    # Métricas de execução (Grupo 2): coletor guardado — se metrics/ não
+    # existir por algum motivo, o pipeline roda normalmente, sem instrumentação.
+    # O coletor herda o run_id da execução: métricas, trace, eventos de
+    # validação e relatório compartilham o MESMO identificador (PR #3).
+    coletor: ExecutionCollector | None = (
+        ExecutionCollector(run_id=run_id) if ExecutionCollector is not None else None
+    )
+    if coletor is not None:
+        config["_metrics_collector"] = coletor
 
     pipeline = build_peer_review_pipeline(tracer=tracer)
     print(f"Pipeline '{pipeline.name}' [modo={resolved.value}] — fases: {pipeline.phase_names}")
@@ -769,7 +806,9 @@ def run_demo(
             # Grupo 1 — validação do ARQUIVO antes de extrair (inexistente,
             # formato incorreto, corrompido, protegido). Bloqueia sem retry.
             validar_arquivo_pdf(pdf_path, run_id=run_id, fase=EXTRACTION_PHASE, exigir=True)
-            doc = extract_pdf_input(pdf_path, extractor=extractor, tracer=tracer, run_id=run_id)
+            doc = extract_pdf_input(
+                pdf_path, extractor=extractor, tracer=tracer, run_id=run_id, coletor=coletor,
+            )
             article_text = doc.text
             config["article_ref"] = doc.filename
             config["document_meta"] = doc.to_metadata()
