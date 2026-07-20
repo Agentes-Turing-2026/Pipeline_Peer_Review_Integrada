@@ -8,7 +8,7 @@ uma execução real do pipeline — e depois lê de volta o arquivo de eventos
 histórico de uma execução.
 
 Uso:
-    python src/demo_eventos.py
+    python src/demos/demo_eventos.py
 
 O que este script demonstra, na ordem do critério de sucesso do PDF do
 Grupo 1:
@@ -28,9 +28,9 @@ import json
 import sys
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
-if str(HERE) not in sys.path:
-    sys.path.insert(0, str(HERE))
+SRC = Path(__file__).resolve().parents[1]  # .../src (as demos vivem em src/demos/)
+if str(SRC) not in sys.path:
+    sys.path.insert(0, str(SRC))
 
 from eventos_validacao import (  # noqa: E402
     formatar_linha_do_tempo,
@@ -40,7 +40,7 @@ from eventos_validacao import (  # noqa: E402
 from review_schema import validar_cross_review, validar_editor_verdict, validar_review  # noqa: E402
 from validacao_retry import PipelineValidationError, validar_com_tentativas  # noqa: E402
 
-EXAMPLES = HERE / "examples"
+EXAMPLES = SRC / "examples"
 LARGURA = 70
 
 
@@ -117,7 +117,7 @@ def main() -> None:
     print(formatar_linha_do_tempo(eventos))
 
     _sep()
-    print(f"  Arquivo de eventos: {HERE / 'logs' / 'validacao_events.jsonl'}")
+    print(f"  Arquivo de eventos: {SRC / 'logs' / 'validacao_events.jsonl'}")
     print("  Cada linha é um JSON independente — pode ser lido com jq, grep,")
     print("  pandas, ou por qualquer outro grupo/ferramenta de métricas/trace.")
     print("  Demo concluída.")
