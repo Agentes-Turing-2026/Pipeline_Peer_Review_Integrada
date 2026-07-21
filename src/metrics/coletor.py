@@ -29,11 +29,17 @@ class ExecutionCollector:
     def __init__(self, run_id: str | None = None) -> None:
         self.run_id: str = run_id or str(uuid4())
         self._eventos: list[ExecutionEvent] = []
+        self._inicio = time.perf_counter()
 
     @property
     def eventos(self) -> list[ExecutionEvent]:
         """Cópia da lista de eventos registrados até agora (ordem de registro)."""
         return list(self._eventos)
+
+    @property
+    def duracao_execucao_s(self) -> float:
+        """Tempo de parede decorrido desde a criação do coletor até agora, em segundos."""
+        return time.perf_counter() - self._inicio
 
     def eventos_como_dict(self) -> list[dict[str, Any]]:
         """Todos os eventos serializados, na ordem em que foram registrados."""

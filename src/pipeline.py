@@ -765,7 +765,7 @@ def run_demo(
         # Grupo 2 — agrega as métricas de execução (eventos, duração, retries) no
         # relatório, para que o JSON salvo já inclua o resumo auditável.
         if coletor is not None and gerar_resumo is not None:
-            resumo = gerar_resumo(coletor.eventos, run_id=coletor.run_id)
+            resumo = gerar_resumo(coletor.eventos, run_id=coletor.run_id, duracao_total_s=coletor.duracao_execucao_s)
             report_local.data["resumo_execucao"] = resumo.to_dict()
         # A gravação em disco é um passo pós-pipeline: envolvemos num span "report"
         # (irmão das fases, sob o run) para que "arquivos_gerados" fique ancorado

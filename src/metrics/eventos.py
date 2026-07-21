@@ -55,9 +55,11 @@ class ExecutionEvent:
         ``duracao_s`` apenas na entrada; ``to_dict()`` nunca volta a emitir
         ``duracao_ms``. Não é compatibilidade bidirecional, é só uma rampa de
         leitura, e deve ser removida quando não houver mais payloads legados
-        em circulação. Mesma estratégia usada por ``TraceEvent.from_dict``
-        (Grupo 3, ``src/observability/events.py``) — precedente já
-        estabelecido no repositório para esse tipo de migração de unidade.
+        em circulação. Estratégia semelhante à de ``TraceEvent.from_dict``
+        (Grupo 3, ``src/observability/events.py``) — mas diverge num ponto:
+        lá, ``duration_s`` presente com valor ``None`` ainda cai para
+        ``duration_ms``; aqui, "duracao_s" presente com valor ``None`` vence
+        e NÃO cai para ``duracao_ms`` (ver precedência abaixo).
 
         Precedência (nunca soma as duas):
           1. Se "duracao_s" está presente no dict (mesmo com valor None), vence
@@ -65,6 +67,10 @@ class ExecutionEvent:
           2. Senão, se "duracao_ms" está presente e não é None, converte:
              duracao_s = duracao_ms / 1000.0.
           3. Senão, duracao_s = None.
+
+        Limitação conhecida: chaves desconhecidas no payload (fora dos campos
+        do dataclass) ainda levantam TypeError via cls(**payload) — não há
+        filtro de campos extras como o de TraceEvent.from_dict.
         """
         payload = dict(data)
         duracao_ms = payload.pop("duracao_ms", None)

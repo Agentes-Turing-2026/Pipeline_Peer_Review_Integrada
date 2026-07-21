@@ -21,10 +21,21 @@ pipeline.py):
   - status="aviso" em qualquer evento -> vira um item em `alertas`
     (opcionalmente lendo detalhes["mensagem"] para o texto).
 
-duracao_total_s é a SOMA das durações dos eventos tipo="fase" — assume fases
-sequenciais (verdadeiro no pipeline atual). Se fases passarem a rodar em
-paralelo, esse cálculo precisa ser revisto para usar timestamp de início/fim
-em vez de soma.
+Dois números de duração, nenhum substitui o outro:
+  - duracao_total_s: tempo de parede da execução inteira (início ao fim),
+    tipicamente vindo de ExecutionCollector.duracao_execucao_s. Cobre TUDO
+    que acontece na execução, inclusive o que nenhuma fase mede (extração,
+    montagem de relatório, gravação em disco).
+  - duracao_soma_fases_s: SOMA das durações dos eventos tipo="fase" — assume
+    fases sequenciais (verdadeiro no pipeline atual). Se fases passarem a
+    rodar em paralelo, esse cálculo precisa ser revisto para usar timestamp
+    de início/fim em vez de soma.
+
+A diferença entre os dois é o tempo NÃO atribuído a nenhuma fase — isso é
+informação de auditoria útil, não ruído, e é por isso que os dois campos
+convivem em vez de um substituir o outro. Quando gerar_resumo() não recebe
+o tempo de parede real, duracao_total_s cai para duracao_soma_fases_s como
+aproximação, e um alerta registra essa aproximação em `alertas`.
 """
 
 from __future__ import annotations
@@ -41,6 +52,7 @@ class ResumoExecucao:
 
     run_id: str
     duracao_total_s: float | None
+    duracao_soma_fases_s: float | None
     duracao_por_fase_s: dict[str, float]
     quantidade_validacoes: int
     quantidade_retries: int
@@ -61,6 +73,7 @@ class ResumoExecucao:
         return {
             "run_id": self.run_id,
             "duracao_total_s": self.duracao_total_s,
+            "duracao_soma_fases_s": self.duracao_soma_fases_s,
             "duracao_por_fase_s": self.duracao_por_fase_s,
             "quantidade_validacoes": self.quantidade_validacoes,
             "quantidade_retries": self.quantidade_retries,
@@ -77,11 +90,22 @@ class ResumoExecucao:
         }
 
 
-def gerar_resumo(eventos: list[ExecutionEvent], *, run_id: str | None = None) -> ResumoExecucao:
+def gerar_resumo(
+    eventos: list[ExecutionEvent],
+    *,
+    run_id: str | None = None,
+    duracao_total_s: float | None = None,
+) -> ResumoExecucao:
     """Agrega uma lista de ExecutionEvent em um ResumoExecucao.
 
     run_id é inferido de eventos[0].run_id quando não informado explicitamente.
     Se a lista estiver vazia, run_id precisa ser passado (não há como inferir).
+
+    duracao_total_s é o tempo de parede real da execução (ex.:
+    ExecutionCollector.duracao_execucao_s), passado pelo chamador. Se omitido,
+    o resumo usa duracao_soma_fases_s como aproximação e registra esse fato em
+    `alertas`. duracao_soma_fases_s é SEMPRE calculado a partir dos eventos,
+    independente deste parâmetro.
     """
     if not eventos and run_id is None:
         raise ValueError(
@@ -123,7 +147,15 @@ def gerar_resumo(eventos: list[ExecutionEvent], *, run_id: str | None = None) ->
             mensagem = evento.detalhes.get("mensagem", f"{evento.tipo} '{evento.nome}' gerou aviso")
             alertas.append(f"[{evento.fase}] {mensagem}")
 
-    duracao_total_s = sum(duracao_por_fase_s.values()) if duracao_por_fase_s else None
+    duracao_soma_fases_s = sum(duracao_por_fase_s.values()) if duracao_por_fase_s else None
+
+    if duracao_total_s is None:
+        duracao_total_s = duracao_soma_fases_s
+        if duracao_soma_fases_s is not None:
+            alertas.append(
+                "Duração total aproximada pela soma das durações das fases "
+                "(nenhum tempo de parede real foi informado a gerar_resumo())."
+            )
 
     if houve_falha:
         status_final = "falha"
@@ -135,6 +167,7 @@ def gerar_resumo(eventos: list[ExecutionEvent], *, run_id: str | None = None) ->
     return ResumoExecucao(
         run_id=resolved_run_id,
         duracao_total_s=duracao_total_s,
+        duracao_soma_fases_s=duracao_soma_fases_s,
         duracao_por_fase_s=duracao_por_fase_s,
         quantidade_validacoes=quantidade_validacoes,
         quantidade_retries=quantidade_retries,

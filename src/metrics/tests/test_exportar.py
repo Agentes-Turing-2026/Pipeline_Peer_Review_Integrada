@@ -16,6 +16,7 @@ def _resumo_vazio() -> ResumoExecucao:
     return ResumoExecucao(
         run_id="run-vazio",
         duracao_total_s=None,
+        duracao_soma_fases_s=None,
         duracao_por_fase_s={},
         quantidade_validacoes=0,
         quantidade_retries=0,
@@ -32,6 +33,7 @@ def _resumo_cheio() -> ResumoExecucao:
     return ResumoExecucao(
         run_id="run-cheio",
         duracao_total_s=0.34567,
+        duracao_soma_fases_s=0.34567,
         duracao_por_fase_s={
             "fase_1_revisao_independente": 0.1,
             "fase_2_leitura_cruzada": 0.12,

@@ -29,6 +29,7 @@ def test_lista_vazia_com_run_id_explicito_gera_resumo_zerado():
     resumo = gerar_resumo([], run_id="run-vazio")
     assert resumo.run_id == "run-vazio"
     assert resumo.duracao_total_s is None
+    assert resumo.duracao_soma_fases_s is None
     assert resumo.duracao_por_fase_s == {}
     assert resumo.quantidade_tools_chamadas == {}
     assert resumo.quantidade_validacoes == 0
@@ -45,14 +46,59 @@ def test_lista_vazia_sem_run_id_levanta_value_error():
         gerar_resumo([])
 
 
-def test_duracao_por_fase_e_total():
+def test_duracao_por_fase_e_soma_fases():
     eventos = [
         _evento(tipo="fase", nome="fase_1", fase="fase_1", duracao_s=0.1),
         _evento(tipo="fase", nome="fase_2", fase="fase_2", duracao_s=0.2),
     ]
     resumo = gerar_resumo(eventos)
     assert resumo.duracao_por_fase_s == {"fase_1": 0.1, "fase_2": 0.2}
-    assert resumo.duracao_total_s == pytest.approx(0.3)
+    assert resumo.duracao_soma_fases_s == pytest.approx(0.3)
+
+
+def test_duracao_total_s_explicito_e_respeitado_sem_sobrescrita_pela_soma():
+    eventos = [
+        _evento(tipo="fase", nome="fase_1", fase="fase_1", duracao_s=0.1),
+        _evento(tipo="fase", nome="fase_2", fase="fase_2", duracao_s=0.2),
+    ]
+    resumo = gerar_resumo(eventos, duracao_total_s=0.5)
+    assert resumo.duracao_total_s == 0.5
+    assert resumo.duracao_soma_fases_s == pytest.approx(0.3)
+    assert resumo.alertas == []
+
+
+def test_sem_parametro_total_vira_soma_das_fases_e_gera_alerta_de_aproximacao():
+    eventos = [
+        _evento(tipo="fase", nome="fase_1", fase="fase_1", duracao_s=0.1),
+        _evento(tipo="fase", nome="fase_2", fase="fase_2", duracao_s=0.2),
+    ]
+    resumo = gerar_resumo(eventos)
+    assert resumo.duracao_soma_fases_s == pytest.approx(0.3)
+    assert resumo.duracao_total_s == pytest.approx(resumo.duracao_soma_fases_s)
+    assert len(resumo.alertas) == 1
+    assert "aproximad" in resumo.alertas[0].lower()
+
+
+def test_duracao_total_s_de_parede_maior_que_soma_das_fases_e_preservada_sem_correcao():
+    eventos = [
+        _evento(tipo="fase", nome="fase_1", fase="fase_1", duracao_s=0.1),
+        _evento(tipo="fase", nome="fase_2", fase="fase_2", duracao_s=0.2),
+    ]
+    resumo = gerar_resumo(eventos, duracao_total_s=5.0)
+    assert resumo.duracao_total_s == 5.0
+    assert resumo.duracao_soma_fases_s == pytest.approx(0.3)
+    assert resumo.duracao_total_s > resumo.duracao_soma_fases_s
+    assert resumo.alertas == []
+
+
+def test_evento_de_fase_sem_duracao_none_nao_entra_na_soma_como_zero():
+    eventos = [
+        _evento(tipo="fase", nome="fase_1", fase="fase_1", duracao_s=0.4),
+        _evento(tipo="fase", nome="fase_2", fase="fase_2"),
+    ]
+    resumo = gerar_resumo(eventos)
+    assert resumo.duracao_por_fase_s == {"fase_1": 0.4}
+    assert resumo.duracao_soma_fases_s == pytest.approx(0.4)
 
 
 def test_contagem_de_tools_chamadas():
@@ -141,17 +187,17 @@ def test_status_final_falha_tem_prioridade_sobre_aviso():
     assert resumo.status_final == "falha"
 
 
-def test_to_dict_tem_exatamente_as_catorze_chaves_esperadas():
+def test_to_dict_tem_exatamente_as_quinze_chaves_esperadas():
     resumo = gerar_resumo([], run_id="run-dict")
     dado = resumo.to_dict()
     assert set(dado.keys()) == {
-        "run_id", "duracao_total_s", "duracao_por_fase_s",
+        "run_id", "duracao_total_s", "duracao_soma_fases_s", "duracao_por_fase_s",
         "quantidade_validacoes", "quantidade_retries", "quantidade_falhas",
         "quantidade_tools_chamadas", "requer_revisao_humana", "decisao_final",
         "status_final", "alertas", "tokens_totais", "custo_estimado",
         "modelo_usado", "chamadas_llm",
     }
-    assert len(dado) == 15
+    assert len(dado) == 16
     assert dado["tokens_totais"] is None
     assert dado["custo_estimado"] is None
     assert dado["modelo_usado"] is None
