@@ -82,6 +82,12 @@ CATEGORIA_PASSOU_APOS_CORRECAO = "passou_apos_correcao"
 CATEGORIA_FALHOU_RECUPERAVEL = "falhou_recuperavel"
 CATEGORIA_CORRIGIDO = "corrigido"
 CATEGORIA_BLOQUEADO = "bloqueado"
+# "alerta_entrada": o dado SEGUE no pipeline, mas com ressalvas que pedem
+# revisão humana. Introduzida pela validação de entrada por PDF (Grupo 1): um
+# documento utilizável, porém suspeito (texto curto, avisos do extrator, baixa
+# densidade), não é bloqueado nem tratado como sucesso limpo — é encaminhado
+# com alerta.
+CATEGORIA_ALERTA_ENTRADA = "alerta_entrada"
 
 CATEGORIAS_VALIDAS = frozenset(
     {
@@ -90,6 +96,7 @@ CATEGORIAS_VALIDAS = frozenset(
         CATEGORIA_FALHOU_RECUPERAVEL,
         CATEGORIA_CORRIGIDO,
         CATEGORIA_BLOQUEADO,
+        CATEGORIA_ALERTA_ENTRADA,
     }
 )
 
@@ -101,15 +108,22 @@ _STATUS_OBSERVABILIDADE_GRUPO3 = {
     CATEGORIA_FALHOU_RECUPERAVEL: "alerta",
     CATEGORIA_CORRIGIDO: "alerta",
     CATEGORIA_BLOQUEADO: "erro",
+    CATEGORIA_ALERTA_ENTRADA: "alerta",
 }
 
 
 def gerar_run_id() -> str:
-    """Gera um identificador de execução provisório (uuid4).
+    """Gera um identificador de execução local (uuid4) — apenas fallback.
 
-    Provisório porque ainda não existe um identificador comum acordado entre
-    os grupos do pipeline (ver README §4). Quando existir, o chamador deve
-    passar esse valor em vez de gerar um novo aqui.
+    O identificador comum do pipeline JÁ EXISTE desde a integração dos
+    grupos: ``Pipeline.run()`` (em ``pipeline_base.py``) sincroniza
+    ``context.run_id`` com o ``tracer.run_id`` do Grupo 3, e as fases
+    repassam esse valor a ``validar_com_tentativas()`` — é ele que deve ser
+    propagado sempre que houver uma execução do pipeline em andamento.
+
+    Este uuid4 local só é usado em contextos isolados, onde não existe um
+    ``run_id`` de execução para herdar: ``demo_eventos.py``, testes, ou uma
+    chamada avulsa de ``validar_com_tentativas()`` sem ``run_id``.
     """
     return str(uuid.uuid4())
 
@@ -274,6 +288,7 @@ _ROTULOS_CATEGORIA = {
     CATEGORIA_FALHOU_RECUPERAVEL: "FALHOU (recuperável, retry a seguir)",
     CATEGORIA_CORRIGIDO: "CORRIGIDO (corrector aplicado)",
     CATEGORIA_BLOQUEADO: "BLOQUEADO (esgotou tentativas)",
+    CATEGORIA_ALERTA_ENTRADA: "ALERTA (segue, requer revisão humana)",
 }
 
 

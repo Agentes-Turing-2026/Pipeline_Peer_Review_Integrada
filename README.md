@@ -50,13 +50,18 @@ orquestração.
     ├── reviewer_agent.py         # Fase 1 — agentes revisores
     ├── cross_review.py           # Fase 2 — leitura cruzada
     ├── editor_agent.py           # Fase 3 — editor-chefe
-    ├── legacy_adapter.py         # Adaptador de formatos legados -> schemas oficiais
-    ├── validacao_retry.py        # Grupo 1 — camada de validação, retry e confiabilidade
+    ├── validacao_retry.py        # Grupo 1 — camada de validação, retry e confiabilidade (saída dos agentes)
     ├── eventos_validacao.py      # Grupo 1 — eventos estruturados (JSONL) de validação/retry
-    ├── demo_validacao.py         # Demo offline da camada de validação (sem API key)
-    ├── demo_eventos.py           # Demo offline dos eventos estruturados (sem API key)
+    ├── validacao_entrada.py      # Grupo 1 — validação e resiliência da ENTRADA por PDF (arquivo + texto extraído)
+    ├── demos/                    # Grupo 1 — demos offline (sem API key), separadas do código principal
+    │   ├── demo_validacao.py     #   camada de validação/retry da saída dos agentes
+    │   ├── demo_eventos.py       #   eventos estruturados de validação/retry
+    │   └── demo_entrada_pdf.py   #   validação da entrada por PDF (passa / alerta / retry / bloqueio)
     ├── tests/
-    │   └── test_eventos_validacao.py
+    │   ├── test_eventos_validacao.py
+    │   └── test_validacao_entrada.py
+    ├── archive/                  # Grupo 1 — código legado sem uso ativo, arquivado (ver archive/README.md)
+    │   └── legacy_adapter.py     #   adaptador de veredito legado (não importado por ninguém)
     ├── demo_observabilidade.py   # Grupo 3 — demo offline: roda o pipeline e reconstrói o trace
     ├── extraction/               # Grupo 3 — entrada real por PDF (contrato + extratores substituíveis)
     │   ├── document.py           #   contrato ExtractedDocument (id, texto, páginas, extrator, duração em s, avisos)
@@ -72,7 +77,9 @@ orquestração.
     │   └── peer_review_mock.json
     └── examples/                 # Artigo de exemplo + exemplos de I/O dos schemas
         ├── example_article.txt
-        ├── example_extracted_document.json    # contrato ExtractedDocument (entrada por PDF, Grupo 3)
+        ├── example_extracted_document.json    # ExtractedDocument válido (entrada por PDF)
+        ├── example_extracted_insuficiente.json # ExtractedDocument com extração insuficiente (Grupo 1 → alerta)
+        ├── example_extracted_escaneado.json   # ExtractedDocument sem texto / escaneado (Grupo 1 → retry/bloqueio)
         ├── example_valid_output.json          # ReviewSchema válido
         ├── example_invalid_output.json        # ReviewSchema inválido (viola notas e justificativas)
         ├── example_cross_review_output.json   # CrossReviewSchema válido
@@ -277,9 +284,9 @@ falha cedo e de forma explícita, em vez de se propagar silenciosamente.
   `recomendacoes_aos_autores`.
 
 > **Sem formatos paralelos.** Escalas e vocabulários legados (ex.: notas 0–10 e
-> rótulos "Accept/Minor Revision") só entram no sistema através do adaptador
-> documentado [`src/legacy_adapter.py`](src/legacy_adapter.py), que converte e
-> **revalida** contra os schemas oficiais.
+> rótulos "Accept/Minor Revision") precisam ser convertidos para os schemas
+> oficiais e **revalidados**. Um adaptador de exemplo (sem uso ativo) está
+> arquivado em [`src/archive/legacy_adapter.py`](src/archive/legacy_adapter.py).
 
 ### Camada de orquestração (genérica)
 
@@ -356,7 +363,7 @@ A função `validar_com_tentativas()` substitui as chamadas diretas a
 Roda **sem internet e sem `GOOGLE_API_KEY`**, demonstrando os 4 requisitos da spec:
 
 ```bash
-python src/demo_validacao.py
+python src/demos/demo_validacao.py
 ```
 
 | Cenário | O que demonstra |
@@ -424,7 +431,7 @@ correções e bloqueios do Grupo 1 na MESMA árvore reconstruída do trace.
 **Rodando a demo:**
 
 ```bash
-python src/demo_eventos.py
+python src/demos/demo_eventos.py
 ```
 
 A demo reaproveita os cenários de sucesso, retry-com-correção e esgotamento de
@@ -450,6 +457,68 @@ validação/retry existente, e não captura eventos internos do ADK (isso é do
 Grupo 3, via `adk_bridge.py`). O identificador comum e a conexão com o trace,
 que antes ficavam como proposta em aberto, já estão integrados — ver
 [§8](#8-observabilidade-e-traces-grupo-3).
+
+### 4.1 Validação e resiliência da ENTRADA por PDF
+
+Com a entrada real por PDF (extração do Grupo 3, [§2.4](#24-entrada-real-por-pdf-grupo-3)),
+a mesma filosofia de confiabilidade passa a valer **antes dos agentes**: decidir
+se um documento pode seguir, precisa de nova tentativa ou deve ser bloqueado —
+sem nunca aceitar em silêncio um arquivo ou texto inadequado. Isso vive em
+[`src/validacao_entrada.py`](src/validacao_entrada.py) e reusa a MESMA trilha de
+eventos (`validacao_events.jsonl`), o MESMO `run_id` e o MESMO espelhamento no
+trace do Grupo 3 — não há segundo sistema de logs nem outro identificador.
+
+**Duas verificações determinísticas (sem LLM):**
+
+| Etapa | Função | Verifica |
+|---|---|---|
+| Antes da extração | `classificar_arquivo_pdf` | arquivo inexistente, não-arquivo, formato ≠ `.pdf`, vazio, sem cabeçalho `%PDF` (corrompido), `/Encrypt` (protegido). |
+| Depois da extração | `classificar_documento_extraido` | texto vazio, muito curto (< 200 caracteres), caracteres ilegíveis (> 30%), baixa densidade por página (< 200 car./página) e avisos do extrator. |
+
+**Política de decisão — quando seguir, alertar, retentar ou bloquear:**
+
+| Decisão | Quando | Efeito | Categoria de evento |
+|---|---|---|---|
+| **OK** | arquivo e texto em condições. | Segue para os agentes. | `passou_de_primeira` |
+| **ALERTA** | texto curto, ilegível, baixa densidade ou avisos do extrator. | **Segue**, marcado para revisão humana (não é silencioso). | `alerta_entrada` |
+| **RETRY** | texto vazio (PDF escaneado/protegido). | Nova tentativa **só** se houver estratégia de reextração (ex.: OCR); ela é registrada como `corrigido` apenas se o texto realmente mudar. | `falhou_recuperavel` → `corrigido` → `passou_apos_correcao` |
+| **BLOQUEAR** | arquivo ruim, ou texto irrecuperável sem estratégia. | Levanta `EntradaInvalidaError`; `main.py` encerra com mensagem clara e código ≠ 0. | `bloqueado` |
+
+**Por que retry só às vezes:** repetir a leitura de um arquivo corrompido,
+inexistente ou protegido nunca muda o resultado — esses casos bloqueiam de
+imediato (`permite_retry=False`). Retry é reservado ao que uma nova tentativa
+pode de fato resolver (texto ausente → reextrair com OCR). E uma reextração que
+devolve o mesmo texto **não** é registrada como "correção" (evita marcar
+correção onde os dados não mudaram).
+
+**Integração combinada com o Grupo 3 (mínima):** o arquivo é validado em
+`run_demo` antes de extrair; o documento é validado dentro de `extract_pdf_input`
+logo após a extração; e a própria chamada de extração é envolvida por um
+`try/except` que transforma uma falha do parser (PDF protegido por senha,
+corrompido de um jeito que só o extrator detecta) em evento estruturado via
+`registrar_falha_extracao` — em vez de um traceback solto. O orquestrador
+`validar_entrada_com_retry` expõe o ciclo completo (arquivo → extração →
+documento → retry) pronto para o Grupo 3 ligar uma estratégia de OCR quando
+quiser — sem redesenhar o pipeline.
+
+**Rodando a demo** (offline, sem PDF real — usa o contrato `ExtractedDocument`
+e arquivos de fixture temporários):
+
+```bash
+python src/demos/demo_entrada_pdf.py
+```
+
+Ela apresenta os quatro casos pedidos — documento que passa, caso com alerta,
+falha recuperável (reextração) e bloqueio com motivo claro — todos sob o mesmo
+`run_id`, e imprime a linha do tempo lida de volta do arquivo de eventos.
+
+**Testes:** [`src/tests/test_validacao_entrada.py`](src/tests/test_validacao_entrada.py)
+cobre os checks de arquivo (fixtures em `tmp_path`), os de documento (contrato
+`ExtractedDocument`), a emissão de eventos com `run_id` e os quatro cenários do
+orquestrador de retry.
+
+**Fora de escopo (dos outros grupos):** não implementamos o extrator de PDF nem
+o OCR (Grupo 3), e não calculamos tokens/métricas (Grupo 2).
 
 ---
 
@@ -531,7 +600,7 @@ Seção transparente sobre o que **não** é "real" hoje:
 | **Entrada do artigo** | Usa um `.txt` de exemplo ([`src/examples/example_article.txt`](src/examples/example_article.txt)). **Ainda não há** ingestão/parse de PDF. |
 | **Validação & retry** | **Integrado** — ver [§4](#4-validação-retry-e-confiabilidade-grupo-1). Retry automático com corrector em modo Mock (offline) e API (Gemini). `PipelineValidationError` bloqueia propagação de dados inválidos. Eventos estruturados em `src/logs/validacao_events.jsonl`, com `run_id` **unificado** com o tracer do Grupo 3 quando presente, e espelhados em `observability.emit_event()` — ver [§8](#8-observabilidade-e-traces-grupo-3). |
 | **Tools de auditoria** | **Integradas** — ver [§5](#5-tools-determinísticas-de-auditoria-grupo-2). `validar_completude` (Fase 1), `checar_coerencia` (chamada por dentro da Fase 3) e `auditar_decisao_final` (Fase 3) — todas ativas. |
-| **Adaptação de pareceres legados de revisor** | O [`src/legacy_adapter.py`](src/legacy_adapter.py) converte o **veredito do editor** legado; o parecer **de revisor** legado não tem as 4 dimensões e, por isso, **não** é adaptado automaticamente (exige nova revisão — limitação documentada). |
+| **Adaptação de pareceres legados de revisor** | O adaptador arquivado em [`src/archive/legacy_adapter.py`](src/archive/legacy_adapter.py) (sem uso ativo) converte o **veredito do editor** legado; o parecer **de revisor** legado não tem as 4 dimensões e, por isso, **não** é adaptado automaticamente (exige nova revisão — limitação documentada). |
 
 > O conteúdo do JSON de mock é **fictício**, porém **válido** contra os schemas —
 > incluindo um caso realista em que o `domain_expert` muda de posição na leitura
@@ -823,10 +892,10 @@ python main.py mock --pdf caminho/do/artigo.pdf
 python src/tools/demo_tools.py
 
 # Demo offline da camada de validação/retry do Grupo 1 (sem API key):
-python src/demo_validacao.py
+python src/demos/demo_validacao.py
 
 # Demo offline dos eventos estruturados de validação/retry do Grupo 1 (sem API key):
-python src/demo_eventos.py
+python src/demos/demo_eventos.py
 
 # Demo offline da observabilidade/traces do Grupo 3 (sem API key):
 python src/demo_observabilidade.py
