@@ -9,7 +9,7 @@ Roda sem internet e sem GOOGLE_API_KEY. Demonstra os quatro requisitos do PDF:
 Além disso, exercita CrossReviewSchema e EditorVerdictSchema.
 
 Uso:
-    python src/demo_validacao.py
+    python src/demos/demo_validacao.py
 """
 
 from __future__ import annotations
@@ -18,9 +18,9 @@ import json
 import sys
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
-if str(HERE) not in sys.path:
-    sys.path.insert(0, str(HERE))
+SRC = Path(__file__).resolve().parents[1]  # .../src (as demos vivem em src/demos/)
+if str(SRC) not in sys.path:
+    sys.path.insert(0, str(SRC))
 
 from review_schema import (  # noqa: E402
     validar_cross_review,
@@ -35,7 +35,7 @@ from validacao_retry import (  # noqa: E402
     validar_com_tentativas,
 )
 
-EXAMPLES = HERE / "examples"
+EXAMPLES = SRC / "examples"
 
 # ---------------------------------------------------------------------------
 # Helpers de exibição

@@ -396,8 +396,9 @@ def cross_review_json_schema() -> dict:
 # EXATAMENTE a mesma escala 1-4 da ``nota_geral`` dos revisores
 # (``ESCALA_NOTA_GERAL``). Não há um segundo formato de nota (ex.: 0-10) nem um
 # vocabulário paralelo de recomendação (ex.: "Accept"/"Minor Revision"). Formatos
-# legados que usem outra escala precisam passar pelo adaptador documentado em
-# ``legacy_adapter.py`` antes de virarem um ``EditorVerdictSchema``.
+# legados que usem outra escala precisam ser convertidos para esta escala 1-4
+# antes de virarem um ``EditorVerdictSchema`` (um adaptador de exemplo, sem uso
+# ativo, está arquivado em ``src/archive/legacy_adapter.py``).
 
 #: Escala da decisão editorial. É a MESMA de ``nota_geral`` — propositalmente
 #: reutilizada para que exista uma única noção de "recomendação" no sistema.

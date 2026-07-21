@@ -52,6 +52,17 @@ from cross_review import _run_cross_review  # noqa: E402
 from editor_agent import _run_editor  # noqa: E402
 from extraction import ExtractedDocument, PdfExtractor, get_default_extractor  # noqa: E402
 
+# Validação e resiliência da entrada por PDF (Grupo 1). Decide se o arquivo e o
+# texto extraído podem entrar no pipeline (segue / alerta / bloqueia), emitindo
+# eventos na mesma trilha de validacao_events.jsonl e do trace do Grupo 3.
+from validacao_entrada import (  # noqa: E402
+    DecisaoEntrada,
+    EntradaInvalidaError,
+    registrar_falha_extracao,
+    validar_arquivo_pdf,
+    validar_documento_extraido,
+)
+
 # Tools determinísticas do Grupo 2 (importação guardada: pipeline funciona sem elas).
 try:
     from tools.validar_completude import validar_completude as _tool_completude
@@ -630,14 +641,29 @@ def extract_pdf_input(
     pdf_path: str | Path,
     extractor: PdfExtractor | None = None,
     tracer=None,
+    run_id: str | None = None,
+    coletor: "ExecutionCollector | None" = None,
 ) -> ExtractedDocument:
     """Extrai um PDF real como etapa DETERMINÍSTICA do pipeline (fase 0).
 
     Não depende de decisão de LLM: é sempre chamada quando a entrada é um PDF.
     A extração entra na MESMA linha do tempo das demais fases (span de fase,
     com início/fim, status, extrator, páginas e duração em segundos). Avisos de
-    qualidade viram eventos de alerta — a camada de validação (Grupo 1) decide
-    se bloqueia ou encaminha; a ausência total de texto é erro claro aqui.
+    qualidade viram eventos de alerta.
+
+    Após a extração, a camada de validação do Grupo 1
+    (``validar_documento_extraido``) decide se o texto pode seguir, se segue com
+    alerta (revisão humana) ou se é bloqueado — registrando um evento
+    estruturado ligado ao ``run_id``. Texto vazio/irrecuperável levanta
+    ``EntradaInvalidaError`` (subclasse de ``RuntimeError``): a entrada nunca é
+    aceita em silêncio.
+
+    ``coletor`` (Grupo 2, opcional): quando a validação gera alerta, também
+    registra um evento ``tipo="validacao", status="aviso"`` no
+    ``ExecutionCollector`` — é o mesmo gatilho que ``metrics/resumo.py`` usa
+    para popular a seção "Alertas" do resumo final. Sem isso, o alerta ficava
+    só em ``validacao_events.jsonl``/trace e nunca aparecia no resumo impresso
+    ao fim de ``python main.py``.
     """
     extractor = extractor or get_default_extractor()
     span_cm = (
@@ -652,7 +678,21 @@ def extract_pdf_input(
         else nullcontext()
     )
     with span_cm:
-        doc = extractor.extract(pdf_path)
+        # Grupo 1 — se o parser do Grupo 3 falhar (PDF protegido por senha ou
+        # corrompido de um jeito que só o extrator detecta), a falha vira um
+        # evento estruturado 'bloqueado' ligado ao run_id, e não um traceback solto.
+        try:
+            doc = extractor.extract(pdf_path)
+        except Exception as exc:  # noqa: BLE001 - registra e re-levanta como bloqueio de entrada
+            erro_extracao = registrar_falha_extracao(
+                pdf_path, exc, run_id=run_id, fase=EXTRACTION_PHASE
+            )
+            if coletor is not None:
+                coletor.registrar(
+                    fase=EXTRACTION_PHASE, tipo="falha", nome="entrada_pdf",
+                    status="falha", erro_final=str(exc),
+                )
+            raise erro_extracao from exc
         logger.info(
             "Fase 0 concluída: '%s' extraído por %s %s (%d página(s), %.2f s, %d aviso(s)).",
             doc.filename, doc.extractor, doc.extractor_version,
@@ -669,12 +709,25 @@ def extract_pdf_input(
                 "aviso_extracao", author="grupo3", phase=EXTRACTION_PHASE, kind="tool",
                 status="alerta", attributes={"aviso": aviso, "document_id": doc.document_id},
             )
-        if not doc.has_text:
-            raise RuntimeError(
-                f"A extração de '{doc.filename}' não produziu texto utilizável "
-                f"({'; '.join(doc.warnings) or 'sem detalhes'}). Não é possível "
-                "alimentar os agentes — forneça um PDF com texto digital ou "
-                "habilite OCR no extrator."
+        # Grupo 1 — valida o documento extraído. Segue (ok/alerta) ou bloqueia
+        # (EntradaInvalidaError), sempre deixando um evento estruturado.
+        try:
+            resultado_validacao = validar_documento_extraido(
+                doc, run_id=run_id, fase=EXTRACTION_PHASE, exigir=True,
+            )
+        except EntradaInvalidaError as exc:
+            if coletor is not None:
+                coletor.registrar(
+                    fase=EXTRACTION_PHASE, tipo="falha", nome="entrada_pdf",
+                    status="falha", erro_final=str(exc),
+                )
+            raise
+        if coletor is not None and resultado_validacao.decisao is DecisaoEntrada.ALERTA:
+            coletor.registrar(
+                fase=EXTRACTION_PHASE, tipo="validacao", nome="entrada_pdf",
+                status="aviso",
+                mensagem="; ".join(resultado_validacao.motivos),
+                requer_revisao_humana=resultado_validacao.requer_revisao_humana,
             )
     return doc
 
@@ -730,7 +783,7 @@ def run_demo(
     # Métricas de execução (Grupo 2): coletor guardado — se metrics/ não
     # existir por algum motivo, o pipeline roda normalmente, sem instrumentação.
     # O coletor herda o run_id da execução: métricas, trace, eventos de
-    # validação e relatório compartilham o MESMO identificador.
+    # validação e relatório compartilham o MESMO identificador (PR #3).
     coletor: ExecutionCollector | None = (
         ExecutionCollector(run_id=run_id) if ExecutionCollector is not None else None
     )
@@ -750,7 +803,12 @@ def run_demo(
         # Fase 0 (apenas com PDF): extração determinística, dentro da mesma
         # linha do tempo (mesmo run_id) das demais fases.
         if pdf_path is not None:
-            doc = extract_pdf_input(pdf_path, extractor=extractor, tracer=tracer)
+            # Grupo 1 — validação do ARQUIVO antes de extrair (inexistente,
+            # formato incorreto, corrompido, protegido). Bloqueia sem retry.
+            validar_arquivo_pdf(pdf_path, run_id=run_id, fase=EXTRACTION_PHASE, exigir=True)
+            doc = extract_pdf_input(
+                pdf_path, extractor=extractor, tracer=tracer, run_id=run_id, coletor=coletor,
+            )
             article_text = doc.text
             config["article_ref"] = doc.filename
             config["document_meta"] = doc.to_metadata()
