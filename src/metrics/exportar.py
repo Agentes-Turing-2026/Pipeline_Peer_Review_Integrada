@@ -23,7 +23,18 @@ def caminho_padrao_resumo() -> Path:
 
 
 def _fmt_s(valor: float | None) -> str:
-    return "—" if valor is None else f"{valor:.2f} s"
+    """Formata uma duração em segundos para exibição no terminal.
+
+    Só afeta exibição — o float completo continua sendo gravado sem
+    transformação por salvar_resumo_json().
+    """
+    if valor is None:
+        return "n/d"
+    if valor == 0.0:
+        return "0 s"
+    if valor < 0.01:
+        return "< 0.01 s"
+    return f"{valor:.2f} s"
 
 
 def imprimir_resumo(resumo: ResumoExecucao) -> None:
