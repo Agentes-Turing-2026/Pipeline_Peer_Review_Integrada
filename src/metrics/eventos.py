@@ -46,5 +46,28 @@ class ExecutionEvent:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "ExecutionEvent":
-        """Reconstrói um ExecutionEvent a partir de um dict (ex.: lido de JSON)."""
-        return cls(**data)
+        """Reconstrói um ExecutionEvent a partir de um dict (ex.: lido de JSON).
+
+        Compatibilidade transitória: antes da migração do contrato de duração
+        para segundos, eventos persistidos gravavam ``duracao_ms``
+        (milissegundos). Para não quebrar a leitura desses payloads antigos,
+        esta conversão é de MÃO ÚNICA — ``duracao_ms`` é convertido para
+        ``duracao_s`` apenas na entrada; ``to_dict()`` nunca volta a emitir
+        ``duracao_ms``. Não é compatibilidade bidirecional, é só uma rampa de
+        leitura, e deve ser removida quando não houver mais payloads legados
+        em circulação. Mesma estratégia usada por ``TraceEvent.from_dict``
+        (Grupo 3, ``src/observability/events.py``) — precedente já
+        estabelecido no repositório para esse tipo de migração de unidade.
+
+        Precedência (nunca soma as duas):
+          1. Se "duracao_s" está presente no dict (mesmo com valor None), vence
+             — é o contrato atual, prioridade absoluta.
+          2. Senão, se "duracao_ms" está presente e não é None, converte:
+             duracao_s = duracao_ms / 1000.0.
+          3. Senão, duracao_s = None.
+        """
+        payload = dict(data)
+        duracao_ms = payload.pop("duracao_ms", None)
+        if "duracao_s" not in payload:
+            payload["duracao_s"] = duracao_ms / 1000.0 if duracao_ms is not None else None
+        return cls(**payload)

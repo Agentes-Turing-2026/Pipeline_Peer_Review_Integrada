@@ -87,3 +87,53 @@ def test_duracao_s_aceita_float_quando_fornecido():
         duracao_s=0.0873,
     )
     assert evento.duracao_s == 0.0873
+
+
+def _payload_legado(**overrides) -> dict:
+    base = dict(
+        run_id="run-legado",
+        fase="fase_1_revisao_independente",
+        tipo="tool",
+        nome="completude",
+        status="sucesso",
+    )
+    base.update(overrides)
+    return base
+
+
+def test_from_dict_payload_novo_com_duracao_s_preserva_valor_identico():
+    evento = ExecutionEvent.from_dict(_payload_legado(duracao_s=1.5))
+    assert evento.duracao_s == 1.5
+
+
+def test_from_dict_payload_legado_com_duracao_ms_converte_para_segundos():
+    evento = ExecutionEvent.from_dict(_payload_legado(duracao_ms=1500))
+    assert evento.duracao_s == 1.5
+
+
+def test_from_dict_payload_com_ambas_as_chaves_duracao_s_vence_e_duracao_ms_e_ignorado():
+    evento = ExecutionEvent.from_dict(_payload_legado(duracao_s=2.0, duracao_ms=9999))
+    assert evento.duracao_s == 2.0
+
+
+def test_from_dict_payload_sem_nenhuma_das_duas_chaves_resulta_em_duracao_s_none():
+    evento = ExecutionEvent.from_dict(_payload_legado())
+    assert evento.duracao_s is None
+
+
+def test_from_dict_payload_com_duracao_ms_none_nao_vira_zero():
+    evento = ExecutionEvent.from_dict(_payload_legado(duracao_ms=None))
+    assert evento.duracao_s is None
+
+
+def test_from_dict_round_trip_preserva_valor_float_exato_sem_aritmetica():
+    original = ExecutionEvent(**_payload_legado(duracao_s=0.123456789))
+    reconstruido = ExecutionEvent.from_dict(original.to_dict())
+    assert reconstruido.duracao_s == original.duracao_s
+
+
+def test_from_dict_de_payload_legado_nao_reintroduz_chave_duracao_ms_no_to_dict():
+    evento = ExecutionEvent.from_dict(_payload_legado(duracao_ms=500))
+    dado = evento.to_dict()
+    assert "duracao_ms" not in dado
+    assert dado["duracao_s"] == 0.5
