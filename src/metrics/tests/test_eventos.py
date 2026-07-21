@@ -116,6 +116,11 @@ def test_from_dict_payload_com_ambas_as_chaves_duracao_s_vence_e_duracao_ms_e_ig
     assert evento.duracao_s == 2.0
 
 
+def test_from_dict_payload_com_duracao_s_none_explicito_nao_cai_para_duracao_ms():
+    evento = ExecutionEvent.from_dict(_payload_legado(duracao_s=None, duracao_ms=1500))
+    assert evento.duracao_s is None
+
+
 def test_from_dict_payload_sem_nenhuma_das_duas_chaves_resulta_em_duracao_s_none():
     evento = ExecutionEvent.from_dict(_payload_legado())
     assert evento.duracao_s is None

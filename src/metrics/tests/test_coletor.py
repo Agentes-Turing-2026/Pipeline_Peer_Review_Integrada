@@ -118,6 +118,17 @@ def test_tool_falha_relevanta_excecao_e_registra_evento_de_falha_com_fase():
     assert evento.detalhes["erro_tipo"] == "RuntimeError"
 
 
+def test_duracao_execucao_s_usa_perf_counter_desde_a_criacao(monkeypatch):
+    import metrics.coletor as coletor_mod
+
+    valores = iter([100.0, 100.0, 107.5])
+    monkeypatch.setattr(coletor_mod.time, "perf_counter", lambda: next(valores))
+
+    coletor = ExecutionCollector(run_id="run-duracao")  # consome 100.0 no __init__
+    assert coletor.duracao_execucao_s == 0.0
+    assert coletor.duracao_execucao_s == 7.5
+
+
 def test_multiplas_fases_e_tools_ficam_na_ordem_de_registro():
     coletor = ExecutionCollector(run_id="run-8")
     with coletor.fase("fase_1_revisao_independente"):

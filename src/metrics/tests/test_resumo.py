@@ -91,6 +91,17 @@ def test_duracao_total_s_de_parede_maior_que_soma_das_fases_e_preservada_sem_cor
     assert resumo.alertas == []
 
 
+def test_duracao_total_s_zero_e_preservada_sem_cair_para_soma_das_fases():
+    eventos = [
+        _evento(tipo="fase", nome="fase_1", fase="fase_1", duracao_s=0.1),
+        _evento(tipo="fase", nome="fase_2", fase="fase_2", duracao_s=0.2),
+    ]
+    resumo = gerar_resumo(eventos, duracao_total_s=0.0)
+    assert resumo.duracao_total_s == 0.0
+    assert resumo.duracao_soma_fases_s == pytest.approx(0.3)
+    assert resumo.alertas == []
+
+
 def test_evento_de_fase_sem_duracao_none_nao_entra_na_soma_como_zero():
     eventos = [
         _evento(tipo="fase", nome="fase_1", fase="fase_1", duracao_s=0.4),
