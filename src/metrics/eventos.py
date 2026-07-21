@@ -27,7 +27,8 @@ class ExecutionEvent:
     nome: str
     status: StatusEvento
     timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
-    duracao_ms: float | None = None
+    duracao_s: float | None = None
+    """Duração medida do que o evento representa, em segundos (float, precisão total)."""
     detalhes: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -39,7 +40,7 @@ class ExecutionEvent:
             "nome": self.nome,
             "status": self.status,
             "timestamp": self.timestamp,
-            "duracao_ms": self.duracao_ms,
+            "duracao_s": self.duracao_s,
             "detalhes": self.detalhes,
         }
 

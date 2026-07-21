@@ -28,8 +28,8 @@ def _evento(**overrides) -> ExecutionEvent:
 def test_lista_vazia_com_run_id_explicito_gera_resumo_zerado():
     resumo = gerar_resumo([], run_id="run-vazio")
     assert resumo.run_id == "run-vazio"
-    assert resumo.duracao_total_ms is None
-    assert resumo.duracao_por_fase_ms == {}
+    assert resumo.duracao_total_s is None
+    assert resumo.duracao_por_fase_s == {}
     assert resumo.quantidade_tools_chamadas == {}
     assert resumo.quantidade_validacoes == 0
     assert resumo.quantidade_retries == 0
@@ -47,12 +47,12 @@ def test_lista_vazia_sem_run_id_levanta_value_error():
 
 def test_duracao_por_fase_e_total():
     eventos = [
-        _evento(tipo="fase", nome="fase_1", fase="fase_1", duracao_ms=100.0),
-        _evento(tipo="fase", nome="fase_2", fase="fase_2", duracao_ms=200.0),
+        _evento(tipo="fase", nome="fase_1", fase="fase_1", duracao_s=0.1),
+        _evento(tipo="fase", nome="fase_2", fase="fase_2", duracao_s=0.2),
     ]
     resumo = gerar_resumo(eventos)
-    assert resumo.duracao_por_fase_ms == {"fase_1": 100.0, "fase_2": 200.0}
-    assert resumo.duracao_total_ms == 300.0
+    assert resumo.duracao_por_fase_s == {"fase_1": 0.1, "fase_2": 0.2}
+    assert resumo.duracao_total_s == pytest.approx(0.3)
 
 
 def test_contagem_de_tools_chamadas():
@@ -145,7 +145,7 @@ def test_to_dict_tem_exatamente_as_catorze_chaves_esperadas():
     resumo = gerar_resumo([], run_id="run-dict")
     dado = resumo.to_dict()
     assert set(dado.keys()) == {
-        "run_id", "duracao_total_ms", "duracao_por_fase_ms",
+        "run_id", "duracao_total_s", "duracao_por_fase_s",
         "quantidade_validacoes", "quantidade_retries", "quantidade_falhas",
         "quantidade_tools_chamadas", "requer_revisao_humana", "decisao_final",
         "status_final", "alertas", "tokens_totais", "custo_estimado",

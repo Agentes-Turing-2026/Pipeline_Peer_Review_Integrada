@@ -22,8 +22,8 @@ def caminho_padrao_resumo() -> Path:
     return SRC / "outputs" / "resumo_execucao.json"
 
 
-def _fmt_ms(valor: float | None) -> str:
-    return "—" if valor is None else f"{valor:.2f} ms"
+def _fmt_s(valor: float | None) -> str:
+    return "—" if valor is None else f"{valor:.2f} s"
 
 
 def imprimir_resumo(resumo: ResumoExecucao) -> None:
@@ -34,12 +34,12 @@ def imprimir_resumo(resumo: ResumoExecucao) -> None:
     print(f"Status final:        {resumo.status_final}")
     print(f"Decisão final:       {resumo.decisao_final if resumo.decisao_final is not None else '—'}")
     print(f"Revisão humana:      {'RECOMENDADA' if resumo.requer_revisao_humana else 'não recomendada'}")
-    print(f"Duração total:       {_fmt_ms(resumo.duracao_total_ms)}")
+    print(f"Duração total:       {_fmt_s(resumo.duracao_total_s)}")
 
     print("\nDuração por fase:")
-    if resumo.duracao_por_fase_ms:
-        for fase, duracao in resumo.duracao_por_fase_ms.items():
-            print(f"  {fase:<40} {_fmt_ms(duracao)}")
+    if resumo.duracao_por_fase_s:
+        for fase, duracao in resumo.duracao_por_fase_s.items():
+            print(f"  {fase:<40} {_fmt_s(duracao)}")
     else:
         print("  (nenhuma fase registrada)")
 

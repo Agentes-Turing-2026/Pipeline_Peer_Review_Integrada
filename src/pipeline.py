@@ -285,7 +285,7 @@ class IndependentReviewPhase(PipelinePhase[str, IndependentReviews]):
                 for rid, review in reviews.items():
                     inicio = time.perf_counter()
                     audit = _tool_completude(review.model_dump())
-                    duracao_ms = (time.perf_counter() - inicio) * 1000
+                    duracao_s = time.perf_counter() - inicio
                     logger.info(
                         "[completude] Fase 1 '%s': score=%.4f completo=%s",
                         rid, audit["score_completude"], audit["completo"],
@@ -293,7 +293,7 @@ class IndependentReviewPhase(PipelinePhase[str, IndependentReviews]):
                     if coletor is not None:
                         coletor.registrar(
                             fase=self.name, tipo="tool", nome="validar_completude",
-                            status="sucesso", duracao_ms=duracao_ms,
+                            status="sucesso", duracao_s=duracao_s,
                             agente=rid, score_completude=audit["score_completude"],
                             completo=audit["completo"],
                         )
@@ -434,7 +434,7 @@ class EditorVerdictPhase(PipelinePhase[CrossReviews, EditorVerdictSchema]):
             if _tool_auditoria is not None:
                 inicio = time.perf_counter()
                 auditoria = _tool_auditoria(verdict.model_dump())
-                duracao_ms = (time.perf_counter() - inicio) * 1000
+                duracao_s = time.perf_counter() - inicio
                 logger.info("[auditoria] %s", auditoria["resumo_auditoria"])
                 if auditoria["requer_revisao_humana"]:
                     logger.warning("[auditoria] Veredito requer revisão humana.")
@@ -442,7 +442,7 @@ class EditorVerdictPhase(PipelinePhase[CrossReviews, EditorVerdictSchema]):
                 if coletor is not None:
                     coletor.registrar(
                         fase=self.name, tipo="tool", nome="auditar_decisao_final",
-                        status="sucesso", duracao_ms=duracao_ms,
+                        status="sucesso", duracao_s=duracao_s,
                         requer_revisao_humana=auditoria["requer_revisao_humana"],
                     )
                 emit_event(

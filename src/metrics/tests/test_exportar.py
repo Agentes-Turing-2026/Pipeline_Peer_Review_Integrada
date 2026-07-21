@@ -15,8 +15,8 @@ from metrics.resumo import ResumoExecucao  # noqa: E402
 def _resumo_vazio() -> ResumoExecucao:
     return ResumoExecucao(
         run_id="run-vazio",
-        duracao_total_ms=None,
-        duracao_por_fase_ms={},
+        duracao_total_s=None,
+        duracao_por_fase_s={},
         quantidade_validacoes=0,
         quantidade_retries=0,
         quantidade_falhas=0,
@@ -31,12 +31,12 @@ def _resumo_vazio() -> ResumoExecucao:
 def _resumo_cheio() -> ResumoExecucao:
     return ResumoExecucao(
         run_id="run-cheio",
-        duracao_total_ms=345.67,
-        duracao_por_fase_ms={
-            "fase_1_revisao_independente": 100.0,
-            "fase_2_leitura_cruzada": 120.0,
-            "fase_3_editor_chefe": 80.0,
-            "fase_4_relatorio_final": 45.67,
+        duracao_total_s=0.34567,
+        duracao_por_fase_s={
+            "fase_1_revisao_independente": 0.1,
+            "fase_2_leitura_cruzada": 0.12,
+            "fase_3_editor_chefe": 0.08,
+            "fase_4_relatorio_final": 0.04567,
         },
         quantidade_validacoes=6,
         quantidade_retries=2,

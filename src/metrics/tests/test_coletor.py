@@ -40,7 +40,7 @@ def test_registrar_adiciona_evento_e_retorna_o_mesmo_objeto_do_ultimo_item():
     assert coletor.eventos[-1].nome == evento.nome
     assert coletor.eventos[-1].status == evento.status
     assert coletor.eventos[-1].timestamp == evento.timestamp
-    assert coletor.eventos[-1].duracao_ms == evento.duracao_ms
+    assert coletor.eventos[-1].duracao_s == evento.duracao_s
     assert coletor.eventos[-1].detalhes == evento.detalhes
 
 
@@ -72,8 +72,8 @@ def test_fase_sucesso_registra_um_evento_com_duracao():
     evento = coletor.eventos[0]
     assert evento.tipo == "fase"
     assert evento.status == "sucesso"
-    assert evento.duracao_ms is not None
-    assert evento.duracao_ms >= 0
+    assert evento.duracao_s is not None
+    assert evento.duracao_s >= 0
 
 
 def test_fase_falha_relevanta_excecao_e_registra_evento_de_falha():
@@ -99,8 +99,8 @@ def test_tool_sucesso_registra_um_evento_com_fase_e_duracao():
     assert evento.nome == "validar_completude"
     assert evento.fase == "fase_1_revisao_independente"
     assert evento.status == "sucesso"
-    assert evento.duracao_ms is not None
-    assert evento.duracao_ms >= 0
+    assert evento.duracao_s is not None
+    assert evento.duracao_s >= 0
 
 
 def test_tool_falha_relevanta_excecao_e_registra_evento_de_falha_com_fase():
