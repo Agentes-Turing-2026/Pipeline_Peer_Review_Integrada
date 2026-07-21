@@ -1,5 +1,12 @@
 # Grupo 2 — Métricas, Tools e Resumo Auditável com ADK
 
+> **Nota (entrega posterior):** o contrato de duração descrito aqui — campos
+> `duracao_ms`/`duracao_total_ms`/`duracao_por_fase_ms` — migrou de
+> milissegundos para segundos numa entrega posterior a esta apresentação. Os
+> números e o corpo deste documento abaixo permanecem como registro histórico
+> da entrega original. Para o contrato atual, ver
+> [`docs/metricas_reference.md`](metricas_reference.md).
+
 ## 1. Contexto da atividade
 
 Esta entrega pediu ao Grupo 2 para transformar o que já acontece dentro de

@@ -577,15 +577,35 @@ inclui a duração da própria Fase 4). Ele é incluído em
 ### Exemplo de resumo gerado (modo mock)
 
 ```
+==========================================================================
+  RESUMO DA EXECUÇÃO — run_id=a8ffbc92-984f-4fba-9174-0add31fe98ed
+==========================================================================
 Status final:        sucesso
 Decisão final:       3
 Revisão humana:      não recomendada
-Duração total:       4.02 ms
+Duração total:       < 0.01 s
+
+Duração por fase:
+  fase_1_revisao_independente              < 0.01 s
+  fase_2_leitura_cruzada                   < 0.01 s
+  fase_3_editor_chefe                      < 0.01 s
+  fase_4_relatorio_final                   < 0.01 s
+
 Validações: 7    Retries: 0    Falhas: 0
+
 Tools chamadas:
   validar_completude                       3x
   auditar_decisao_final                    1x
+
+Alertas:
+  (nenhum)
+==========================================================================
 ```
+
+Durações são medidas em **segundos**; em modo mock as fases rodam tão rápido
+que aparecem como `< 0.01 s` (ver `_fmt_s` em
+[`docs/metricas_reference.md`](docs/metricas_reference.md) para a regra de
+arredondamento na exibição — o JSON sempre grava o float completo).
 
 ### Como rodar
 
@@ -618,9 +638,10 @@ cat src/outputs/resumo_execucao.json
 
 - Nenhuma hierarquia de span/parent_span nem bridge com o `Runner` do ADK
   (território do Grupo 3).
-- `duracao_total_ms` assume fases sequenciais (soma simples); se o pipeline
-  passar a rodar fases em paralelo, esse cálculo precisa mudar para usar
-  timestamps de início/fim em vez de soma.
+- `duracao_total_s` já é tempo de parede (medido pelo `ExecutionCollector`,
+  início ao fim da execução), não soma de fases. Mas `duracao_soma_fases_s`
+  (a soma) continua assumindo fases sequenciais; se o pipeline passar a
+  rodar fases em paralelo, esse número específico precisaria ser revisto.
 
 ---
 
