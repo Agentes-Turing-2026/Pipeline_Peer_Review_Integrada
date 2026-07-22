@@ -29,11 +29,17 @@ class ExecutionCollector:
     def __init__(self, run_id: str | None = None) -> None:
         self.run_id: str = run_id or str(uuid4())
         self._eventos: list[ExecutionEvent] = []
+        self._inicio = time.perf_counter()
 
     @property
     def eventos(self) -> list[ExecutionEvent]:
         """Cópia da lista de eventos registrados até agora (ordem de registro)."""
         return list(self._eventos)
+
+    @property
+    def duracao_execucao_s(self) -> float:
+        """Tempo de parede decorrido desde a criação do coletor até agora, em segundos."""
+        return time.perf_counter() - self._inicio
 
     def eventos_como_dict(self) -> list[dict[str, Any]]:
         """Todos os eventos serializados, na ordem em que foram registrados."""
@@ -46,7 +52,7 @@ class ExecutionCollector:
         tipo: TipoEvento,
         nome: str,
         status: StatusEvento,
-        duracao_ms: float | None = None,
+        duracao_s: float | None = None,
         **detalhes: Any,
     ) -> ExecutionEvent:
         """Registra um evento genérico e devolve o ExecutionEvent criado."""
@@ -56,7 +62,7 @@ class ExecutionCollector:
             tipo=tipo,
             nome=nome,
             status=status,
-            duracao_ms=duracao_ms,
+            duracao_s=duracao_s,
             detalhes=dict(detalhes),
         )
         self._eventos.append(evento)
@@ -74,15 +80,15 @@ class ExecutionCollector:
         try:
             yield
         except Exception as exc:
-            duracao_ms = (time.perf_counter() - inicio) * 1000
+            duracao_s = time.perf_counter() - inicio
             self.registrar(
                 fase=nome, tipo="fase", nome=nome, status="falha",
-                duracao_ms=duracao_ms, erro=str(exc), erro_tipo=type(exc).__name__,
+                duracao_s=duracao_s, erro=str(exc), erro_tipo=type(exc).__name__,
             )
             raise
         else:
-            duracao_ms = (time.perf_counter() - inicio) * 1000
-            self.registrar(fase=nome, tipo="fase", nome=nome, status="sucesso", duracao_ms=duracao_ms)
+            duracao_s = time.perf_counter() - inicio
+            self.registrar(fase=nome, tipo="fase", nome=nome, status="sucesso", duracao_s=duracao_s)
 
     @contextmanager
     def tool(self, nome: str, *, fase: str) -> Iterator[None]:
@@ -95,12 +101,12 @@ class ExecutionCollector:
         try:
             yield
         except Exception as exc:
-            duracao_ms = (time.perf_counter() - inicio) * 1000
+            duracao_s = time.perf_counter() - inicio
             self.registrar(
                 fase=fase, tipo="tool", nome=nome, status="falha",
-                duracao_ms=duracao_ms, erro=str(exc), erro_tipo=type(exc).__name__,
+                duracao_s=duracao_s, erro=str(exc), erro_tipo=type(exc).__name__,
             )
             raise
         else:
-            duracao_ms = (time.perf_counter() - inicio) * 1000
-            self.registrar(fase=fase, tipo="tool", nome=nome, status="sucesso", duracao_ms=duracao_ms)
+            duracao_s = time.perf_counter() - inicio
+            self.registrar(fase=fase, tipo="tool", nome=nome, status="sucesso", duracao_s=duracao_s)

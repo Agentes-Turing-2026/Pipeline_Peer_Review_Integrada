@@ -28,7 +28,7 @@ def test_criacao_com_campos_obrigatorios_preenche_defaults_sozinha():
     assert evento.nome == "completude"
     assert evento.status == "sucesso"
     assert isinstance(evento.timestamp, str) and evento.timestamp != ""
-    assert evento.duracao_ms is None
+    assert evento.duracao_s is None
     assert evento.detalhes == {}
     assert evento.detalhes is not None
 
@@ -38,7 +38,7 @@ def test_to_dict_contem_exatamente_as_oito_chaves_com_valores_certos():
     dado = evento.to_dict()
     assert set(dado.keys()) == {
         "run_id", "fase", "tipo", "nome", "status",
-        "timestamp", "duracao_ms", "detalhes",
+        "timestamp", "duracao_s", "detalhes",
     }
     assert dado["run_id"] == "run-123"
     assert dado["fase"] == "fase_1_revisao_independente"
@@ -46,7 +46,7 @@ def test_to_dict_contem_exatamente_as_oito_chaves_com_valores_certos():
     assert dado["nome"] == "completude"
     assert dado["status"] == "sucesso"
     assert dado["timestamp"] == evento.timestamp
-    assert dado["duracao_ms"] is None
+    assert dado["duracao_s"] is None
     assert dado["detalhes"] == {}
 
 
@@ -57,7 +57,7 @@ def test_from_dict_de_to_dict_reconstroi_evento_igual():
         tipo="decisao_final",
         nome="veredito",
         status="aviso",
-        duracao_ms=12.5,
+        duracao_s=0.0125,
         detalhes={"decisao": 3},
     )
     reconstruido = ExecutionEvent.from_dict(original.to_dict())
@@ -68,22 +68,77 @@ def test_from_dict_de_to_dict_reconstroi_evento_igual():
     assert reconstruido.nome == original.nome
     assert reconstruido.status == original.status
     assert reconstruido.timestamp == original.timestamp
-    assert reconstruido.duracao_ms == original.duracao_ms
+    assert reconstruido.duracao_s == original.duracao_s
     assert reconstruido.detalhes == original.detalhes
 
 
-def test_duracao_ms_aceita_none_por_padrao():
+def test_duracao_s_aceita_none_por_padrao():
     evento = _evento_basico()
-    assert evento.duracao_ms is None
+    assert evento.duracao_s is None
 
 
-def test_duracao_ms_aceita_float_quando_fornecido():
+def test_duracao_s_aceita_float_quando_fornecido():
     evento = ExecutionEvent(
         run_id="run-789",
         fase="fase_2_leitura_cruzada",
         tipo="retry",
         nome="correcao_aplicada",
         status="falha",
-        duracao_ms=87.3,
+        duracao_s=0.0873,
     )
-    assert evento.duracao_ms == 87.3
+    assert evento.duracao_s == 0.0873
+
+
+def _payload_legado(**overrides) -> dict:
+    base = dict(
+        run_id="run-legado",
+        fase="fase_1_revisao_independente",
+        tipo="tool",
+        nome="completude",
+        status="sucesso",
+    )
+    base.update(overrides)
+    return base
+
+
+def test_from_dict_payload_novo_com_duracao_s_preserva_valor_identico():
+    evento = ExecutionEvent.from_dict(_payload_legado(duracao_s=1.5))
+    assert evento.duracao_s == 1.5
+
+
+def test_from_dict_payload_legado_com_duracao_ms_converte_para_segundos():
+    evento = ExecutionEvent.from_dict(_payload_legado(duracao_ms=1500))
+    assert evento.duracao_s == 1.5
+
+
+def test_from_dict_payload_com_ambas_as_chaves_duracao_s_vence_e_duracao_ms_e_ignorado():
+    evento = ExecutionEvent.from_dict(_payload_legado(duracao_s=2.0, duracao_ms=9999))
+    assert evento.duracao_s == 2.0
+
+
+def test_from_dict_payload_com_duracao_s_none_explicito_nao_cai_para_duracao_ms():
+    evento = ExecutionEvent.from_dict(_payload_legado(duracao_s=None, duracao_ms=1500))
+    assert evento.duracao_s is None
+
+
+def test_from_dict_payload_sem_nenhuma_das_duas_chaves_resulta_em_duracao_s_none():
+    evento = ExecutionEvent.from_dict(_payload_legado())
+    assert evento.duracao_s is None
+
+
+def test_from_dict_payload_com_duracao_ms_none_nao_vira_zero():
+    evento = ExecutionEvent.from_dict(_payload_legado(duracao_ms=None))
+    assert evento.duracao_s is None
+
+
+def test_from_dict_round_trip_preserva_valor_float_exato_sem_aritmetica():
+    original = ExecutionEvent(**_payload_legado(duracao_s=0.123456789))
+    reconstruido = ExecutionEvent.from_dict(original.to_dict())
+    assert reconstruido.duracao_s == original.duracao_s
+
+
+def test_from_dict_de_payload_legado_nao_reintroduz_chave_duracao_ms_no_to_dict():
+    evento = ExecutionEvent.from_dict(_payload_legado(duracao_ms=500))
+    dado = evento.to_dict()
+    assert "duracao_ms" not in dado
+    assert dado["duracao_s"] == 0.5
