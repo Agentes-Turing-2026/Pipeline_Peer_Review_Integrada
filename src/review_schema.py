@@ -247,8 +247,9 @@ class CriterionRevision(BaseModel):
     revisão de posição.
     """
 
-    model_config = {"extra": "forbid"}
-
+    # Sem ``extra: forbid`` aqui: este modelo é usado como ``output_schema`` do
+    # ADK e o Gemini rejeita ``additionalProperties`` no ``response_schema``. A
+    # validação estrita (campos obrigatórios, tipos, validators) é preservada.
     criterio: CriterioRevisavel = Field(
         ...,
         description="Qual critério (ou síntese) teve a nota revisada.",
@@ -299,8 +300,8 @@ class CrossReviewSchema(BaseModel):
     documenta, de forma rastreável, se e por que o revisor mudou de posição.
     """
 
-    model_config = {"extra": "forbid"}
-
+    # Sem ``extra: forbid``: usado como ``output_schema`` do ADK (ver nota em
+    # ``CriterionRevision``).
     revisor: str = Field(
         ...,
         min_length=1,
@@ -416,8 +417,8 @@ class EditorCriticism(BaseModel):
     fonte (``revisor``) e o ``tipo`` padronizados.
     """
 
-    model_config = {"extra": "forbid"}
-
+    # Sem ``extra: forbid``: usado como ``output_schema`` do ADK (ver nota em
+    # ``CriterionRevision``).
     revisor: str = Field(
         ...,
         min_length=1,
@@ -445,8 +446,8 @@ class EditorVerdictSchema(BaseModel):
     única noção de recomendação em todo o sistema.
     """
 
-    model_config = {"extra": "forbid"}
-
+    # Sem ``extra: forbid``: usado como ``output_schema`` do ADK (ver nota em
+    # ``CriterionRevision``).
     decisao: int = Field(
         ...,
         ge=1,

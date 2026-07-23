@@ -142,19 +142,30 @@ REGRAS OBRIGATÓRIAS:
 
 
 def build_editor_agent():
-    """Cria o ``LlmAgent`` do Editor-Chefe com saída forçada/validada pelo schema.
+    """Cria o ``LlmAgent`` do Editor-Chefe em JSON mode (validado pelo Grupo 1).
 
     Grava o veredito no state sob ``final_verdict`` (output_key), seguindo o mesmo
     padrão das fases anteriores. A importação do ADK é lazy para permitir
     inspecionar o prompt sem o pacote instalado.
+
+    Diferente das Fases 1 e 2, aqui NÃO usamos ``output_schema``: o
+    ``EditorVerdictSchema`` tem ``notas_por_revisor: dict[str, int]`` (um *map*),
+    que o Pydantic serializa com ``additionalProperties`` — campo que o Gemini
+    REJEITA no ``response_schema`` (erro 400 INVALID_ARGUMENT). Em vez disso,
+    forçamos JSON puro com ``response_mime_type="application/json"`` (o prompt já
+    descreve o formato exato) e deixamos a validação estrutural para a camada do
+    Grupo 1 (``validar_editor_verdict`` + retry), preservando o fluxo do ADK.
     """
     from google.adk.agents import LlmAgent
+    from google.genai import types
 
     return LlmAgent(
         name="editor_in_chief",
         model=MODEL,
         output_key="final_verdict",          # veredito no state da sessão
-        output_schema=EditorVerdictSchema,    # força + valida a estrutura
+        generate_content_config=types.GenerateContentConfig(
+            response_mime_type="application/json",  # JSON garantido, sem response_schema
+        ),
         description="Editor-chefe que sintetiza os pareceres em um veredito final.",
         instruction=EDITOR_PROMPT,
     )
