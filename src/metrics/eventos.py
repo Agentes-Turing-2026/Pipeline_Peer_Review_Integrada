@@ -2,7 +2,7 @@
 
 Cada ExecutionEvent representa um fato atômico ocorrido durante uma execução do
 pipeline (início/fim de fase, chamada de tool, tentativa de validação, retry,
-falha, decisão final). Dataclass puro da biblioteca padrão — sem dependência de
+falha, decisão final, chamada LLM com usage do ADK). Dataclass puro da biblioteca padrão — sem dependência de
 ADK/OpenTelemetry hoje, mas os nomes de campo foram escolhidos para mapear
 diretamente para conceitos de span/trace no futuro (ver docs/metricas_reference.md).
 """
@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Literal
 
-TipoEvento = Literal["fase", "tool", "validacao", "retry", "falha", "decisao_final"]
+TipoEvento = Literal["fase", "tool", "validacao", "retry", "falha", "decisao_final", "chamada_llm"]
 StatusEvento = Literal["sucesso", "falha", "aviso"]
 
 

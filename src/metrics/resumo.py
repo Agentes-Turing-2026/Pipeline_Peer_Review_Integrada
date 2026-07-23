@@ -16,6 +16,12 @@ pipeline.py):
   - tipo="falha"          -> todas as tentativas se esgotaram e a saída foi
                              bloqueada (falha definitiva, não recuperável).
   - tipo="decisao_final"  -> deve trazer detalhes={"decisao": <valor>}.
+  - tipo="chamada_llm"    -> uma chamada LLM real (registrada por
+                             metrics/adk_usage.py a partir do usage_metadata do
+                             ADK); detalhes carrega tokens_entrada/resposta/
+                             pensamento/cache/total (int ou None = indisponível,
+                             nunca 0 no lugar de ausente), modelo, agente,
+                             invocation_id e event_id.
   - detalhes={"requer_revisao_humana": True} em QUALQUER evento -> liga a
     flag agregada de revisão humana no resumo.
   - status="aviso" em qualquer evento -> vira um item em `alertas`
@@ -43,7 +49,18 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from .adk_usage import PrecosModelo, estimar_custo_usd
 from .eventos import ExecutionEvent
+
+# Categorias de token agregadas por execução — nomes do UsageChamada
+# (adk_usage.py), na ordem de exibição.
+CATEGORIAS_TOKENS = (
+    "tokens_entrada",
+    "tokens_resposta",
+    "tokens_pensamento",
+    "tokens_cache",
+    "tokens_total",
+)
 
 
 @dataclass
@@ -62,11 +79,21 @@ class ResumoExecucao:
     decisao_final: Any | None
     status_final: str
     alertas: list[str] = field(default_factory=list)
-    # Placeholders para evolução futura (ADK/OpenTelemetry) — não preenchidos hoje.
+    # Tokens reais (usage_metadata do ADK), agregados dos eventos tipo="chamada_llm".
+    # None = nenhuma chamada LLM registrada (ex.: modo mock) ou dado indisponível
+    # — nunca 0 no lugar de "não medido".
     tokens_totais: int | None = None
     custo_estimado: float | None = None
+    """Preenchido apenas quando gerar_resumo() recebe preço configurado (precos=...)."""
     modelo_usado: str | None = None
+    """Um modelo -> o nome dele; vários -> nomes únicos ordenados, separados por ', '."""
     chamadas_llm: int | None = None
+    tokens_execucao: dict[str, int | None] | None = None
+    """Totais da execução por categoria (CATEGORIAS_TOKENS); None sem chamadas LLM."""
+    tokens_por_agente: dict[str, int | None] = field(default_factory=dict)
+    """tokens_total somado por agente; valor None = agente chamou, consumo indisponível."""
+    tokens_por_fase: dict[str, int | None] = field(default_factory=dict)
+    """tokens_total somado por fase; valor None = fase teve chamadas, consumo indisponível."""
 
     def to_dict(self) -> dict[str, Any]:
         """Serializa o resumo em um dict simples, pronto para JSON."""
@@ -87,7 +114,36 @@ class ResumoExecucao:
             "custo_estimado": self.custo_estimado,
             "modelo_usado": self.modelo_usado,
             "chamadas_llm": self.chamadas_llm,
+            "tokens_execucao": self.tokens_execucao,
+            "tokens_por_agente": self.tokens_por_agente,
+            "tokens_por_fase": self.tokens_por_fase,
         }
+
+
+def _acumular_tokens(atual: int | None, valor: int | None) -> int | None:
+    """Acumula tokens_total preservando a semântica "indisponível ≠ zero".
+
+    None + None = None (houve chamada, consumo desconhecido); disponível soma
+    normalmente; indisponível não zera nem invalida o que já foi somado.
+    """
+    if valor is None:
+        return atual
+    return valor if atual is None else atual + valor
+
+
+def _somar_categoria(chamadas: list[ExecutionEvent], categoria: str) -> int | None:
+    """Soma uma categoria de token nas chamadas onde ela veio informada.
+
+    None quando NENHUMA chamada informou a categoria. Soma parcial (algumas
+    chamadas sem o dado) é permitida e fica auditável pelos alertas dos
+    próprios eventos status="aviso".
+    """
+    valores = [
+        chamada.detalhes.get(categoria)
+        for chamada in chamadas
+        if chamada.detalhes.get(categoria) is not None
+    ]
+    return sum(valores) if valores else None
 
 
 def gerar_resumo(
@@ -95,6 +151,7 @@ def gerar_resumo(
     *,
     run_id: str | None = None,
     duracao_total_s: float | None = None,
+    precos: PrecosModelo | None = None,
 ) -> ResumoExecucao:
     """Agrega uma lista de ExecutionEvent em um ResumoExecucao.
 
@@ -106,6 +163,11 @@ def gerar_resumo(
     o resumo usa duracao_soma_fases_s como aproximação e registra esse fato em
     `alertas`. duracao_soma_fases_s é SEMPRE calculado a partir dos eventos,
     independente deste parâmetro.
+
+    precos (opcional) ativa a estimativa de custo PREPARADA em adk_usage.py:
+    quando informado (ex.: via precos_de_ambiente()), custo_estimado é calculado
+    sobre os tokens reais de entrada/resposta. Sem preço configurado — o padrão
+    — custo_estimado permanece None; consumo real e preço nunca se misturam.
     """
     if not eventos and run_id is None:
         raise ValueError(
@@ -149,6 +211,39 @@ def gerar_resumo(
 
     duracao_soma_fases_s = sum(duracao_por_fase_s.values()) if duracao_por_fase_s else None
 
+    # Tokens reais (ADK): agrega os eventos tipo="chamada_llm" já deduplicados
+    # pelo coletor. Sem chamadas (ex.: modo mock), tudo permanece None/{} —
+    # nenhum campo vira 0 por ausência de medição.
+    chamadas = [evento for evento in eventos if evento.tipo == "chamada_llm"]
+    chamadas_llm: int | None = None
+    tokens_execucao: dict[str, int | None] | None = None
+    tokens_totais: int | None = None
+    tokens_por_agente: dict[str, int | None] = {}
+    tokens_por_fase: dict[str, int | None] = {}
+    modelo_usado: str | None = None
+    custo_estimado: float | None = None
+    if chamadas:
+        chamadas_llm = len(chamadas)
+        tokens_execucao = {
+            categoria: _somar_categoria(chamadas, categoria)
+            for categoria in CATEGORIAS_TOKENS
+        }
+        tokens_totais = tokens_execucao["tokens_total"]
+        for chamada in chamadas:
+            agente = chamada.detalhes.get("agente") or chamada.nome
+            total = chamada.detalhes.get("tokens_total")
+            tokens_por_agente[agente] = _acumular_tokens(tokens_por_agente.get(agente), total)
+            tokens_por_fase[chamada.fase] = _acumular_tokens(tokens_por_fase.get(chamada.fase), total)
+        modelos = sorted({
+            chamada.detalhes["modelo"]
+            for chamada in chamadas
+            if chamada.detalhes.get("modelo")
+        })
+        modelo_usado = ", ".join(modelos) if modelos else None
+        custo_estimado = estimar_custo_usd(
+            tokens_execucao["tokens_entrada"], tokens_execucao["tokens_resposta"], precos
+        )
+
     if duracao_total_s is None:
         duracao_total_s = duracao_soma_fases_s
         if duracao_soma_fases_s is not None:
@@ -177,4 +272,11 @@ def gerar_resumo(
         decisao_final=decisao_final,
         status_final=status_final,
         alertas=alertas,
+        tokens_totais=tokens_totais,
+        custo_estimado=custo_estimado,
+        modelo_usado=modelo_usado,
+        chamadas_llm=chamadas_llm,
+        tokens_execucao=tokens_execucao,
+        tokens_por_agente=tokens_por_agente,
+        tokens_por_fase=tokens_por_fase,
     )
