@@ -456,6 +456,40 @@ class EditorVerdictPhase(PipelinePhase[CrossReviews, EditorVerdictSchema]):
                         status="sucesso", duracao_s=duracao_s,
                         requer_revisao_humana=auditoria["requer_revisao_humana"],
                     )
+                    # A checagem de coerência roda por DENTRO da auditoria, mas
+                    # precisa aparecer no resumo como verificação própria (task
+                    # do Grupo 2) — inclusive quando NÃO rodou, para o resumo
+                    # denunciar a lacuna em vez de omiti-la.
+                    inconsistencias = auditoria.get("inconsistencias") or []
+                    tipos_inconsistencias = sorted(
+                        {i.get("tipo", "desconhecido") for i in inconsistencias if isinstance(i, dict)}
+                    )
+                    if auditoria.get("coerencia_executada"):
+                        coletor.registrar(
+                            fase=self.name, tipo="tool", nome="checar_coerencia",
+                            status="aviso" if inconsistencias else "sucesso",
+                            quantidade_inconsistencias=len(inconsistencias),
+                            tipos_inconsistencias=tipos_inconsistencias,
+                            **(
+                                {
+                                    "mensagem": (
+                                        f"checar_coerencia: {len(inconsistencias)} "
+                                        f"inconsistência(s) no veredito "
+                                        f"({', '.join(tipos_inconsistencias)})"
+                                    )
+                                }
+                                if inconsistencias
+                                else {}
+                            ),
+                        )
+                    else:
+                        coletor.registrar(
+                            fase=self.name, tipo="tool", nome="checar_coerencia",
+                            status="aviso",
+                            quantidade_inconsistencias=0,
+                            mensagem=auditoria.get("aviso_coerencia")
+                            or "checar_coerencia não executada",
+                        )
                 emit_event(
                     "auditoria_veredito", author="grupo2", phase=self.name, kind="tool",
                     status="alerta" if auditoria["requer_revisao_humana"] else "ok",
@@ -703,6 +737,17 @@ def extract_pdf_input(
             status="alerta" if doc.warnings else "ok",
             attributes=doc.to_metadata(),
         )
+        # Grupo 2 — a fase 0 entra no coletor como as demais fases, usando a
+        # duração que o extrator do Grupo 3 já mede (extraction_duration_s).
+        # Sem isso, o tempo de extração só aparecia no trace e na diferença
+        # entre duracao_total_s e duracao_soma_fases_s do resumo.
+        if coletor is not None:
+            coletor.registrar(
+                fase=EXTRACTION_PHASE, tipo="fase", nome=EXTRACTION_PHASE,
+                status="sucesso", duracao_s=doc.extraction_duration_s,
+                extrator=f"{doc.extractor} {doc.extractor_version}",
+                paginas=doc.num_pages, avisos_extracao=len(doc.warnings),
+            )
         for aviso in doc.warnings:
             logger.warning("[extracao] %s", aviso)
             emit_event(
