@@ -30,6 +30,7 @@ class ExecutionCollector:
         self.run_id: str = run_id or str(uuid4())
         self._eventos: list[ExecutionEvent] = []
         self._inicio = time.perf_counter()
+        self._chaves_dedup: set[str] = set()
 
     @property
     def eventos(self) -> list[ExecutionEvent]:
@@ -53,9 +54,23 @@ class ExecutionCollector:
         nome: str,
         status: StatusEvento,
         duracao_s: float | None = None,
+        chave_dedup: str | None = None,
         **detalhes: Any,
-    ) -> ExecutionEvent:
-        """Registra um evento genérico e devolve o ExecutionEvent criado."""
+    ) -> ExecutionEvent | None:
+        """Registra um evento genérico e devolve o ExecutionEvent criado.
+
+        ``chave_dedup`` (opcional) previne contagem duplicada: quando informada
+        e a mesma chave já foi registrada nesta execução, o evento é IGNORADO e
+        a função devolve ``None``. Quem emite escolhe a chave — para eventos do
+        ADK, a convenção é ``event.id`` quando existir, senão
+        ``invocation_id + author`` (o mesmo evento pode reaparecer no streaming;
+        parciais têm usage cumulativo e só o final deve contar). Eventos sem
+        chave seguem o comportamento de sempre: todo registro entra.
+        """
+        if chave_dedup is not None:
+            if chave_dedup in self._chaves_dedup:
+                return None
+            self._chaves_dedup.add(chave_dedup)
         evento = ExecutionEvent(
             run_id=self.run_id,
             fase=fase,

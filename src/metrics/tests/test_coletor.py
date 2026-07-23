@@ -144,3 +144,53 @@ def test_multiplas_fases_e_tools_ficam_na_ordem_de_registro():
         ("tool", "validar_completude"),
         ("fase", "fase_2_leitura_cruzada"),
     ]
+
+
+# ---------------------------------------------------------------------------
+# Prevenção de contagem duplicada (chave_dedup)
+# ---------------------------------------------------------------------------
+
+def test_chave_dedup_ignora_o_mesmo_evento_registrado_duas_vezes():
+    coletor = ExecutionCollector(run_id="run-dedup")
+    primeiro = coletor.registrar(
+        fase="fase_1", tipo="tool", nome="chamada_llm", status="sucesso",
+        chave_dedup="evento-adk-123",
+    )
+    repetido = coletor.registrar(
+        fase="fase_1", tipo="tool", nome="chamada_llm", status="sucesso",
+        chave_dedup="evento-adk-123",
+    )
+    assert isinstance(primeiro, ExecutionEvent)
+    assert repetido is None
+    assert len(coletor.eventos) == 1
+
+
+def test_chaves_dedup_diferentes_registram_todos_os_eventos():
+    coletor = ExecutionCollector(run_id="run-dedup")
+    coletor.registrar(
+        fase="fase_1", tipo="tool", nome="chamada_llm", status="sucesso",
+        chave_dedup="inv-1:reviewer_a",
+    )
+    coletor.registrar(
+        fase="fase_1", tipo="tool", nome="chamada_llm", status="sucesso",
+        chave_dedup="inv-1:reviewer_b",
+    )
+    assert len(coletor.eventos) == 2
+
+
+def test_sem_chave_dedup_eventos_identicos_continuam_entrando():
+    """Comportamento pré-existente preservado: sem chave, todo registro entra."""
+    coletor = ExecutionCollector(run_id="run-dedup")
+    for _ in range(2):
+        coletor.registrar(fase="fase_1", tipo="validacao", nome="reviewer_a", status="sucesso")
+    assert len(coletor.eventos) == 2
+
+
+def test_chave_dedup_nao_vaza_para_os_detalhes_do_evento():
+    coletor = ExecutionCollector(run_id="run-dedup")
+    evento = coletor.registrar(
+        fase="fase_1", tipo="tool", nome="chamada_llm", status="sucesso",
+        chave_dedup="evento-adk-123", agente="reviewer_a",
+    )
+    assert evento is not None
+    assert evento.detalhes == {"agente": "reviewer_a"}

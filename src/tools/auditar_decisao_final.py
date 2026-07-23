@@ -74,6 +74,8 @@ def _erro(mensagem: str, veredito: object) -> dict:
         "criticas_por_tipo": {tipo: 0 for tipo in TIPOS_CRITICA},
         "requer_revisao_humana": True,  # na dúvida, manda para humano
         "inconsistencias": [],
+        "coerencia_executada": False,
+        "aviso_coerencia": "auditoria abortada antes da checagem de coerência",
         "resumo_auditoria": mensagem,
         "veredito": veredito,
     }
@@ -178,6 +180,12 @@ def auditar_decisao_final(veredito: dict) -> dict:
         - ``requer_revisao_humana`` (bool): divergência ≥ 2 **ou** há inconsistências;
         - ``inconsistencias`` (list): repassadas de ``checar_coerencia`` (vazia se a
           Tool 2 ainda não está integrada);
+        - ``coerencia_executada`` (bool): ``True`` quando ``checar_coerencia`` rodou
+          de fato; ``False`` quando ausente, falhou ou devolveu resultado inesperado —
+          permite ao pipeline reportar a checagem de coerência no resumo de métricas
+          mesmo quando ela roda por dentro da auditoria;
+        - ``aviso_coerencia`` (str | None): motivo de a coerência não ter rodado
+          (``None`` quando ``coerencia_executada`` é ``True``);
         - ``resumo_auditoria`` (str, PT-BR);
         - ``veredito`` (dict bruto preservado para rastreabilidade).
     """
@@ -224,6 +232,8 @@ def auditar_decisao_final(veredito: dict) -> dict:
         "criticas_por_tipo": criticas_por_tipo,
         "requer_revisao_humana": requer_revisao_humana,
         "inconsistencias": inconsistencias,
+        "coerencia_executada": aviso is None,
+        "aviso_coerencia": aviso,
         "resumo_auditoria": resumo,
         "veredito": veredito,
     }
