@@ -195,6 +195,38 @@ def test_imprimir_resumo_com_12_3456_arredonda_para_12_35_s_na_exibicao(capsys):
     assert _linha_duracao_total(saida) == "12.35 s"
 
 
+def test_imprimir_resumo_sem_chamadas_llm_indica_ausencia_de_medicao(capsys):
+    imprimir_resumo(_resumo_vazio())
+    saida = capsys.readouterr().out
+    assert "Tokens (usage_metadata do ADK):" in saida
+    assert "nenhuma chamada LLM registrada" in saida
+
+
+def test_imprimir_resumo_exibe_tokens_com_n_d_para_indisponivel(capsys):
+    resumo = _resumo_cheio()
+    resumo.chamadas_llm = 3
+    resumo.tokens_execucao = {
+        "tokens_entrada": 390,
+        "tokens_resposta": 150,
+        "tokens_pensamento": None,
+        "tokens_cache": None,
+        "tokens_total": 540,
+    }
+    resumo.tokens_por_agente = {"revisor_metodologia": 165, "revisor_significancia": None}
+    resumo.tokens_por_fase = {"fase_1_revisao_independente": 540}
+
+    imprimir_resumo(resumo)
+    saida = capsys.readouterr().out
+    assert "Chamadas LLM:        3" in saida
+    assert "pensamento n/d" in saida
+    assert "total 540" in saida
+    # Agente com chamada mas sem usage aparece como n/d, nunca 0.
+    linha_significancia = next(
+        linha for linha in saida.splitlines() if "revisor_significancia" in linha
+    )
+    assert linha_significancia.rstrip().endswith("n/d")
+
+
 def test_imprimir_resumo_nao_muta_o_resumo_recebido(capsys):
     resumo = _resumo_cheio()
     antes = resumo.to_dict()

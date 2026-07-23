@@ -131,11 +131,13 @@ try:
     from metrics.coletor import ExecutionCollector
     from metrics.resumo import gerar_resumo
     from metrics.exportar import imprimir_resumo, salvar_resumo_json
+    from metrics.adk_usage import definir_coletor_adk
 except ImportError:
     ExecutionCollector = None
     gerar_resumo = None
     imprimir_resumo = None
     salvar_resumo_json = None
+    definir_coletor_adk = None
 
 
 def _fase_medida(coletor: ExecutionCollector | None, nome: str):
@@ -834,6 +836,11 @@ def run_demo(
     )
     if coletor is not None:
         config["_metrics_collector"] = coletor
+        # Tokens reais (usage_metadata do ADK): registra o coletor no consumidor
+        # plugado nos loops dos agentes (metrics/adk_usage.py) — mesmo padrão de
+        # contexto global do tracer; sem execução instrumentada, é no-op lá.
+        if definir_coletor_adk is not None:
+            definir_coletor_adk(coletor)
 
     pipeline = build_peer_review_pipeline(tracer=tracer)
     print(f"Pipeline '{pipeline.name}' [modo={resolved.value}] — fases: {pipeline.phase_names}")

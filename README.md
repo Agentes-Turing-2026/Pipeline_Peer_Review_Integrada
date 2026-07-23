@@ -624,7 +624,8 @@ Vive em [`src/metrics/`](src/metrics/), sem dependências externas:
 |---|---|
 | `eventos.py` | `ExecutionEvent` — evento atômico (fase, tipo, nome, status, duração, detalhes). |
 | `coletor.py` | `ExecutionCollector` — acumula eventos de uma execução; dois context managers (`fase()`, `tool()`) medem duração e registram sucesso/falha automaticamente. |
-| `resumo.py` | `gerar_resumo()` — agrega os eventos em um `ResumoExecucao`: duração total, duração por fase, nº validações/retries/falhas, tools chamadas, decisão final, status final, alertas. |
+| `adk_usage.py` | Tokens reais: lê o `usage_metadata` dos `Event` do ADK (entrada, resposta, pensamento, cache, total + modelo/agente/`invocation_id`), com dedup de parciais/repetidos e custo preparado via preço configurado. |
+| `resumo.py` | `gerar_resumo()` — agrega os eventos em um `ResumoExecucao`: duração total, duração por fase, nº validações/retries/falhas, tools chamadas, tokens (por agente, por fase e da execução), decisão final, status final, alertas. |
 | `exportar.py` | `imprimir_resumo()` (tabela no terminal) e `salvar_resumo_json()`. |
 
 ### Como se integra ao pipeline
@@ -642,6 +643,34 @@ O resumo é montado em `run_demo()`, depois que `pipeline.run()` retorna (assim
 inclui a duração da própria Fase 4). Ele é incluído em
 `final_report.json["resumo_execucao"]` e também salvo separadamente em
 `src/outputs/resumo_execucao.json`.
+
+### Tokens reais (usage_metadata do ADK)
+
+No modo API, os três loops de agente (`reviewer_agent.py`, `cross_review.py`,
+`editor_agent.py`) passam cada `Event` do Runner para
+`registrar_usage_adk(event, fase=...)` — ao lado do `trace_adk_event` do
+Grupo 3, consumindo o MESMO stream de eventos. Cada resposta de modelo vira um
+evento `chamada_llm` com os tokens do `usage_metadata` (`prompt`, `candidates`,
+`thoughts`, `cached`, `total`), o modelo (`model_version`), o agente
+(`author`), a fase e o `invocation_id`.
+
+Regras importantes (detalhes e schema em
+[`docs/metricas_reference.md §5`](docs/metricas_reference.md)):
+
+- **Indisponível ≠ zero:** campo que o ADK não informou fica `null` no JSON e
+  `n/d` no terminal — nunca `0`, e nunca estimado por tamanho de texto.
+  Chamada sem `usage_metadata` ainda é registrada, com aviso em `alertas`.
+- **Sem contagem duplicada:** parciais de streaming são ignorados (usage
+  cumulativo — só a resposta final conta) e o registro deduplica por
+  `event.id` (ou `invocation_id + author`).
+- **Agregação:** `tokens_execucao` (categorias da execução completa),
+  `tokens_por_agente` e `tokens_por_fase` (soma de `tokens_total`), além de
+  `chamadas_llm` e `modelo_usado`.
+- **Custo preparado, não ativado:** `custo_estimado` só é calculado se houver
+  preço configurado via `GRUPO2_PRECO_USD_MILHAO_TOKENS_ENTRADA`/`_SAIDA`
+  (nenhum preço fixo no código); sem preço, permanece `null`.
+- No modo **mock** não há chamada LLM — a seção de tokens indica isso
+  explicitamente, e todos os campos ficam `null`/`n/d`.
 
 ### Exemplo de resumo gerado (modo mock)
 
@@ -665,11 +694,19 @@ Validações: 7    Retries: 0    Falhas: 0
 Tools chamadas:
   validar_completude                       3x
   auditar_decisao_final                    1x
+  checar_coerencia                         1x
+
+Tokens (usage_metadata do ADK):
+  (nenhuma chamada LLM registrada — ex.: modo mock)
 
 Alertas:
   (nenhum)
 ==========================================================================
 ```
+
+Em execução real (modo API), a seção de tokens mostra chamadas LLM, modelo,
+tokens da execução completa (entrada/resposta/pensamento/cache/total) e os
+totais por agente e por fase — com `n/d` onde o ADK não informou o dado.
 
 Durações são medidas em **segundos**; em modo mock as fases rodam tão rápido
 que aparecem como `< 0.01 s` (ver `_fmt_s` em
@@ -697,11 +734,12 @@ cat src/outputs/resumo_execucao.json
   hook em `Pipeline.run()`?** Porque `pipeline_base.py` não tem
   `on_phase_start`/`on_phase_end` hoje, e criar um não é responsabilidade
   desta atividade.
-- **Campos placeholder** (`tokens_totais`, `custo_estimado`, `modelo_usado`,
-  `chamadas_llm`) existem em `ResumoExecucao` mas não são preenchidos ainda —
-  ver documentação detalhada em
-  [`docs/metricas_reference.md`](docs/metricas_reference.md) para o caminho
-  de evolução até ADK/OpenTelemetry.
+- **Tokens** (`tokens_totais`, `modelo_usado`, `chamadas_llm`,
+  `tokens_execucao`, `tokens_por_agente`, `tokens_por_fase`) são preenchidos
+  a partir do `usage_metadata` real do ADK quando há execução com Gemini;
+  `custo_estimado` fica preparado (preço via variáveis de ambiente) — ver
+  [`docs/metricas_reference.md §5`](docs/metricas_reference.md) e o caminho
+  de evolução até OpenTelemetry.
 
 ### O que ficou fora desta etapa
 

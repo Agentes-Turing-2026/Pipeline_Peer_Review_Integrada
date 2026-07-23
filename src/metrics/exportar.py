@@ -37,6 +37,20 @@ def _fmt_s(valor: float | None) -> str:
     return f"{valor:.2f} s"
 
 
+def _fmt_tokens(valor: int | None) -> str:
+    """Formata contagem de tokens para o terminal — None é "n/d", nunca 0."""
+    return "n/d" if valor is None else str(valor)
+
+
+ROTULOS_TOKENS = {
+    "tokens_entrada": "entrada",
+    "tokens_resposta": "resposta",
+    "tokens_pensamento": "pensamento",
+    "tokens_cache": "cache",
+    "tokens_total": "total",
+}
+
+
 def imprimir_resumo(resumo: ResumoExecucao) -> None:
     """Imprime o resumo de execução como uma tabela simples no terminal."""
     print("=" * LARGURA)
@@ -64,6 +78,29 @@ def imprimir_resumo(resumo: ResumoExecucao) -> None:
             print(f"  {nome:<40} {qtd}x")
     else:
         print("  (nenhuma tool registrada)")
+
+    print("\nTokens (usage_metadata do ADK):")
+    if resumo.chamadas_llm is None:
+        print("  (nenhuma chamada LLM registrada — ex.: modo mock)")
+    else:
+        print(f"  Chamadas LLM:        {resumo.chamadas_llm}")
+        print(f"  Modelo(s):           {resumo.modelo_usado if resumo.modelo_usado else 'n/d'}")
+        if resumo.tokens_execucao:
+            partes = [
+                f"{rotulo} {_fmt_tokens(resumo.tokens_execucao.get(campo))}"
+                for campo, rotulo in ROTULOS_TOKENS.items()
+            ]
+            print(f"  Execução completa:   {'  '.join(partes)}")
+        if resumo.tokens_por_agente:
+            print("  Por agente (total):")
+            for agente, total in resumo.tokens_por_agente.items():
+                print(f"    {agente:<38} {_fmt_tokens(total)}")
+        if resumo.tokens_por_fase:
+            print("  Por fase (total):")
+            for fase, total in resumo.tokens_por_fase.items():
+                print(f"    {fase:<38} {_fmt_tokens(total)}")
+        if resumo.custo_estimado is not None:
+            print(f"  Custo estimado:      US$ {resumo.custo_estimado:.6f} (preço configurado)")
 
     print("\nAlertas:")
     if resumo.alertas:
