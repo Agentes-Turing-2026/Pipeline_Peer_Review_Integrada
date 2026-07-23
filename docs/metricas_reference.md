@@ -15,7 +15,7 @@ precisa respeitar para que `gerar_resumo()` produza números corretos.
 
 ## 1. Tipos de evento e o que cada um exige em `detalhes`
 
-`ExecutionEvent.tipo` é um `Literal` com seis valores. `gerar_resumo()`
+`ExecutionEvent.tipo` é um `Literal` com sete valores. `gerar_resumo()`
 interpreta cada um de um jeito específico:
 
 | `tipo` | Quando ocorre | O que `gerar_resumo()` faz com ele |
@@ -26,6 +26,7 @@ interpreta cada um de um jeito específico:
 | `"retry"` | Uma tentativa de retry ocorreu após falha recuperável. | Incrementa `quantidade_retries`. |
 | `"falha"` | Todas as tentativas se esgotaram e a saída foi bloqueada (falha definitiva, não recuperável). | Incrementa `quantidade_falhas`; também marca `status_final = "falha"` se `evento.status == "falha"`. |
 | `"decisao_final"` | A decisão editorial foi consolidada (Fase 4). | Lê `detalhes["decisao"]` e preenche `resumo.decisao_final`. |
+| `"chamada_llm"` | Uma chamada LLM real, registrada por `metrics/adk_usage.py` a partir do `usage_metadata` dos `Event` do ADK (Fases 1-3). | Conta em `chamadas_llm` e agrega os tokens de `detalhes` em `tokens_execucao`, `tokens_totais`, `tokens_por_agente[agente]` e `tokens_por_fase[fase]`; `detalhes["modelo"]` alimenta `modelo_usado`. Ver §5. |
 
 Duas convenções cruzam **qualquer** tipo de evento, não só um:
 
@@ -50,7 +51,7 @@ Dataclass puro, sem dependências externas.
 |---|---|---|---|
 | `run_id` | `str` | Sim | Identificador da execução à qual o evento pertence. |
 | `fase` | `str` | Sim | Nome da fase do pipeline (ex.: `fase_1_revisao_independente`). |
-| `tipo` | `TipoEvento` (`Literal["fase","tool","validacao","retry","falha","decisao_final"]`) | Sim | Natureza do evento — ver tabela §1. |
+| `tipo` | `TipoEvento` (`Literal["fase","tool","validacao","retry","falha","decisao_final","chamada_llm"]`) | Sim | Natureza do evento — ver tabela §1. |
 | `nome` | `str` | Sim | Rótulo do evento (nome da fase, da tool, do agente, etc., conforme o tipo). |
 | `status` | `StatusEvento` (`Literal["sucesso","falha","aviso"]`) | Sim | Resultado do evento. |
 | `timestamp` | `str` | Não (default: agora, ISO-8601 UTC) | Momento em que o evento foi criado. |
@@ -96,12 +97,15 @@ Snapshot agregado de uma lista de `ExecutionEvent`, produzido por
 | `decisao_final` | `Any \| None` | Extraído de `detalhes["decisao"]` do evento `tipo="decisao_final"`. |
 | `status_final` | `str` | `"sucesso"` \| `"sucesso_com_alertas"` \| `"falha"` (ver regra de prioridade em §1). |
 | `alertas` | `list[str]` | Uma entrada por evento com `status="aviso"`, no formato `"[fase] mensagem"`. |
-| `tokens_totais` | `int \| None` | **Placeholder** — não preenchido hoje (ver §5). |
-| `custo_estimado` | `float \| None` | **Placeholder** — não preenchido hoje (ver §5). |
-| `modelo_usado` | `str \| None` | **Placeholder** — não preenchido hoje (ver §5). |
-| `chamadas_llm` | `int \| None` | **Placeholder** — não preenchido hoje (ver §5). |
+| `tokens_totais` | `int \| None` | Soma de `tokens_total` das chamadas LLM onde o ADK informou consumo. `None` = nenhuma medição disponível (ex.: modo mock) — **nunca 0 no lugar de "não medido"** (ver §5). |
+| `custo_estimado` | `float \| None` | Preenchido apenas quando `gerar_resumo()` recebe preço configurado (`precos=...`); consumo real e preço nunca se misturam (ver §5.3). |
+| `modelo_usado` | `str \| None` | Modelo(s) informado(s) pelo ADK (`model_version`). Um modelo → o nome dele; vários → nomes únicos ordenados, separados por `", "`. |
+| `chamadas_llm` | `int \| None` | Total de eventos `tipo="chamada_llm"`. `None` quando não houve nenhum. |
+| `tokens_execucao` | `dict[str, int \| None] \| None` | Totais da execução por categoria: `tokens_entrada`, `tokens_resposta`, `tokens_pensamento`, `tokens_cache`, `tokens_total`. Valor `None` numa categoria = nenhuma chamada informou aquela categoria. `None` no campo inteiro = nenhuma chamada LLM. |
+| `tokens_por_agente` | `dict[str, int \| None]` | `tokens_total` somado por agente (`author` do ADK). Valor `None` = o agente fez chamadas, mas o consumo está indisponível. |
+| `tokens_por_fase` | `dict[str, int \| None]` | `tokens_total` somado por fase. Mesma semântica de `None`. |
 
-Método `to_dict()` serializa as 16 chaves acima num dict JSON-pronto (é o que
+Método `to_dict()` serializa as 19 chaves acima num dict JSON-pronto (é o que
 vira `final_report.json["resumo_execucao"]` e `resumo_execucao.json`).
 
 `gerar_resumo([])` **levanta `ValueError`** se `run_id` não for informado
@@ -131,26 +135,27 @@ aproximada (não é tempo de parede real).
 
 ## 4. Exemplo real de `resumo_execucao.json` (modo mock)
 
-Gerado por `.venv/bin/python main.py mock` nesta rodada — números reais, não
+Gerado por `python main.py mock` nesta rodada — números reais, não
 inventados:
 
 ```json
 {
-  "run_id": "a8ffbc92-984f-4fba-9174-0add31fe98ed",
-  "duracao_total_s": 0.0064597539603710175,
-  "duracao_soma_fases_s": 0.004867468029260635,
+  "run_id": "run_4d394bd382a4495e",
+  "duracao_total_s": 0.011900800003786571,
+  "duracao_soma_fases_s": 0.009830800001509488,
   "duracao_por_fase_s": {
-    "fase_1_revisao_independente": 0.0024566210340708494,
-    "fase_2_leitura_cruzada": 0.00139256299007684,
-    "fase_3_editor_chefe": 0.0007801270112395287,
-    "fase_4_relatorio_final": 0.00023815699387341738
+    "fase_1_revisao_independente": 0.004149500004132278,
+    "fase_2_leitura_cruzada": 0.003696300002047792,
+    "fase_3_editor_chefe": 0.0017325999942841008,
+    "fase_4_relatorio_final": 0.00025240000104531646
   },
   "quantidade_validacoes": 7,
   "quantidade_retries": 0,
   "quantidade_falhas": 0,
   "quantidade_tools_chamadas": {
     "validar_completude": 3,
-    "auditar_decisao_final": 1
+    "auditar_decisao_final": 1,
+    "checar_coerencia": 1
   },
   "requer_revisao_humana": false,
   "decisao_final": 3,
@@ -159,7 +164,10 @@ inventados:
   "tokens_totais": null,
   "custo_estimado": null,
   "modelo_usado": null,
-  "chamadas_llm": null
+  "chamadas_llm": null,
+  "tokens_execucao": null,
+  "tokens_por_agente": {},
+  "tokens_por_fase": {}
 }
 ```
 
@@ -167,7 +175,9 @@ inventados:
 cada (um por revisor: `statistician`, `domain_expert`, `copyeditor`) e a Fase
 3 valida 1 veredito do editor (3 + 3 + 1 = 7). `quantidade_tools_chamadas`
 reflete `validar_completude` rodando uma vez por revisor na Fase 1 (3x) e
-`auditar_decisao_final` rodando uma vez na Fase 3 (1x).
+`auditar_decisao_final` + `checar_coerencia` rodando na Fase 3 (1x cada).
+Os campos de tokens estão todos `null`/vazios porque o modo mock **não faz
+chamada LLM nenhuma** — indisponível é `null`, nunca `0` (ver §5).
 
 **Precisão total no JSON, arredondamento só na exibição.** Repare que os
 valores de duração acima têm todas as casas decimais que o `float` do Python
@@ -183,7 +193,69 @@ em `imprimir_resumo()` (tabela do terminal), via `_fmt_s`:
 
 ---
 
-## 5. Caminho de evolução para ADK/OpenTelemetry
+## 5. Tokens reais — `usage_metadata` do ADK (`src/metrics/adk_usage.py`)
+
+Os tokens vêm **diretamente dos `Event` do Runner do ADK** (campo
+`usage_metadata`, contrato do google-genai) — nunca de estimativa por tamanho
+de texto. Versão validada nos testes: `google-adk==1.27.5` (requirements.txt).
+
+### 5.1. Captura e ponto de conexão
+
+Os três loops `async for event in runner.run_async(...)` dos agentes
+(`reviewer_agent.py`, `cross_review.py`, `editor_agent.py`) chamam
+`registrar_usage_adk(event, fase=...)` ao lado do `trace_adk_event` do
+Grupo 3 — mesma fonte de eventos, nenhuma segunda história da execução. O
+consumidor é **no-op** quando nenhum coletor foi registrado (demos avulsas
+continuam funcionando); o pipeline registra o coletor via
+`definir_coletor_adk(coletor)` ao criar o `ExecutionCollector`.
+
+Cada chamada LLM vira um `ExecutionEvent` `tipo="chamada_llm"` com
+`detalhes`: `tokens_entrada` (`prompt_token_count`), `tokens_resposta`
+(`candidates_token_count`), `tokens_pensamento` (`thoughts_token_count`),
+`tokens_cache` (`cached_content_token_count`), `tokens_total`
+(`total_token_count`), `modelo` (`model_version`), `agente` (`author`),
+`invocation_id` e `event_id`. Nenhum prompt, chave de API ou conteúdo de
+resposta é gravado nas métricas.
+
+### 5.2. Regras (o que os testes garantem)
+
+- **Ausência ≠ zero.** Campo sem valor no ADK vira `None` (exibido `"n/d"`),
+  nunca `0`. Resposta de modelo **sem** `usage_metadata` ainda é registrada
+  (a chamada aconteceu) com tokens `None` e `status="aviso"` — o aviso
+  aparece em `alertas` e o `status_final` vira `sucesso_com_alertas`.
+- **Sem contagem duplicada.** Eventos `partial=True` (streaming) são
+  ignorados — o usage de parciais é cumulativo, só a resposta final conta. O
+  registro usa a `chave_dedup` do coletor: `event.id` quando existir, senão
+  `invocation_id + author` (agentes diferentes da mesma invocação, como no
+  `ParallelAgent` da Fase 1, contam separado).
+- **Eventos que não são chamada LLM** (mensagem do usuário, evento de
+  controle sem conteúdo e sem usage) não entram.
+- **Agregação parcial é explícita.** Se parte das chamadas veio sem usage, os
+  totais somam só o que foi medido e o agente/fase sem medição aparece com
+  `None` — a limitação fica visível, não escondida num número menor.
+
+### 5.3. Custo (preparado, não ativado)
+
+`custo_estimado` só é preenchido quando `gerar_resumo()` recebe `precos=`
+(ex.: `precos_de_ambiente()`, que lê as variáveis de ambiente
+`GRUPO2_PRECO_USD_MILHAO_TOKENS_ENTRADA` e
+`GRUPO2_PRECO_USD_MILHAO_TOKENS_SAIDA` — as duas obrigatórias, nenhum preço
+fixo no código). O pipeline **não** passa preço hoje: consumo real (tokens) e
+preço configurado ficam separados por construção. Sem preço ou sem consumo
+medido, o custo é `None` — custo desconhecido, não custo zero.
+
+### 5.4. Como gerar e onde aparece
+
+`python main.py mock` (reprodutível, sem chamadas LLM — tokens `n/d`) ou
+`python main.py api [caminho.pdf]` (execução real com Gemini — requer
+`GOOGLE_API_KEY`). O resumo sai no terminal (seção "Tokens (usage_metadata do
+ADK)"), em `src/outputs/<run_id>/resumo_execucao.json` e dentro de
+`final_report.json["resumo_execucao"]` — sempre com o `run_id` comum da
+execução.
+
+---
+
+## 6. Caminho de evolução para ADK/OpenTelemetry
 
 Os nomes de campo de `ExecutionEvent`/`ResumoExecucao` foram escolhidos para
 mapear diretamente em conceitos de **span**/**trace** OpenTelemetry, mesmo sem
@@ -197,7 +269,7 @@ implementar isso agora:
 | Evento `tipo="validacao"` / `"retry"` / `"falha"` | Eventos anexados (`span.add_event(...)`) ao span da fase, com `detalhes["erro"]`/`detalhes["tentativas_usadas"]` como atributos do evento. |
 | Evento `tipo="decisao_final"` | Um **atributo do span raiz** (`decisao_final`, `requer_revisao_humana`) ou um evento terminal do trace. |
 | `ExecutionEvent.status` | `span.status` (`OK`/`ERROR`) — `"aviso"` mapearia para `OK` com um atributo/evento adicional, já que OTel não tem um terceiro estado nativo. |
-| `ResumoExecucao.tokens_totais`, `.custo_estimado`, `.modelo_usado`, `.chamadas_llm` | Atributos de span padronizados pela semântica **gen-ai** do OpenTelemetry (`gen_ai.usage.*`, `gen_ai.request.model`) quando os agentes (Fases 1-3, que já usam `google-adk`) expuserem essa informação — hoje o pipeline não a captura em lugar nenhum, por isso os campos ficam `None`. |
+| Evento `tipo="chamada_llm"` (`detalhes` com `tokens_*`, `modelo`) | Atributos de span padronizados pela semântica **gen-ai** do OpenTelemetry: `gen_ai.usage.input_tokens`/`output_tokens` ↔ `tokens_entrada`/`tokens_resposta`, `gen_ai.request.model` ↔ `modelo`. A captura já existe (§5); trocar o destino por um exporter OTel não mudaria o contrato do evento. |
 
 A camada atual (`ExecutionCollector` em memória + JSON no fim da execução) é
 deliberadamente a implementação mais simples que respeita esse contrato de
