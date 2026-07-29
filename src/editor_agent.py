@@ -14,8 +14,9 @@ Princípios (alinhados às fases anteriores):
 2. **Preservar críticas.** O editor NÃO resume nem agrupa: cada fraqueza ou
    problema crítico levantado por um revisor entra individualmente em
    ``criticas`` (campo do schema), com a fonte e o tipo padronizados.
-3. **Sem mocks.** Chama o Gemini real; sem ``GOOGLE_API_KEY`` a execução falha
-   com mensagem clara (mesma política de ``reviewer_agent.py``).
+3. **Sem mocks.** Chama o provedor real escolhido em ``model_provider.py``
+   (Gemini, Maritaca ou OpenAI); sem a chave do serviço selecionado a execução
+   falha com mensagem clara (mesma política de ``reviewer_agent.py``).
 """
 
 from __future__ import annotations
@@ -33,7 +34,13 @@ from review_schema import (  # noqa: E402
     CrossReviewSchema,
     EditorVerdictSchema,
 )
-from reviewer_agent import MODEL, REVIEWERS  # noqa: E402
+from model_provider import build_model, resolver_config  # noqa: E402
+from reviewer_agent import REVIEWERS  # noqa: E402
+
+#: Papel do editor: habilita sobrescrita própria de provedor/modelo
+#: (``LLM_PROVIDER_EDITOR`` / ``LLM_MODEL_EDITOR``), útil para rodar a síntese
+#: final num modelo mais forte que o dos revisores.
+PAPEL = "editor"
 
 # Rótulos legíveis dos critérios (apenas para formatar os pareceres no prompt).
 _LABELS = {
@@ -152,7 +159,7 @@ def build_editor_agent():
 
     return LlmAgent(
         name="editor_in_chief",
-        model=MODEL,
+        model=build_model(papel=PAPEL),
         output_key="final_verdict",          # veredito no state da sessão
         output_schema=EditorVerdictSchema,    # força + valida a estrutura
         description="Editor-chefe que sintetiza os pareceres em um veredito final.",
@@ -195,11 +202,12 @@ async def _run_editor(
     except Exception:  # noqa: BLE001
         trace_adk_event = None  # type: ignore[assignment]
 
+    provedor = {"provedor": resolver_config(papel=PAPEL).provider.value}
     async for event in runner.run_async(
         user_id=USER_ID, session_id=session.id, new_message=trigger
     ):
         if trace_adk_event is not None:
-            trace_adk_event(event, phase="fase_3_editor_chefe")
+            trace_adk_event(event, phase="fase_3_editor_chefe", extra=provedor)
 
     updated = await runner.session_service.get_session(
         app_name=APP_NAME, user_id=USER_ID, session_id=session.id

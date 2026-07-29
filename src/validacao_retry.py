@@ -195,15 +195,20 @@ def corrigir_saida_mock(dados: dict, erro: str) -> dict:  # noqa: ARG001
 
 
 # ---------------------------------------------------------------------------
-# Corretor via API Gemini — importação lazy para não quebrar modo offline
+# Corretor via API do provedor escolhido — import lazy p/ não quebrar o offline
 # ---------------------------------------------------------------------------
 
 
 def corrigir_saida_api(dados: dict, erro: str, schema_fn: Callable) -> dict:
-    """Chama o Gemini para corrigir uma saída inválida.
+    """Chama o provedor de LLM escolhido para corrigir uma saída inválida.
 
-    Importa ``google.genai`` de forma lazy para que o módulo possa ser importado
-    mesmo sem a biblioteca instalada (modo MOCK / testes offline).
+    A correção usa o MESMO provedor e modelo dos agentes (Gemini, Maritaca ou
+    OpenAI): a chamada é delegada a ``model_provider.completar_texto``, que
+    concentra essa decisão. Sem isso, escolher outro serviço ainda cairia no
+    Gemini justamente no caminho de correção.
+
+    A importação é lazy para que o módulo continue carregando sem as bibliotecas
+    de API instaladas (modo MOCK / testes offline).
 
     Parameters
     ----------
@@ -215,23 +220,7 @@ def corrigir_saida_api(dados: dict, erro: str, schema_fn: Callable) -> dict:
         A função de validação cujo modelo Pydantic será usado para extrair o
         JSON Schema e incluir no prompt.
     """
-    try:
-        import os
-
-        import google.genai as genai  # type: ignore[import]
-    except ImportError as exc:
-        raise RuntimeError(
-            "google-genai não está instalado. No modo API, instale-o com "
-            "'pip install google-genai'."
-        ) from exc
-
-    api_key = os.getenv("GOOGLE_API_KEY")
-    if not api_key:
-        raise RuntimeError(
-            "GOOGLE_API_KEY não encontrada. Configure a variável de ambiente."
-        )
-
-    model_id = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+    from model_provider import completar_texto
 
     # Extrai o JSON Schema do modelo Pydantic associado à função de validação.
     # Convenção: o módulo review_schema expõe as funções validar_* cujo
@@ -251,12 +240,7 @@ def corrigir_saida_api(dados: dict, erro: str, schema_fn: Callable) -> dict:
         "Retorne APENAS o JSON corrigido, sem texto adicional, sem blocos de código markdown."
     )
 
-    client = genai.Client(api_key=api_key)
-    resposta = client.models.generate_content(
-        model=model_id,
-        contents=prompt,
-    )
-    texto = resposta.text.strip()
+    texto = completar_texto(prompt)
     return _extrair_json_da_resposta(texto)
 
 

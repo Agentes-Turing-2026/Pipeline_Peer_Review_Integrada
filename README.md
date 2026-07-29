@@ -23,7 +23,8 @@ inválidos entre fases.
 | **Objetivo** | Orquestrar agentes em fases sequenciais, com contratos de dados estáveis. |
 | **Caso de teste** | Peer review (revisão por pares de um artigo). |
 | **Contratos oficiais** | `ReviewSchema`, `CrossReviewSchema`, `EditorVerdictSchema`. |
-| **Modos de execução** | **API** (Gemini real) · **Mock** (JSONs locais, offline). |
+| **Modos de execução** | **API** (provedor real) · **Mock** (JSONs locais, offline). |
+| **Provedores de LLM** | **Gemini** · **Maritaca AI** · **OpenAI** — escolha única em `LLM_PROVIDER`, sem duplicar agentes. |
 | **Saída** | Relatório final em Markdown + JSON estruturado. |
 
 Princípio central: a **orquestração é genérica e agnóstica de domínio**
@@ -46,6 +47,7 @@ orquestração.
     ├── pipeline_base.py          # Orquestração GENÉRICA (Pipeline, PipelinePhase, PipelineContext)
     ├── pipeline.py               # As 4 fases concretas + modos (API/Mock) + demo
     ├── review_schema.py          # Contratos: ReviewSchema, CrossReviewSchema, EditorVerdictSchema
+    ├── model_provider.py         # Escolha ÚNICA de provedor/modelo (Gemini · Maritaca · OpenAI)
     ├── reviewer_agent.py         # Fase 1 — agentes revisores
     ├── cross_review.py           # Fase 2 — leitura cruzada
     ├── editor_agent.py           # Fase 3 — editor-chefe
@@ -56,9 +58,11 @@ orquestração.
     ├── observability/            # Grupo 3 — base de observabilidade e traces
     │   ├── events.py             #   formato COMUM de evento (run_id, span_id, phase, author, status)
     │   ├── tracer.py             #   ciclo de vida da execução + spans + storage local (JSONL)
-    │   ├── adk_bridge.py         #   captura os Event do Runner do ADK (invocation_id, author, tools)
+    │   ├── adk_bridge.py         #   captura os Event do ADK (invocation_id, author, tools, modelo, tokens)
     │   ├── timeline.py           #   reconstrói a linha do tempo a partir do trace
     │   └── tests/                #   testes offline do tracer (envelope, erro, ponte ADK)
+    ├── tests/                    # Testes offline da seleção de provedor/modelo
+    │   └── test_model_provider.py
     ├── mocks/                    # Respostas pré-salvas para o modo offline
     │   └── peer_review_mock.json
     └── examples/                 # Artigo de exemplo + exemplos de I/O dos schemas
@@ -91,7 +95,8 @@ orquestração.
   ```
 
   > O **modo Mock** (offline) precisa apenas de `pydantic` e `python-dotenv`.
-  > O **modo API** também precisa de `google-adk` e `google-genai`.
+  > O **modo API** também precisa de `google-adk` e `google-genai`; os provedores
+  > **Maritaca** e **OpenAI** somam `litellm` (o Gemini não precisa dele).
 
 ### 2.2 Modo Local / Mock (offline, sem chave) — recomendado para testar o fluxo
 
@@ -112,18 +117,18 @@ $env:PIPELINE_MODE="mock"; python main.py
 PIPELINE_MODE=mock python main.py
 ```
 
-### 2.3 Modo API (chamadas reais ao Gemini)
+### 2.3 Modo API (chamadas reais ao provedor escolhido)
 
-1. Copie o template e preencha a sua chave:
+1. Copie o template e preencha a chave do serviço que você vai usar:
 
    ```bash
    cp .env.example .env
    ```
 
    ```env
+   LLM_PROVIDER=gemini
+   LLM_MODEL=gemini-2.5-flash
    GOOGLE_API_KEY=coloque_sua_chave_real_aqui
-   GOOGLE_GENAI_USE_VERTEXAI=FALSE
-   GEMINI_MODEL=gemini-2.0-flash
    ```
 
 2. Rode a demo:
@@ -135,7 +140,39 @@ PIPELINE_MODE=mock python main.py
    ```
 
    Sem a chave configurada, o modo API interrompe com uma mensagem clara
-   (o sistema **não** usa fallback silencioso).
+   apontando a variável do provedor selecionado (o sistema **não** usa fallback
+   silencioso).
+
+#### Escolha do provedor
+
+Um único par de variáveis vale para **todos** os agentes — revisores, leitura
+cruzada, editor-chefe e o corretor de retry. Os agentes são os mesmos objetos
+`LlmAgent` do ADK em qualquer provedor: **não existe uma versão do revisor por
+serviço**, e prompts, schemas, validações, traces e o modo mock não mudam.
+
+| `LLM_PROVIDER` | Chave de API | `LLM_MODEL` padrão | Como o ADK conversa |
+|---|---|---|---|
+| `gemini` (default) | `GOOGLE_API_KEY` | `gemini-2.5-flash` | Rota nativa do ADK (string do modelo). |
+| `maritaca` | `MARITACA_API_KEY` | `sabia-3` | `LiteLlm` do ADK apontando para `https://chat.maritaca.ai/api`. |
+| `openai` | `OPENAI_API_KEY` | `gpt-4o-mini` | `LiteLlm` do ADK (`openai/<modelo>`). |
+
+```bash
+# Windows (PowerShell)
+$env:LLM_PROVIDER="maritaca"; python main.py api
+# Linux / macOS
+LLM_PROVIDER=openai LLM_MODEL=gpt-4o python main.py api
+```
+
+Detalhes e pontos de extensão: [`src/model_provider.py`](src/model_provider.py).
+
+- **Sobrescrita por papel.** `LLM_PROVIDER_EDITOR` / `LLM_MODEL_EDITOR` trocam o
+  modelo só do editor-chefe (ex.: revisores na Maritaca, síntese final no GPT-4o).
+- **Structured output.** Gemini e OpenAI recebem o `output_schema` como
+  `response_format: json_schema`. Na Maritaca isso vem desligado por padrão, pois
+  o suporte não é documentado — o schema continua **exigido no prompt e validado**
+  pelo ADK e pelo retry do Grupo 1. Para ligar: `LLM_JSON_SCHEMA=on`.
+- **Compatibilidade.** Um `.env` antigo com apenas `GOOGLE_API_KEY` +
+  `GEMINI_MODEL`, sem nenhuma variável `LLM_*`, continua funcionando como antes.
 
 ### 2.4 Saídas geradas
 
@@ -273,7 +310,7 @@ PipelineValidationError (pipeline bloqueado)
 | Modo | Corrector | Descrição |
 |---|---|---|
 | `mock` | `corrigir_saida_mock()` | Determinístico, offline, sem API key. Clampeia notas fora do range, injeta sentinel em campos vazios/ausentes, corrige incoerências `mudou_posicao/mudancas`. |
-| `api` | `corrigir_saida_api()` | Chama o Gemini com o JSON inválido + erro Pydantic + JSON Schema esperado e pede a correção. Importação lazy — não quebra o modo offline. |
+| `api` | `corrigir_saida_api()` | Chama o **provedor escolhido** (via `model_provider.completar_texto`) com o JSON inválido + erro Pydantic + JSON Schema esperado e pede a correção. Importação lazy — não quebra o modo offline. |
 
 ### Pontos de integração no pipeline
 
@@ -387,10 +424,10 @@ Seção transparente sobre o que **não** é "real" hoje:
 
 | Item | Situação |
 |---|---|
-| **Fases 1–3 no modo Mock** | Lidas de [`src/mocks/peer_review_mock.json`](src/mocks/peer_review_mock.json). No modo API, são chamadas reais ao Gemini. |
+| **Fases 1–3 no modo Mock** | Lidas de [`src/mocks/peer_review_mock.json`](src/mocks/peer_review_mock.json). No modo API, são chamadas reais ao provedor escolhido. |
 | **Fase 4 (relatório)** | **Nunca** mockada — é pura formatação em Python, idêntica nos dois modos. |
 | **Entrada do artigo** | Usa um `.txt` de exemplo ([`src/examples/example_article.txt`](src/examples/example_article.txt)). **Ainda não há** ingestão/parse de PDF. |
-| **Validação & retry** | **Integrado** — ver [§4](#4-validação-retry-e-confiabilidade-grupo-1). Retry automático com corrector em modo Mock (offline) e API (Gemini). `PipelineValidationError` bloqueia propagação de dados inválidos. |
+| **Validação & retry** | **Integrado** — ver [§4](#4-validação-retry-e-confiabilidade-grupo-1). Retry automático com corrector em modo Mock (offline) e API (provedor escolhido). `PipelineValidationError` bloqueia propagação de dados inválidos. |
 | **Tools de auditoria** | **Integradas** — ver [§5](#5-tools-determinísticas-de-auditoria-grupo-2). `validar_completude` (Fase 1), `checar_coerencia` (chamada por dentro da Fase 3) e `auditar_decisao_final` (Fase 3) — todas ativas. |
 | **Adaptação de pareceres legados de revisor** | O [`src/legacy_adapter.py`](src/legacy_adapter.py) converte o **veredito do editor** legado; o parecer **de revisor** legado não tem as 4 dimensões e, por isso, **não** é adaptado automaticamente (exige nova revisão — limitação documentada). |
 
@@ -461,10 +498,28 @@ A reconstrução imprime a árvore da execução, por exemplo:
   ✓ <phase> fase_3_editor_chefe [0 ms]
     · ✓ auditoria_veredito [grupo2] — requer_revisao_humana=False
   ✓ <phase> fase_4_relatorio_final [1 ms]
+
+tokens: não reportados nesta execução (modo mock ou provedor sem medição)
 ```
 
 O `final_report.json` passa a carregar o `run_id` que o gerou — o relatório
 **aponta para a execução** que o produziu.
+
+### Provedor, modelo e consumo de tokens
+
+No modo API o trace registra **com quem** a execução falou e **quanto custou**:
+
+| Onde | O que aparece |
+|---|---|
+| `run_start` | `modelo` — o rótulo `provedor:modelo` da execução. |
+| evento `modelo_selecionado` | `provedor`, `modelo` e se o structured output nativo está ativo. |
+| eventos `adk:*` | `provedor` (informado pela fase), `modelo` — o `model_version` que **de fato** respondeu — e `tokens_entrada` / `tokens_saida` / `tokens_total`. |
+| fim da linha do tempo | soma dos tokens da execução, discriminada por modelo. |
+
+Tokens são capturados do `usage_metadata` do ADK, preenchido tanto pela rota
+nativa do Gemini quanto pelo `LiteLlm` (Maritaca/OpenAI). **Quando o provedor não
+reporta medição, o resumo diz "não reportados" em vez de exibir zeros** —
+`resumir_tokens()` distingue "não medido" de "consumiu zero".
 
 ### Como os outros grupos entram na MESMA execução
 
@@ -553,8 +608,15 @@ mesmos.
 # Fluxo completo offline (sem chave):
 python main.py mock
 
-# Fluxo completo com Gemini real (requer .env com GOOGLE_API_KEY):
+# Fluxo completo com provedor real (requer a chave do serviço escolhido no .env):
 python main.py api
+
+# Mesmo pipeline, outro provedor — sem tocar em código (PowerShell):
+$env:LLM_PROVIDER="maritaca"; python main.py api
+$env:LLM_PROVIDER="openai";   python main.py api
+
+# Testes offline da seleção de provedor/modelo:
+python -m pytest src/tests -q
 
 # Demo offline das tools de auditoria do Grupo 2 (sem API key):
 python src/tools/demo_tools.py
