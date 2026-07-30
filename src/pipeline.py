@@ -63,6 +63,11 @@ from validacao_entrada import (  # noqa: E402
     validar_documento_extraido,
 )
 
+# Persistência e retomada de execuções (Grupo 1). CheckpointManager grava o
+# resultado de cada fase em disco; numa retomada, fases já concluídas são
+# puladas (ver Pipeline.run() em pipeline_base.py).
+from persistencia import CheckpointManager  # noqa: E402
+
 # Tools determinísticas do Grupo 2 (importação guardada: pipeline funciona sem elas).
 try:
     from tools.validar_completude import validar_completude as _tool_completude
@@ -252,6 +257,14 @@ class IndependentReviewPhase(PipelinePhase[str, IndependentReviews]):
 
     name = "fase_1_revisao_independente"
 
+    def serialize_output(self, data: IndependentReviews) -> dict:
+        return {"reviews": {rid: r.model_dump() for rid, r in data.reviews.items()}}
+
+    def deserialize_output(self, raw: dict) -> IndependentReviews:
+        return IndependentReviews(
+            reviews={rid: ReviewSchema(**v) for rid, v in raw["reviews"].items()}
+        )
+
     def run(self, data: str, context: PipelineContext) -> IndependentReviews:
         coletor: ExecutionCollector | None = context.config.get("_metrics_collector")
         with _fase_medida(coletor, self.name):
@@ -333,6 +346,14 @@ class CrossReviewPhase(PipelinePhase[IndependentReviews, CrossReviews]):
 
     name = "fase_2_leitura_cruzada"
 
+    def serialize_output(self, data: CrossReviews) -> dict:
+        return {"cross_reviews": {rid: cr.model_dump() for rid, cr in data.cross_reviews.items()}}
+
+    def deserialize_output(self, raw: dict) -> CrossReviews:
+        return CrossReviews(
+            cross_reviews={rid: CrossReviewSchema(**v) for rid, v in raw["cross_reviews"].items()}
+        )
+
     def run(self, data: IndependentReviews, context: PipelineContext) -> CrossReviews:
         coletor: ExecutionCollector | None = context.config.get("_metrics_collector")
         with _fase_medida(coletor, self.name):
@@ -401,6 +422,9 @@ class EditorVerdictPhase(PipelinePhase[CrossReviews, EditorVerdictSchema]):
     """O Editor-Chefe sintetiza os pareceres finais em um veredito (EditorVerdictSchema)."""
 
     name = "fase_3_editor_chefe"
+
+    def deserialize_output(self, raw: dict) -> EditorVerdictSchema:
+        return EditorVerdictSchema(**raw)
 
     def run(self, data: CrossReviews, context: PipelineContext) -> EditorVerdictSchema:
         coletor: ExecutionCollector | None = context.config.get("_metrics_collector")
@@ -590,6 +614,9 @@ class FinalReportPhase(PipelinePhase[EditorVerdictSchema, FinalReport]):
     """
 
     name = "fase_4_relatorio_final"
+
+    def deserialize_output(self, raw: dict) -> FinalReport:
+        return FinalReport(markdown=raw["markdown"], data=raw["data"])
 
     def run(self, data: EditorVerdictSchema, context: PipelineContext) -> FinalReport:
         coletor: ExecutionCollector | None = context.config.get("_metrics_collector")
@@ -787,6 +814,7 @@ def run_demo(
     mode: str | None = None,
     pdf_path: str | Path | None = None,
     extractor: PdfExtractor | None = None,
+    run_id: str | None = None,
 ) -> FinalReport:
     """Roda o pipeline completo (PDF real ou artigo de exemplo) e salva os resultados.
 
@@ -804,7 +832,29 @@ def run_demo(
     extractor:
         Implementação de :class:`~extraction.PdfExtractor` a usar. ``None``
         usa o extrator padrão (LiteParse) — ponto de troca sem reescrever nada.
+    run_id:
+        Identificador de uma execução anterior a retomar. Quando informado,
+        os checkpoints já salvos em ``src/logs/checkpoints/<run_id>/`` são
+        carregados e as fases já concluídas são puladas (ver
+        ``Pipeline.run()`` em ``pipeline_base.py``). Se ``pdf_path``/``mode``
+        não forem passados explicitamente, são recuperados do arquivo de
+        metadados gravado na execução original
+        (``src/logs/checkpoints/<run_id>.meta.json``). ``None`` (padrão)
+        inicia uma execução nova, com um run_id gerado automaticamente.
     """
+    # Retomada: recupera pdf_path/mode da execução original quando não
+    # informados explicitamente nesta chamada — sem isso, retomar com um PDF
+    # ou modo diferente do original geraria um relatório inconsistente sem
+    # nenhum erro visível.
+    if run_id:
+        meta_anterior = LOG_DIR / "checkpoints" / f"{run_id}.meta.json"
+        if meta_anterior.exists():
+            meta_salva = json.loads(meta_anterior.read_text(encoding="utf-8"))
+            if pdf_path is None and meta_salva.get("pdf_path"):
+                pdf_path = meta_salva["pdf_path"]
+            if mode is None and meta_salva.get("mode"):
+                mode = meta_salva["mode"]
+
     config: dict = {}
     if mode is not None:
         config["mode"] = mode
@@ -819,13 +869,36 @@ def run_demo(
         _require_api_key()
 
     # Observabilidade: cria uma execução identificável (run_id) e um trace local.
-    tracer = create_tracer(trace_dir=LOG_DIR / "traces") if create_tracer is not None else None
+    # Se `run_id` foi passado (retomada), o tracer usa o MESMO identificador em
+    # vez de gerar um novo, para que trace, checkpoint e métricas continuem
+    # apontando para a mesma execução original.
+    tracer = (
+        create_tracer(trace_dir=LOG_DIR / "traces", run_id=run_id)
+        if create_tracer is not None else None
+    )
 
     # run_id único da execução — usado também para organizar os artefatos de
     # saída em outputs/<run_id>/, evitando que uma execução sobrescreva
-    # silenciosamente a anterior.
-    run_id = tracer.run_id if tracer is not None else PipelineContext(None).run_id
+    # silenciosamente a anterior. Mantém o `run_id` explícito no fallback (não
+    # só um novo uuid) para não perder silenciosamente uma retomada quando o
+    # pacote de observabilidade não estiver disponível.
+    run_id = tracer.run_id if tracer is not None else (run_id or PipelineContext(None).run_id)
     config["run_id"] = run_id
+
+    # Persistência e retomada (Grupo 1): checkpoint por fase em disco. O
+    # sidecar `<run_id>.meta.json` (irmão da pasta `<run_id>/`, não dentro
+    # dela — para não poluir `fases_concluidas()`) grava pdf_path/mode só na
+    # primeira execução, para uma retomada futura recuperá-los.
+    ckpt = CheckpointManager(LOG_DIR / "checkpoints", run_id)
+    meta_path = LOG_DIR / "checkpoints" / f"{run_id}.meta.json"
+    if not meta_path.exists():
+        meta_path.write_text(
+            json.dumps(
+                {"pdf_path": str(pdf_path) if pdf_path else None, "mode": resolved.value},
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
 
     # Métricas de execução (Grupo 2): coletor guardado — se metrics/ não
     # existir por algum motivo, o pipeline roda normalmente, sem instrumentação.
@@ -874,7 +947,9 @@ def run_demo(
             article_path = HERE / "examples" / "example_article.txt"
             article_text = article_path.read_text(encoding="utf-8")
 
-        result = pipeline.run(initial_input=article_text, config=config, verbose=True)
+        result = pipeline.run(
+            initial_input=article_text, config=config, verbose=True, checkpoint_manager=ckpt,
+        )
         report_local: FinalReport = result.final
         # Grupo 2 — agrega as métricas de execução (eventos, duração, retries) no
         # relatório, para que o JSON salvo já inclua o resumo auditável.
@@ -905,19 +980,48 @@ def run_demo(
             )
         return report_local
 
-    if tracer is not None:
-        # Delimita a execução inteira (run_start/run_end): tudo abaixo entra na
-        # mesma linha do tempo, inclusive a fase 0 (extração) e os eventos dos
-        # Grupos 1 e 2.
-        with tracer.run(
-            name="peer_review",
-            attributes={"modo": resolved.value, "artigo": config["article_ref"]},
-        ):
+    try:
+        if tracer is not None:
+            # Delimita a execução inteira (run_start/run_end): tudo abaixo entra na
+            # mesma linha do tempo, inclusive a fase 0 (extração) e os eventos dos
+            # Grupos 1 e 2.
+            with tracer.run(
+                name="peer_review",
+                attributes={"modo": resolved.value, "artigo": config["article_ref"]},
+            ):
+                report = _run_and_save()
+            trace_path = LOG_DIR / "traces" / f"{tracer.run_id}.jsonl"
+        else:
             report = _run_and_save()
-        trace_path = LOG_DIR / "traces" / f"{tracer.run_id}.jsonl"
-    else:
-        report = _run_and_save()
-        trace_path = None
+            trace_path = None
+    except EntradaInvalidaError:
+        # Bloqueio de entrada por PDF (Grupo 1) não é retomável — o mesmo
+        # arquivo continuaria inválido — então propaga direto, sem o resumo
+        # de falha/retomada abaixo (main.py já trata esse erro com mensagem
+        # própria e código de saída != 0).
+        raise
+    except Exception as exc:
+        # Resumo parcial: mostra o que foi concluído, onde parou e os
+        # checkpoints disponíveis para retomada, mesmo que o pipeline tenha
+        # falhado no meio.
+        fases_ok = ckpt.fases_concluidas()
+        print(f"\nFALHA | run_id={run_id} | {type(exc).__name__}: {exc}")
+        print(f"Fases concluídas antes da falha: {fases_ok or 'nenhuma'}")
+        for fase in fases_ok:
+            print(f"  checkpoint: {ckpt.caminho(fase)}")
+        if coletor is not None and gerar_resumo is not None:
+            resumo_parcial = gerar_resumo(
+                coletor.eventos, run_id=run_id, duracao_total_s=coletor.duracao_execucao_s,
+            )
+            if imprimir_resumo is not None:
+                imprimir_resumo(resumo_parcial)
+            if salvar_resumo_json is not None:
+                resumo_path = salvar_resumo_json(
+                    resumo_parcial, caminho=out_dir / "resumo_execucao_parcial.json",
+                )
+                print(f"Resumo parcial salvo: {resumo_path}")
+        print(f"Para retomar: python main.py --resume {run_id}")
+        raise
 
     print("OK: pipeline concluído.")
     print(f"run_id:                {report.data['run_id']}")
@@ -937,6 +1041,10 @@ def run_demo(
 
 if __name__ == "__main__":
     # Permite escolher o modo pela linha de comando: `python pipeline.py mock`.
-    # Para entrada por PDF, prefira o ponto de entrada oficial: `python main.py --pdf caminho.pdf`.
+    # Para entrada por PDF ou retomada, prefira o ponto de entrada oficial:
+    # `python main.py --pdf caminho.pdf` / `python main.py --resume <run_id>`.
+    # Um segundo argumento posicional aqui também retoma, por conveniência:
+    # `python pipeline.py mock run_abc123`.
     cli_mode = sys.argv[1] if len(sys.argv) > 1 else None
-    run_demo(mode=cli_mode)
+    cli_run_id = sys.argv[2] if len(sys.argv) > 2 else None
+    run_demo(mode=cli_mode, run_id=cli_run_id)

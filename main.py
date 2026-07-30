@@ -10,6 +10,7 @@ Uso:
     python main.py api                      # artigo de exemplo com Gemini real (requer GOOGLE_API_KEY)
     python main.py --pdf caminho/artigo.pdf # PDF REAL: extração + execução completa com ADK
     python main.py mock --pdf artigo.pdf    # extração real do PDF + fases com respostas mock
+    python main.py --resume run_abc123      # retoma uma execução interrompida (pula fases já concluídas)
 
 O modo também pode ser definido pela variável de ambiente ``PIPELINE_MODE``; a
 flag de linha de comando tem precedência sobre ela.
@@ -50,14 +51,23 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Caminho de um PDF real a revisar. Sem esta flag, usa o artigo de "
         "exemplo em src/examples/example_article.txt.",
     )
+    parser.add_argument(
+        "--resume",
+        dest="resume",
+        default=None,
+        metavar="RUN_ID",
+        help="Retoma uma execução interrompida por run_id (reusa os checkpoints "
+        "de src/logs/checkpoints/<run_id>/, pulando fases já concluídas). Sem "
+        "--pdf/modo, reaproveita o pdf_path/mode salvos na execução original.",
+    )
     return parser.parse_args(argv)
 
 
 def main() -> None:
-    """Roda o pipeline completo, com modo e PDF opcionais vindos da linha de comando."""
+    """Roda o pipeline completo, com modo, PDF e retomada opcionais vindos da linha de comando."""
     args = _parse_args()
     try:
-        run_demo(mode=args.mode, pdf_path=args.pdf)
+        run_demo(mode=args.mode, pdf_path=args.pdf, run_id=args.resume)
     except EntradaInvalidaError as exc:
         # Entrada bloqueada pela validação do Grupo 1: mensagem clara (não um
         # traceback), e código de saída != 0 — a falha não passa despercebida.
