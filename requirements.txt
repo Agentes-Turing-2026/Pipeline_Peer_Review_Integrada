@@ -9,12 +9,17 @@
 pydantic>=2.0
 python-dotenv>=1.0
 #
-# Modo API (chamadas reais ao Gemini via ADK) também precisa de:
+# Modo API (chamadas reais ao provedor de LLM) também precisa de:
 google-adk==1.27.5
 google-genai==1.67.0
 #
 # Entrada real por PDF (extração local, substituível):
 liteparse==2.6.0
+#
+# Provedores Maritaca AI e OpenAI (LLM_PROVIDER=maritaca|openai): o ADK fala com
+# eles pelo adaptador LiteLlm, que depende de:
+litellm>=1.40
+# (não é necessário para LLM_PROVIDER=gemini nem para o modo Mock)
 #
 # Testes automatizados:
 pytest>=8.0

@@ -67,6 +67,41 @@ def build_timeline(eventos: list[TraceEvent]) -> dict[str, Any]:
     return {"roots": roots, "spans": spans, "filhos": filhos}
 
 
+#: Contadores de token somáveis (``tokens_total`` é derivado, não se soma junto
+#: para não contar duas vezes o que entrada+saída já representam).
+_TOKENS_SOMAVEIS = ("tokens_entrada", "tokens_saida", "tokens_raciocinio", "tokens_cache")
+
+
+def resumir_tokens(eventos: list[TraceEvent]) -> dict[str, Any]:
+    """Soma o consumo de tokens de uma execução, por modelo e no total.
+
+    Só considera o que os provedores efetivamente reportaram: se nenhum evento
+    trouxe ``usage_metadata``, devolve ``{"medido": False}`` em vez de zeros —
+    "não medido" e "consumiu zero" são coisas diferentes.
+    """
+    totais: dict[str, int] = {}
+    por_modelo: dict[str, dict[str, int]] = {}
+    medido = False
+
+    for ev in eventos:
+        atributos = ev.attributes or {}
+        presentes = {k: v for k, v in atributos.items() if k in _TOKENS_SOMAVEIS}
+        if not presentes:
+            continue
+        medido = True
+        modelo = str(atributos.get("modelo") or "desconhecido")
+        alvo = por_modelo.setdefault(modelo, {})
+        for rotulo, valor in presentes.items():
+            totais[rotulo] = totais.get(rotulo, 0) + valor
+            alvo[rotulo] = alvo.get(rotulo, 0) + valor
+
+    if not medido:
+        return {"medido": False}
+
+    totais["tokens_total"] = totais.get("tokens_entrada", 0) + totais.get("tokens_saida", 0)
+    return {"medido": True, "totais": totais, "por_modelo": por_modelo}
+
+
 _ICONE_STATUS = {
     Status.OK.value: "OK",
     Status.ERROR.value: "ERR",
@@ -115,6 +150,25 @@ def render_timeline(path: str | Path) -> str:
 
     for root in arvore["roots"]:
         _walk(root, 0)
+
+    resumo = resumir_tokens(eventos)
+    if resumo["medido"]:
+        totais = resumo["totais"]
+        linhas.append("")
+        linhas.append(
+            f"tokens: entrada={totais.get('tokens_entrada', 0)} "
+            f"saída={totais.get('tokens_saida', 0)} "
+            f"total={totais.get('tokens_total', 0)}"
+        )
+        for modelo, valores in resumo["por_modelo"].items():
+            linhas.append(
+                f"  · {modelo}: entrada={valores.get('tokens_entrada', 0)} "
+                f"saída={valores.get('tokens_saida', 0)}"
+            )
+    else:
+        linhas.append("")
+        linhas.append("tokens: não reportados nesta execução (modo mock ou provedor sem medição)")
+
     return "\n".join(linhas)
 
 

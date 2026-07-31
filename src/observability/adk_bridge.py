@@ -57,11 +57,51 @@ def _safe_text(event: Any) -> str | None:
     return (resumo[:180] + "…") if len(resumo) > 180 else resumo
 
 
-def trace_adk_event(event: Any, *, phase: str | None = None) -> None:
+#: Contadores de token do ADK (``usage_metadata``) -> nome no nosso trace.
+#: São os campos do ``GenerateContentResponseUsageMetadata``, preenchidos tanto
+#: pela rota nativa do Gemini quanto pelo adaptador LiteLlm (Maritaca/OpenAI).
+_CAMPOS_TOKENS = {
+    "prompt_token_count": "tokens_entrada",
+    "candidates_token_count": "tokens_saida",
+    "total_token_count": "tokens_total",
+    "cached_content_token_count": "tokens_cache",
+    "thoughts_token_count": "tokens_raciocinio",
+}
+
+
+def _safe_usage(event: Any) -> dict[str, int]:
+    """Extrai o consumo de tokens do evento, QUANDO o provedor o reporta.
+
+    Nem todo serviço devolve ``usage_metadata`` (e alguns preenchem só parte dos
+    contadores). Ausência não é erro: significa apenas que aquele evento não
+    trouxe medição — por isso só entram no trace os campos realmente presentes,
+    em vez de zeros que fingiriam uma medição que não houve.
+    """
+    usage = getattr(event, "usage_metadata", None)
+    if usage is None:
+        return {}
+    tokens: dict[str, int] = {}
+    for campo, rotulo in _CAMPOS_TOKENS.items():
+        valor = getattr(usage, campo, None)
+        if isinstance(valor, int):
+            tokens[rotulo] = valor
+    return tokens
+
+
+def trace_adk_event(
+    event: Any, *, phase: str | None = None, extra: dict[str, Any] | None = None
+) -> None:
     """Registra um ``Event`` do ADK na linha do tempo da execução atual.
 
     Captura o ``author`` (quem gerou), o ``invocation_id`` (a qual invocação do
-    ADK pertence — nosso vínculo com o ``run_id``) e eventuais chamadas de tool.
+    ADK pertence — nosso vínculo com o ``run_id``), eventuais chamadas de tool,
+    o modelo que de fato respondeu (``model_version``) e o consumo de tokens,
+    quando o provedor o reporta.
+
+    ``extra`` permite ao chamador anexar contexto que o ``Event`` não carrega —
+    é por onde o pipeline informa o PROVEDOR (a ponte segue agnóstica: ela não
+    conhece Gemini, Maritaca nem OpenAI).
+
     No-op se não houver execução em curso.
     """
     tracer = get_current_tracer()
@@ -86,6 +126,15 @@ def trace_adk_event(event: Any, *, phase: str | None = None) -> None:
     partial = getattr(event, "partial", None)
     if partial is not None:
         attributes["partial"] = bool(partial)
+
+    # Qual modelo respondeu de fato (o ADK preenche tanto no Gemini quanto via
+    # LiteLlm) e quanto custou — ambos só entram se o provedor os reportar.
+    modelo = getattr(event, "model_version", None)
+    if modelo:
+        attributes["modelo"] = modelo
+    attributes.update(_safe_usage(event))
+    if extra:
+        attributes.update(extra)
 
     nome = f"adk:{author}" if author else "adk:event"
     tracer.event(

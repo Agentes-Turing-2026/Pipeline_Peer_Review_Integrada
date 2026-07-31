@@ -11,20 +11,24 @@ copyeditor em ``Atividade_2/.../src/agents/``), porém com duas mudanças centra
    junto com o ``output_key`` já usado no projeto, de modo que o ADK force e
    valide a estrutura de saída.
 
-Configuração via ambiente (.env):
-    GOOGLE_API_KEY           — chave da API Gemini (obrigatória para rodar)
-    GOOGLE_GENAI_USE_VERTEXAI — FALSE para usar a API pública do Gemini
-    GEMINI_MODEL             — id do modelo (default: gemini-2.0-flash)
+Configuração via ambiente (.env) — ver ``model_provider.py``:
+    LLM_PROVIDER   — gemini | maritaca | openai (default: gemini)
+    LLM_MODEL      — id do modelo (default: o padrão do provedor escolhido)
+    <PROVEDOR>_API_KEY — chave do serviço selecionado (ex.: ``GOOGLE_API_KEY``)
 
-Não há mocks nem fallbacks: se a ``GOOGLE_API_KEY`` não estiver configurada, a
-demonstração falha com uma mensagem clara em vez de fingir que funcionou.
+O provedor NÃO é escolhido aqui: ``build_model()`` resolve a decisão central e
+devolve o modelo pronto, de modo que estes mesmos agentes rodem em qualquer um
+dos serviços — sem versão paralela de revisor por provedor.
+
+Não há mocks nem fallbacks: se a chave do provedor escolhido não estiver
+configurada, a demonstração falha com uma mensagem clara em vez de fingir que
+funcionou.
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
-import os
 import sys
 from pathlib import Path
 
@@ -36,13 +40,21 @@ HERE = Path(__file__).resolve().parent
 if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 
+from model_provider import (  # noqa: E402
+    build_model,
+    descricao_modelo,
+    exigir_api_key,
+    resolver_config,
+)
 from review_schema import ReviewSchema, validar_review  # noqa: E402
 
 # Carrega variáveis de ambiente a partir do .env da raiz do projeto.
 load_dotenv()
 
-# Modelo configurável por ambiente (padrão do projeto: gemini-2.0-flash).
-MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+#: Id do modelo resolvido no momento da importação. Mantido por compatibilidade
+#: com quem já importava ``MODEL``; para RELATAR a execução prefira
+#: ``descricao_modelo()``, que também identifica o provedor.
+MODEL = resolver_config().model
 
 
 # ---------------------------------------------------------------------------
@@ -176,14 +188,16 @@ def build_reviewer_agent(reviewer_id: str):
     """Cria um ``LlmAgent`` revisor com saída forçada/validada pelo schema.
 
     A importação do ADK é feita aqui dentro para que carregar este módulo não
-    exija o pacote instalado nem a API — útil para inspecionar os prompts.
+    exija o pacote instalado nem a API — útil para inspecionar os prompts. O
+    ``model`` vem de ``build_model()``: é a única linha que muda quando o
+    pipeline passa a rodar em outro provedor.
     """
     from google.adk.agents import LlmAgent
 
     cfg = REVIEWERS[reviewer_id]
     return LlmAgent(
         name=cfg["name"],
-        model=MODEL,
+        model=build_model(),
         output_key=cfg["output_key"],   # grava o parecer no state da sessão
         output_schema=ReviewSchema,      # força + valida a estrutura de notas
         description=cfg["description"],
@@ -205,13 +219,14 @@ USER_ID = "demo_user"
 
 
 def _require_api_key() -> None:
-    """Falha de forma explícita se a API key não estiver configurada."""
-    if not os.getenv("GOOGLE_API_KEY"):
-        raise RuntimeError(
-            "GOOGLE_API_KEY não configurada. Copie '.env.example' para '.env' na "
-            "raiz do projeto e preencha a sua chave do Gemini antes de rodar a "
-            "demonstração. O sistema NÃO usa mocks nem respostas simuladas."
-        )
+    """Falha de forma explícita se a chave do provedor escolhido não existir.
+
+    Delega a ``model_provider.exigir_api_key`` para que a mensagem cite a
+    variável do serviço realmente selecionado (``GOOGLE_API_KEY``,
+    ``MARITACA_API_KEY`` ou ``OPENAI_API_KEY``). Mantido com este nome porque
+    ``pipeline.py`` e ``cross_review.py`` já o importam.
+    """
+    exigir_api_key()
 
 
 async def _run_reviewers(article_text: str) -> dict:
@@ -248,11 +263,12 @@ async def _run_reviewers(article_text: str) -> dict:
     except Exception:  # noqa: BLE001
         registrar_usage_adk = None  # type: ignore[assignment]
 
+    provedor = {"provedor": resolver_config().provider.value}
     async for event in runner.run_async(
         user_id=USER_ID, session_id=session.id, new_message=trigger
     ):
         if trace_adk_event is not None:
-            trace_adk_event(event, phase="fase_1_revisao_independente")
+            trace_adk_event(event, phase="fase_1_revisao_independente", extra=provedor)
         if registrar_usage_adk is not None:
             registrar_usage_adk(event, fase="fase_1_revisao_independente")
 
@@ -282,7 +298,7 @@ def run_demo() -> dict:
 
     output = {
         "article_file": "examples/example_article.txt",
-        "model": MODEL,
+        "model": descricao_modelo(),
         "reviews": reviews,
     }
 

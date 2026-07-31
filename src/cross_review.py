@@ -49,8 +49,8 @@ from review_schema import (  # noqa: E402
     validar_cross_review,
     validar_review,
 )
+from model_provider import build_model, descricao_modelo, resolver_config  # noqa: E402
 from reviewer_agent import (  # noqa: E402
-    MODEL,
     REVIEWERS,
     _require_api_key,
     _run_reviewers,
@@ -260,7 +260,7 @@ def build_cross_reviewer_agent(reviewer_id: str):
     cfg = REVIEWERS[reviewer_id]
     return LlmAgent(
         name=f"{cfg['name']}_cross",
-        model=MODEL,
+        model=build_model(),
         output_key=f"{reviewer_id}_cross_review",   # parecer revisado no state
         output_schema=CrossReviewSchema,            # força + valida a estrutura
         description=f"Leitura cruzada do revisor {reviewer_id}.",
@@ -316,11 +316,12 @@ async def _run_cross_review(reviews: dict[str, dict], article_text: str) -> dict
     except Exception:  # noqa: BLE001
         registrar_usage_adk = None  # type: ignore[assignment]
 
+    provedor = {"provedor": resolver_config().provider.value}
     async for event in runner.run_async(
         user_id=USER_ID, session_id=session.id, new_message=trigger
     ):
         if trace_adk_event is not None:
-            trace_adk_event(event, phase="fase_2_leitura_cruzada")
+            trace_adk_event(event, phase="fase_2_leitura_cruzada", extra=provedor)
         if registrar_usage_adk is not None:
             registrar_usage_adk(event, fase="fase_2_leitura_cruzada")
 
@@ -392,7 +393,7 @@ def run_demo() -> dict:
 
     output = {
         "article_file": "examples/example_article.txt",
-        "model": MODEL,
+        "model": descricao_modelo(),
         "phase1_reviews": phase1,
         "phase2_cross_reviews": cross_reviews,
     }

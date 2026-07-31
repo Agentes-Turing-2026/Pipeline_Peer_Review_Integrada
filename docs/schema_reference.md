@@ -115,11 +115,12 @@ passa a forçar o modelo a responder nessa estrutura e a valida automaticamente:
 
 ```python
 from google.adk.agents import LlmAgent
+from model_provider import build_model
 from review_schema import ReviewSchema
 
 statistician_agent = LlmAgent(
     name="statistician_reviewer",
-    model="gemini-2.0-flash",
+    model=build_model(),                 # provedor escolhido em LLM_PROVIDER
     output_key="statistician_review",   # grava no session state (padrão do projeto)
     output_schema=ReviewSchema,          # força + valida a estrutura de notas
     instruction=STATISTICIAN_PROMPT,
@@ -181,15 +182,18 @@ partir do *state* da sessão, e as chaves `{{ }}` do exemplo JSON são literais.
 - `build_reviewer_agent(reviewer_id)` — cria o `LlmAgent` (com `output_schema`).
 - `build_all_reviewers()` — retorna os três agentes prontos para orquestração.
 - `run_demo()` — executa os três revisores sobre o artigo de exemplo e salva o resultado validado.
-- `REVIEWERS`, `MODEL`, `REVIEWER_PROMPT_TEMPLATE` — configuração e personas.
+- `REVIEWERS`, `REVIEWER_PROMPT_TEMPLATE` — configuração e personas.
+- O `model=` de cada agente vem de `model_provider.build_model()` — ver seção 6.
 
 ---
 
-## 6. Configuração da API key
+## 6. Configuração do provedor e da API key
 
-O sistema usa as APIs **reais** do Google ADK / Gemini — não há mocks nem
-fallbacks. Se a `GOOGLE_API_KEY` não estiver configurada, a demonstração falha
-com uma mensagem clara.
+O sistema usa as APIs **reais** através do Google ADK — não há mocks nem
+fallbacks neste caminho. O provedor é escolhido em um único lugar
+(`src/model_provider.py`, via `LLM_PROVIDER`): **Gemini**, **Maritaca AI** ou
+**OpenAI**. Se a chave do provedor selecionado não estiver configurada, a
+demonstração falha com uma mensagem clara citando a variável certa.
 
 1. Na **raiz do projeto**, copie o template e preencha a sua chave:
 
@@ -197,13 +201,17 @@ com uma mensagem clara.
    cp .env.example .env
    ```
 
-2. Edite o `.env` e informe a chave do Gemini:
+2. Edite o `.env` e informe provedor, modelo e a chave correspondente:
 
    ```env
+   LLM_PROVIDER=gemini          # gemini | maritaca | openai
+   LLM_MODEL=gemini-2.5-flash
    GOOGLE_API_KEY=coloque_sua_chave_real_aqui
    GOOGLE_GENAI_USE_VERTEXAI=FALSE
-   GEMINI_MODEL=gemini-2.0-flash
    ```
+
+   O `output_schema` das seções anteriores continua valendo em qualquer
+   provedor: os agentes são os mesmos, apenas o `model=` muda.
 
    O `.env` está no `.gitignore` (não é versionado); o `.env.example` é
    versionado como template.
@@ -227,7 +235,7 @@ A demonstração:
 Sem a chave configurada, o comando interrompe com:
 
 ```
-RuntimeError: GOOGLE_API_KEY não configurada. Copie '.env.example' para '.env' ...
+RuntimeError: GOOGLE_API_KEY não configurada, mas o provedor selecionado é 'gemini'. ...
 ```
 
 > `outputs/sample_run_output.json` é **gerado ao rodar** com uma chave válida —
@@ -242,7 +250,7 @@ arquivo final agrupa os três pareceres por `output_key`:
 ```json
 {
   "article_file": "examples/example_article.txt",
-  "model": "gemini-2.0-flash",
+  "model": "gemini:gemini-2.5-flash",
   "reviews": {
     "statistician_review": {
       "revisor": "statistician",
@@ -336,7 +344,7 @@ Cada revisor grava o parecer atualizado no estado da sessão via `output_key`
 # cross_review.py (resumo)
 LlmAgent(
     name="statistician_reviewer_cross",
-    model=MODEL,
+    model=build_model(),                      # Gemini, Maritaca ou OpenAI
     output_key="statistician_cross_review",  # parecer revisado no state
     output_schema=CrossReviewSchema,          # força + valida a estrutura
     instruction=build_cross_reviewer_prompt("statistician"),

@@ -14,7 +14,13 @@ from __future__ import annotations
 
 from .adk_bridge import trace_adk_event
 from .events import EventType, SpanKind, Status, TraceEvent, new_id
-from .timeline import build_timeline, load_events, print_timeline, render_timeline
+from .timeline import (
+    build_timeline,
+    load_events,
+    print_timeline,
+    render_timeline,
+    resumir_tokens,
+)
 from .tracer import (
     Exporter,
     JsonlExporter,
@@ -49,4 +55,5 @@ __all__ = [
     "build_timeline",
     "render_timeline",
     "print_timeline",
+    "resumir_tokens",
 ]

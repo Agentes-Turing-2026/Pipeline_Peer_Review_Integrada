@@ -15,8 +15,10 @@ não conhece peer review. Para aplicar a mesma arquitetura a OUTRO domínio
 multiagente, basta escrever novas ``PipelinePhase`` (com seus próprios schemas e
 agentes) e montá-las em um ``Pipeline`` — sem tocar na orquestração.
 
-Sem mocks: as fases 1-3 chamam o Gemini real. A fase 4 é pura formatação (sem
-LLM). Sem ``GOOGLE_API_KEY``, a demo falha com mensagem clara.
+As fases 1-3 chamam o provedor de LLM escolhido em ``model_provider.py``
+(Gemini, Maritaca ou OpenAI — a decisão é única e vale para todo o pipeline). A
+fase 4 é pura formatação (sem LLM). Sem a chave do provedor selecionado, a demo
+falha com mensagem clara; para rodar offline, use o modo mock.
 """
 
 from __future__ import annotations
@@ -46,8 +48,9 @@ from review_schema import (  # noqa: E402
     validar_editor_verdict,
     validar_review,
 )
+from model_provider import descricao_modelo, resolver_config  # noqa: E402
 from validacao_retry import PipelineValidationError, validar_com_tentativas  # noqa: E402
-from reviewer_agent import MODEL, REVIEWERS, _require_api_key, _run_reviewers  # noqa: E402
+from reviewer_agent import REVIEWERS, _require_api_key, _run_reviewers  # noqa: E402
 from cross_review import _run_cross_review  # noqa: E402
 from editor_agent import _run_editor  # noqa: E402
 from extraction import ExtractedDocument, PdfExtractor, get_default_extractor  # noqa: E402
@@ -114,7 +117,7 @@ if not logger.handlers:
 
 
 # ---------------------------------------------------------------------------
-# Modo de execução: API (Gemini real) x MOCK (JSONs locais, offline)
+# Modo de execução: API (provedor real) x MOCK (JSONs locais, offline)
 # ---------------------------------------------------------------------------
 # A alternância permite rodar o pipeline de ponta a ponta SEM internet nem
 # chave de API: no modo MOCK, cada fase lê respostas pré-salvas de um JSON local
@@ -178,7 +181,7 @@ def _registrar_validacao(coletor: ExecutionCollector | None, *, fase: str, agent
 class RunMode(str, Enum):
     """Modos de execução do pipeline."""
 
-    API = "api"     # chamadas reais ao Gemini, usando os prompts das fases
+    API = "api"     # chamadas reais ao provedor escolhido (ver model_provider)
     MOCK = "mock"   # lê respostas pré-salvas em JSON local (offline, sem chave)
 
 
@@ -198,6 +201,18 @@ def resolve_mode(config: dict) -> RunMode:
         f"Modo de execução desconhecido: {raw!r}. Use 'api' ou 'mock' "
         f"(via config['mode'] ou a variável de ambiente PIPELINE_MODE)."
     )
+
+
+def descrever_execucao(config: dict) -> str:
+    """Descreve QUEM produziu os pareceres, para relatório e traces.
+
+    No modo API devolve ``provedor:modelo`` (ex.: ``maritaca:sabia-3``); no modo
+    MOCK devolve ``mock (offline)``, em vez de anunciar um provedor que não foi
+    chamado — o relatório não deve sugerir uma execução que não aconteceu.
+    """
+    if resolve_mode(config) is RunMode.MOCK:
+        return "mock (offline)"
+    return descricao_modelo(config)
 
 
 def _load_mock(context: PipelineContext) -> dict:
@@ -534,6 +549,7 @@ class EditorVerdictPhase(PipelinePhase[CrossReviews, EditorVerdictSchema]):
 
 def _render_report_md(
     article_ref: str,
+    modelo_ref: str,
     reviews: dict[str, ReviewSchema],
     cross: dict[str, CrossReviewSchema],
     verdict: EditorVerdictSchema,
@@ -562,7 +578,7 @@ def _render_report_md(
         )
         if document_meta.get("warnings"):
             linhas.append(f"- **Avisos da extração:** {'; '.join(document_meta['warnings'])}")
-    linhas.append(f"- **Modelo:** {MODEL}")
+    linhas.append(f"- **Modelo:** {modelo_ref}")
     linhas.append(
         f"- **Decisão editorial:** {verdict.decisao} — {ESCALA_VEREDITO[verdict.decisao]}"
     )
@@ -626,11 +642,13 @@ class FinalReportPhase(PipelinePhase[EditorVerdictSchema, FinalReport]):
             phase2: CrossReviews = context.get("fase_2_leitura_cruzada")
             article_ref: str = context.config.get("article_ref", "entrada")
             document_meta: dict | None = context.config.get("document_meta")
+            modelo_ref = descrever_execucao(context.config)
 
             _tracer_atual = get_current_tracer()
             run_id = _tracer_atual.run_id if _tracer_atual is not None else context.run_id
             markdown = _render_report_md(
                 article_ref=article_ref,
+                modelo_ref=modelo_ref,
                 reviews=phase1.reviews,
                 cross=phase2.cross_reviews,
                 verdict=verdict,
@@ -642,7 +660,7 @@ class FinalReportPhase(PipelinePhase[EditorVerdictSchema, FinalReport]):
                 "run_id": run_id,
                 "article_ref": article_ref,
                 "document": document_meta,
-                "model": MODEL,
+                "model": modelo_ref,
                 "decisao": verdict.decisao,
                 "decisao_rotulo": ESCALA_VEREDITO[verdict.decisao],
                 "phase1_reviews": {rid: r.model_dump() for rid, r in phase1.reviews.items()},
@@ -821,9 +839,12 @@ def run_demo(
     Parameters
     ----------
     mode:
-        Modo de execução: ``"api"`` (Gemini real) ou ``"mock"`` (JSONs locais,
+        Modo de execução: ``"api"`` (provedor real) ou ``"mock"`` (JSONs locais,
         offline). Se ``None``, cai para a variável de ambiente ``PIPELINE_MODE``
         e, na ausência dela, para ``"api"``.
+
+        O provedor e o modelo do modo API vêm de ``model_provider.resolver_config``
+        (``LLM_PROVIDER`` / ``LLM_MODEL``), não desta função.
     pdf_path:
         Caminho de um PDF real. Quando informado, a fase 0 (extração
         determinística) roda antes dos agentes e o texto extraído alimenta o
@@ -864,7 +885,8 @@ def run_demo(
         config["article_ref"] = "examples/example_article.txt"
 
     resolved = resolve_mode(config)
-    # A chave de API só é exigida no modo que de fato chama o Gemini.
+    # A chave só é exigida no modo que de fato chama um provedor — e a checagem
+    # já aponta a variável do serviço selecionado (GOOGLE/MARITACA/OPENAI).
     if resolved is RunMode.API:
         _require_api_key()
 
@@ -916,7 +938,10 @@ def run_demo(
             definir_coletor_adk(coletor)
 
     pipeline = build_peer_review_pipeline(tracer=tracer)
-    print(f"Pipeline '{pipeline.name}' [modo={resolved.value}] — fases: {pipeline.phase_names}")
+    print(
+        f"Pipeline '{pipeline.name}' [modo={resolved.value} · "
+        f"modelo={descrever_execucao(config)}] — fases: {pipeline.phase_names}"
+    )
 
     resumo = None
 
@@ -946,6 +971,19 @@ def run_demo(
         else:
             article_path = HERE / "examples" / "example_article.txt"
             article_text = article_path.read_text(encoding="utf-8")
+
+        if resolved is RunMode.API:
+            # Registra na linha do tempo COM QUEM esta execução falou. É o que
+            # torna comparável um trace rodado no Gemini e outro no Maritaca.
+            escolha = resolver_config(config)
+            emit_event(
+                "modelo_selecionado", author="sistema", kind="call",
+                attributes={
+                    "provedor": escolha.provider.value,
+                    "modelo": escolha.model,
+                    "structured_output": escolha.structured_output,
+                },
+            )
 
         result = pipeline.run(
             initial_input=article_text, config=config, verbose=True, checkpoint_manager=ckpt,
@@ -987,7 +1025,11 @@ def run_demo(
             # Grupos 1 e 2.
             with tracer.run(
                 name="peer_review",
-                attributes={"modo": resolved.value, "artigo": config["article_ref"]},
+                attributes={
+                    "modo": resolved.value,
+                    "artigo": config["article_ref"],
+                    "modelo": descrever_execucao(config),
+                },
             ):
                 report = _run_and_save()
             trace_path = LOG_DIR / "traces" / f"{tracer.run_id}.jsonl"
