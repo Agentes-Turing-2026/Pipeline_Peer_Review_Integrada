@@ -114,3 +114,49 @@ def test_funciona_sobre_exemplo_versionado_do_editor():
     assert r["decisao_rotulo"] == "Aceitar com ressalvas"
     assert r["divergencia_notas"] == 1
     assert r["criticas_por_tipo"] == {"fraqueza": 2, "critica": 1}
+
+
+# ---------------------------------------------------------------------------
+# Marcador de execução da coerência (coerencia_executada / aviso_coerencia)
+# ---------------------------------------------------------------------------
+
+def test_coerencia_executada_quando_tool2_esta_integrada():
+    r = auditar_decisao_final(_veredito_coerente())
+    assert r["coerencia_executada"] is True
+    assert r["aviso_coerencia"] is None
+
+
+def test_coerencia_ausente_e_sinalizada_sem_derrubar_a_auditoria(monkeypatch):
+    # importlib: `import tools.auditar_decisao_final` devolveria a FUNÇÃO
+    # homônima reexportada em tools/__init__.py, não o módulo.
+    import importlib
+
+    mod = importlib.import_module("tools.auditar_decisao_final")
+    monkeypatch.setattr(mod, "checar_coerencia", None)
+    r = auditar_decisao_final(_veredito_coerente())
+    assert r["status"] == "ok"
+    assert r["coerencia_executada"] is False
+    assert "ausente" in r["aviso_coerencia"]
+    assert r["inconsistencias"] == []
+
+
+def test_coerencia_que_falha_e_sinalizada_sem_derrubar_a_auditoria(monkeypatch):
+    import importlib
+
+    mod = importlib.import_module("tools.auditar_decisao_final")
+
+    def _explode(veredito):
+        raise ValueError("boom")
+
+    monkeypatch.setattr(mod, "checar_coerencia", _explode)
+    r = auditar_decisao_final(_veredito_coerente())
+    assert r["status"] == "ok"
+    assert r["coerencia_executada"] is False
+    assert "falhou" in r["aviso_coerencia"]
+
+
+def test_entrada_invalida_tambem_expoe_o_marcador_de_coerencia():
+    r = auditar_decisao_final("não sou um dict")
+    assert r["status"] == "erro"
+    assert r["coerencia_executada"] is False
+    assert isinstance(r["aviso_coerencia"], str) and r["aviso_coerencia"]

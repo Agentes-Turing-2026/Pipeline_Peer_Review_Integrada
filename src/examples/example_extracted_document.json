@@ -1,0 +1,11 @@
+{
+  "_comentario": "Exemplo VERSIONADO do contrato de documento extraído (ExtractedDocument, em src/extraction/document.py). Use este arquivo como dado de teste (Grupos 1 e 2) sem depender do extrator real. O campo 'text' alimenta os agentes; 'warnings' carrega avisos de qualidade para a camada de validação decidir; 'extraction_duration_s' está em SEGUNDOS.",
+  "document_id": "doc_3a1f9c2e8b7d4a05",
+  "filename": "example_article.pdf",
+  "text": "Deep Learning Approaches for Automated Peer Review Quality Assessment\n\nAbstract\nPeer review is the cornerstone of scientific quality control, yet it faces mounting challenges... (texto completo extraído do PDF; veja examples/example_article.txt para um artigo de exemplo completo)",
+  "num_pages": 8,
+  "extractor": "liteparse",
+  "extractor_version": "2.6.0",
+  "extraction_duration_s": 0.4821,
+  "warnings": []
+}

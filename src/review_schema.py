@@ -247,8 +247,9 @@ class CriterionRevision(BaseModel):
     revisão de posição.
     """
 
-    model_config = {"extra": "forbid"}
-
+    # Sem ``extra: forbid`` aqui: este modelo é usado como ``output_schema`` do
+    # ADK e o Gemini rejeita ``additionalProperties`` no ``response_schema``. A
+    # validação estrita (campos obrigatórios, tipos, validators) é preservada.
     criterio: CriterioRevisavel = Field(
         ...,
         description="Qual critério (ou síntese) teve a nota revisada.",
@@ -299,8 +300,8 @@ class CrossReviewSchema(BaseModel):
     documenta, de forma rastreável, se e por que o revisor mudou de posição.
     """
 
-    model_config = {"extra": "forbid"}
-
+    # Sem ``extra: forbid``: usado como ``output_schema`` do ADK (ver nota em
+    # ``CriterionRevision``).
     revisor: str = Field(
         ...,
         min_length=1,
@@ -396,8 +397,9 @@ def cross_review_json_schema() -> dict:
 # EXATAMENTE a mesma escala 1-4 da ``nota_geral`` dos revisores
 # (``ESCALA_NOTA_GERAL``). Não há um segundo formato de nota (ex.: 0-10) nem um
 # vocabulário paralelo de recomendação (ex.: "Accept"/"Minor Revision"). Formatos
-# legados que usem outra escala precisam passar pelo adaptador documentado em
-# ``legacy_adapter.py`` antes de virarem um ``EditorVerdictSchema``.
+# legados que usem outra escala precisam ser convertidos para esta escala 1-4
+# antes de virarem um ``EditorVerdictSchema`` (um adaptador de exemplo, sem uso
+# ativo, está arquivado em ``src/archive/legacy_adapter.py``).
 
 #: Escala da decisão editorial. É a MESMA de ``nota_geral`` — propositalmente
 #: reutilizada para que exista uma única noção de "recomendação" no sistema.
@@ -415,8 +417,8 @@ class EditorCriticism(BaseModel):
     fonte (``revisor``) e o ``tipo`` padronizados.
     """
 
-    model_config = {"extra": "forbid"}
-
+    # Sem ``extra: forbid``: usado como ``output_schema`` do ADK (ver nota em
+    # ``CriterionRevision``).
     revisor: str = Field(
         ...,
         min_length=1,
@@ -444,8 +446,8 @@ class EditorVerdictSchema(BaseModel):
     única noção de recomendação em todo o sistema.
     """
 
-    model_config = {"extra": "forbid"}
-
+    # Sem ``extra: forbid``: usado como ``output_schema`` do ADK (ver nota em
+    # ``CriterionRevision``).
     decisao: int = Field(
         ...,
         ge=1,

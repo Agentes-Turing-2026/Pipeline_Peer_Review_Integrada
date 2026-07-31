@@ -103,10 +103,10 @@ def resumir_tokens(eventos: list[TraceEvent]) -> dict[str, Any]:
 
 
 _ICONE_STATUS = {
-    Status.OK.value: "✓",
-    Status.ERROR.value: "✗",
+    Status.OK.value: "OK",
+    Status.ERROR.value: "ERR",
     Status.WARNING.value: "!",
-    Status.RUNNING.value: "…",
+    Status.RUNNING.value: "...",
 }
 
 
@@ -125,8 +125,8 @@ def render_timeline(path: str | Path) -> str:
         kind = abertura.kind if abertura else None
         status = fechamento.status if fechamento else (abertura.status if abertura else "?")
         icone = _ICONE_STATUS.get(status, "?")
-        dur = fechamento.duration_ms if fechamento else None
-        dur_txt = f" [{dur:.0f} ms]" if dur is not None else ""
+        dur = fechamento.duration_s if fechamento else None
+        dur_txt = f" [{dur:.2f} s]" if dur is not None else ""
         autor = f" (autor: {abertura.author})" if abertura and abertura.author else ""
         kind_txt = f"<{kind}> " if kind else ""
         return f"{icone} {kind_txt}{nome}{autor}{dur_txt}"

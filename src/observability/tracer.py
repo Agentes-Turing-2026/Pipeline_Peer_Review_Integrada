@@ -199,7 +199,7 @@ class Tracer:
             raise
         finally:
             inicio = self._starts.pop(span_id, None)
-            dur_ms = (time.perf_counter() - inicio) * 1000 if inicio is not None else None
+            dur_s = (time.perf_counter() - inicio) if inicio is not None else None
             self._emit(
                 TraceEvent(
                     run_id=self.run_id,
@@ -211,7 +211,7 @@ class Tracer:
                     phase=phase,
                     author=author,
                     status=status,
-                    duration_ms=dur_ms,
+                    duration_s=dur_s,
                 )
             )
             _current_span.reset(token)
@@ -266,7 +266,7 @@ class Tracer:
             raise
         finally:
             inicio = self._starts.pop(self.root_span_id, None)
-            dur_ms = (time.perf_counter() - inicio) * 1000 if inicio is not None else None
+            dur_s = (time.perf_counter() - inicio) if inicio is not None else None
             self._emit(
                 TraceEvent(
                     run_id=self.run_id,
@@ -275,7 +275,7 @@ class Tracer:
                     kind=SpanKind.RUN.value,
                     span_id=self.root_span_id,
                     status=status,
-                    duration_ms=dur_ms,
+                    duration_s=dur_s,
                 )
             )
             _current_span.reset(span_token)

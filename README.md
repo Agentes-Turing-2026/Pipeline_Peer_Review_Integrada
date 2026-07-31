@@ -3,7 +3,7 @@
 Repositório **integrado** onde os grupos reúnem suas contribuições para um
 **pipeline multiagente em fases**. O caso de teste atual é **peer review** de
 artigos científicos, mas a arquitetura foi desenhada para ser **reaproveitável em
-outros domínios** (ver [§8 Extensibilidade](#8-extensibilidade)).
+outros domínios** (ver [§9 Extensibilidade](#9-extensibilidade)).
 
 O sistema recebe um artigo, faz três revisores especializados avaliarem-no de
 forma independente, promove uma leitura cruzada entre eles, sintetiza um veredito
@@ -22,10 +22,11 @@ inválidos entre fases.
 |---|---|
 | **Objetivo** | Orquestrar agentes em fases sequenciais, com contratos de dados estáveis. |
 | **Caso de teste** | Peer review (revisão por pares de um artigo). |
-| **Contratos oficiais** | `ReviewSchema`, `CrossReviewSchema`, `EditorVerdictSchema`. |
+| **Entrada** | **PDF real** (extraído localmente) ou artigo de exemplo em texto. |
+| **Contratos oficiais** | `ReviewSchema`, `CrossReviewSchema`, `EditorVerdictSchema`, `ExtractedDocument`. |
 | **Modos de execução** | **API** (provedor real) · **Mock** (JSONs locais, offline). |
 | **Provedores de LLM** | **Gemini** · **Maritaca AI** · **OpenAI** — escolha única em `LLM_PROVIDER`, sem duplicar agentes. |
-| **Saída** | Relatório final em Markdown + JSON estruturado. |
+| **Saída** | Relatório final em Markdown + JSON estruturado, organizados por `run_id`. |
 
 Princípio central: a **orquestração é genérica e agnóstica de domínio**
 ([`src/pipeline_base.py`](src/pipeline_base.py)); a **lógica de peer review**
@@ -51,10 +52,23 @@ orquestração.
     ├── reviewer_agent.py         # Fase 1 — agentes revisores
     ├── cross_review.py           # Fase 2 — leitura cruzada
     ├── editor_agent.py           # Fase 3 — editor-chefe
-    ├── legacy_adapter.py         # Adaptador de formatos legados -> schemas oficiais
-    ├── validacao_retry.py        # Grupo 1 — camada de validação, retry e confiabilidade
-    ├── demo_validacao.py         # Demo offline da camada de validação (sem API key)
+    ├── validacao_retry.py        # Grupo 1 — camada de validação, retry e confiabilidade (saída dos agentes)
+    ├── eventos_validacao.py      # Grupo 1 — eventos estruturados (JSONL) de validação/retry
+    ├── validacao_entrada.py      # Grupo 1 — validação e resiliência da ENTRADA por PDF (arquivo + texto extraído)
+    ├── demos/                    # Grupo 1 — demos offline (sem API key), separadas do código principal
+    │   ├── demo_validacao.py     #   camada de validação/retry da saída dos agentes
+    │   ├── demo_eventos.py       #   eventos estruturados de validação/retry
+    │   └── demo_entrada_pdf.py   #   validação da entrada por PDF (passa / alerta / retry / bloqueio)
+    ├── tests/
+    │   ├── test_eventos_validacao.py
+    │   └── test_validacao_entrada.py
+    ├── archive/                  # Grupo 1 — código legado sem uso ativo, arquivado (ver archive/README.md)
+    │   └── legacy_adapter.py     #   adaptador de veredito legado (não importado por ninguém)
     ├── demo_observabilidade.py   # Grupo 3 — demo offline: roda o pipeline e reconstrói o trace
+    ├── extraction/               # Grupo 3 — entrada real por PDF (contrato + extratores substituíveis)
+    │   ├── document.py           #   contrato ExtractedDocument (id, texto, páginas, extrator, duração em s, avisos)
+    │   ├── extractor.py          #   interface PdfExtractor + LiteParseExtractor (extrator padrão)
+    │   └── tests/                #   testes do contrato e do extrator (PDF digital e "escaneado")
     ├── observability/            # Grupo 3 — base de observabilidade e traces
     │   ├── events.py             #   formato COMUM de evento (run_id, span_id, phase, author, status)
     │   ├── tracer.py             #   ciclo de vida da execução + spans + storage local (JSONL)
@@ -67,6 +81,9 @@ orquestração.
     │   └── peer_review_mock.json
     └── examples/                 # Artigo de exemplo + exemplos de I/O dos schemas
         ├── example_article.txt
+        ├── example_extracted_document.json    # ExtractedDocument válido (entrada por PDF)
+        ├── example_extracted_insuficiente.json # ExtractedDocument com extração insuficiente (Grupo 1 → alerta)
+        ├── example_extracted_escaneado.json   # ExtractedDocument sem texto / escaneado (Grupo 1 → retry/bloqueio)
         ├── example_valid_output.json          # ReviewSchema válido
         ├── example_invalid_output.json        # ReviewSchema inválido (viola notas e justificativas)
         ├── example_cross_review_output.json   # CrossReviewSchema válido
@@ -96,7 +113,10 @@ orquestração.
 
   > O **modo Mock** (offline) precisa apenas de `pydantic` e `python-dotenv`.
   > O **modo API** também precisa de `google-adk` e `google-genai`; os provedores
-  > **Maritaca** e **OpenAI** somam `litellm` (o Gemini não precisa dele).
+  > **Maritaca** e **OpenAI** somam `litellm` (o Gemini não precisa dele); a
+  > **entrada por PDF** precisa de `liteparse`. As versões usadas nos testes
+  > desta atividade estão **fixadas** no `requirements.txt`: `google-adk==1.27.5`,
+  > `google-genai==1.67.0` e `liteparse==2.6.0`.
 
 ### 2.2 Modo Local / Mock (offline, sem chave) — recomendado para testar o fluxo
 
@@ -174,18 +194,70 @@ Detalhes e pontos de extensão: [`src/model_provider.py`](src/model_provider.py)
 - **Compatibilidade.** Um `.env` antigo com apenas `GOOGLE_API_KEY` +
   `GEMINI_MODEL`, sem nenhuma variável `LLM_*`, continua funcionando como antes.
 
-### 2.4 Saídas geradas
+### 2.4 Entrada real por PDF (Grupo 3)
 
-Após rodar (em qualquer modo), em `src/outputs/` e `src/logs/` (ignorados pelo git):
+O pipeline aceita um **artigo real em PDF**. A extração é uma etapa
+**determinística obrigatória** (fase 0) que roda ANTES dos agentes — ela não
+depende de decisão de LLM — e entra na **mesma linha do tempo** (mesmo `run_id`)
+das demais fases:
+
+```bash
+# Execução completa: PDF -> extração -> agentes ADK -> relatório (requer .env)
+python main.py --pdf caminho/do/artigo.pdf
+
+# Extração real do PDF + fases dos agentes com respostas mock (offline)
+python main.py mock --pdf caminho/do/artigo.pdf
+```
+
+**Contrato do documento extraído** — qualquer extrator devolve um
+`ExtractedDocument` ([`src/extraction/document.py`](src/extraction/document.py)),
+independente de biblioteca (exemplo versionado em
+[`src/examples/example_extracted_document.json`](src/examples/example_extracted_document.json)):
+
+| Campo | Conteúdo |
+|---|---|
+| `document_id` | identificador estável do documento (hash do conteúdo) |
+| `filename` | nome do arquivo original |
+| `text` | texto extraído (alimenta os agentes) |
+| `num_pages` | número de páginas |
+| `extractor` / `extractor_version` | extrator utilizado e sua versão |
+| `extraction_duration_s` | duração da extração em **segundos** |
+| `warnings` | avisos de qualidade (ex.: PDF possivelmente escaneado) |
+
+**Extrator substituível** — o pipeline conhece apenas a interface `PdfExtractor`
+([`src/extraction/extractor.py`](src/extraction/extractor.py)). O extrator padrão é o
+[LiteParse](https://pypi.org/project/liteparse/) (`liteparse==2.6.0`, local, leve);
+trocá-lo no futuro = escrever outra subclasse (ou injetar via
+`run_demo(extractor=...)`), **sem reescrever o pipeline**.
+
+**Qualidade e limitações (primeira versão):**
+
+- PDFs com **texto digital** são o caso suportado. OCR vem **desligado** por
+  padrão (`LiteParseExtractor(ocr_enabled=True)` habilita, exigindo Tesseract).
+- PDF **escaneado/complexo** não derruba o pipeline na extração: gera `warnings`
+  no contrato e eventos de **alerta** no trace, para a camada de validação
+  (Grupo 1) decidir se bloqueia ou encaminha para revisão. Se **nenhum** texto
+  for extraído, a execução falha com **erro claro** (não há o que revisar).
+- Baixa densidade de texto (< 200 caracteres/página, em média) também gera aviso.
+- Não coloque PDFs de acesso restrito no repositório; os testes geram PDFs
+  mínimos em memória.
+
+### 2.5 Saídas geradas
+
+Após rodar (em qualquer modo), em `src/outputs/` e `src/logs/` (ignorados pelo git).
+Os artefatos de cada execução ficam em `src/outputs/<run_id>/` — uma execução
+**não sobrescreve** silenciosamente a anterior:
 
 | Arquivo | Conteúdo |
 |---|---|
-| `src/outputs/final_report.md` | Relatório final legível (decisão, síntese, críticas, recomendações). |
-| `src/outputs/final_report.json` | Mesmo conteúdo em JSON estruturado, com as saídas de todas as fases. |
-| `src/logs/pipeline.log` | Log fase a fase da execução. |
-| `src/logs/traces/<run_id>.jsonl` | Trace de observabilidade da execução (um evento por linha) — ver [§7 Observabilidade](#7-observabilidade-e-traces-grupo-3). |
+| `src/outputs/<run_id>/final_report.md` | Relatório final legível (decisão, síntese, críticas, recomendações), apontando para o **documento** e a **execução** que o geraram. |
+| `src/outputs/<run_id>/final_report.json` | Mesmo conteúdo em JSON estruturado, com as saídas de todas as fases, os metadados do documento extraído (sem o texto completo) e o `run_id` **único** da execução (compartilhado com o trace do Grupo 3). |
+| `src/outputs/<run_id>/resumo_execucao.json` | Resumo auditável de métricas da execução (Grupo 2). |
+| `src/logs/pipeline.log` | Log fase a fase, em texto (orquestração + tools do Grupo 2). |
+| `src/logs/validacao_events.jsonl` | Eventos estruturados de validação/retry (Grupo 1) — ver [§4](#4-validação-retry-e-confiabilidade-grupo-1). |
+| `src/logs/traces/<run_id>.jsonl` | Trace de observabilidade da execução (um evento por linha), mesmo `run_id` do item acima — ver [§8 Observabilidade](#8-observabilidade-e-traces-grupo-3). |
 
-### 2.5 Como escolher o modo (precedência)
+### 2.6 Como escolher o modo (precedência)
 
 1. **Flag** explícita: `python main.py mock` / `run_demo(mode="mock")`;
 2. **Variável de ambiente** `PIPELINE_MODE` (`api` / `mock`, com sinônimos `local`, `offline`, `real`);
@@ -249,9 +321,9 @@ falha cedo e de forma explícita, em vez de se propagar silenciosamente.
   `recomendacoes_aos_autores`.
 
 > **Sem formatos paralelos.** Escalas e vocabulários legados (ex.: notas 0–10 e
-> rótulos "Accept/Minor Revision") só entram no sistema através do adaptador
-> documentado [`src/legacy_adapter.py`](src/legacy_adapter.py), que converte e
-> **revalida** contra os schemas oficiais.
+> rótulos "Accept/Minor Revision") precisam ser convertidos para os schemas
+> oficiais e **revalidados**. Um adaptador de exemplo (sem uso ativo) está
+> arquivado em [`src/archive/legacy_adapter.py`](src/archive/legacy_adapter.py).
 
 ### Camada de orquestração (genérica)
 
@@ -328,7 +400,7 @@ A função `validar_com_tentativas()` substitui as chamadas diretas a
 Roda **sem internet e sem `GOOGLE_API_KEY`**, demonstrando os 4 requisitos da spec:
 
 ```bash
-python src/demo_validacao.py
+python src/demos/demo_validacao.py
 ```
 
 | Cenário | O que demonstra |
@@ -348,6 +420,142 @@ python src/demo_validacao.py
 | [`example_invalid_output.json`](src/examples/example_invalid_output.json) | `ReviewSchema` | `nota=5` (acima do máximo), `justificativa` só espaços, `confianca.nota=0` |
 | [`example_invalid_cross_review.json`](src/examples/example_invalid_cross_review.json) | `CrossReviewSchema` | `mudou_posicao=true` com `mudancas=[]`, `resposta_aos_pares` vazia |
 | [`example_invalid_editor_verdict.json`](src/examples/example_invalid_editor_verdict.json) | `EditorVerdictSchema` | `decisao=5`, `justificativa=""`, `notas_por_revisor={}`, recomendação vazia |
+
+### Observabilidade estruturada: eventos de validação/retry
+
+Além do log em texto de sempre, cada tentativa de validação agora também gera
+um **evento estruturado** (JSON), em [`src/eventos_validacao.py`](src/eventos_validacao.py),
+respondendo diretamente à pergunta central desta parte do pipeline: *o dado
+passou, falhou ou foi corrigido por quê?*
+
+**Por que um arquivo separado (`src/logs/validacao_events.jsonl`) em vez de
+escrever no `pipeline.log` que já existe:** o `pipeline.log` já é usado, no
+mesmo formato de texto, pela orquestração e pelas tools do Grupo 2. Criar um
+arquivo próprio, em JSON Lines (uma linha = um evento = um JSON válido), evita
+disputar esse arquivo e deixa os eventos fáceis de consultar por qualquer
+ferramenta (jq, grep, pandas) sem parsing heurístico de texto.
+
+**Categorias de evento** (campo `categoria`), cobrindo os casos pedidos:
+
+| Categoria | Quando ocorre |
+|---|---|
+| `passou_de_primeira` | Validou na 1ª tentativa. |
+| `falhou_recuperavel` | Falhou, mas ainda há tentativas — retry a seguir. |
+| `corrigido` | O corrector (mock ou API) rodou; o evento carrega o **diff** dos campos alterados (`correcao_aplicada`). |
+| `passou_apos_correcao` | Validou numa tentativa ≥ 2, depois de correção. |
+| `bloqueado` | Esgotaram-se as tentativas (ou o corrector falhou) — `requer_revisao_humana=True`. |
+
+**`run_id` — agora unificado com o Grupo 3.** Antes desta integração, cada
+execução gerava um `run_id` (`uuid4`) próprio, sem relação com nenhum outro
+grupo. Com a base de observabilidade do Grupo 3 (`src/observability/`)
+presente, `Pipeline.run()` (em `pipeline_base.py`) passa a sobrescrever
+`context.run_id` pelo `tracer.run_id` assim que o contexto é criado — então o
+mesmo identificador aparece em `validacao_events.jsonl`, em
+`final_report.json` e no trace (`src/logs/traces/<run_id>.jsonl`). Sem o
+tracer (uso isolado do Grupo 1: `demo_eventos.py`, testes, ou o pacote
+`observability` ausente), o comportamento antigo continua valendo — um
+`uuid4` próprio é gerado e nada quebra.
+
+**Eventos também aparecem na timeline do Grupo 3.** `emitir_evento()` (em
+`eventos_validacao.py`), além de gravar `validacao_events.jsonl` como antes,
+repassa cada evento para `observability.emit_event()` — de forma guardada:
+se o pacote não existir, essa chamada é um no-op silencioso, e uma falha nela
+nunca derruba a validação (o evento já foi gravado no arquivo próprio antes
+dessa chamada). Assim, rodando `python main.py mock` com as duas camadas
+presentes, `python src/demo_observabilidade.py` mostra as tentativas, retries,
+correções e bloqueios do Grupo 1 na MESMA árvore reconstruída do trace.
+
+**Rodando a demo:**
+
+```bash
+python src/demos/demo_eventos.py
+```
+
+A demo reaproveita os cenários de sucesso, retry-com-correção e esgotamento de
+`demo_validacao.py`, mas sob um único `run_id`, e ao final lê de volta o
+arquivo de eventos e imprime a linha do tempo da execução — é assim que se
+"abre o arquivo de eventos e entende o histórico de validação de uma
+execução". Rodada isoladamente (sem o pacote `observability`), funciona
+exatamente como antes da integração.
+
+**Rodando o pipeline completo** (`python main.py mock`), os eventos de todas
+as fases ficam em `src/logs/validacao_events.jsonl`, todos com o mesmo
+`run_id` impresso no console ao final da execução — e, se o tracer do Grupo 3
+estiver ativo, esse é também o `run_id` do trace.
+
+**Testes:** `src/tests/test_eventos_validacao.py` cobre o diff de correção, a
+validação de categorias, a leitura/filtragem por `run_id` e a sequência
+completa de eventos emitidos por `validar_com_tentativas()` nos três casos
+(sucesso, retry e bloqueio) — sem depender do pacote `observability` (que,
+quando ausente, faz o espelhamento virar no-op).
+
+**O que este item não faz (por escopo):** não recalcula nem substitui a
+validação/retry existente, e não captura eventos internos do ADK (isso é do
+Grupo 3, via `adk_bridge.py`). O identificador comum e a conexão com o trace,
+que antes ficavam como proposta em aberto, já estão integrados — ver
+[§8](#8-observabilidade-e-traces-grupo-3).
+
+### 4.1 Validação e resiliência da ENTRADA por PDF
+
+Com a entrada real por PDF (extração do Grupo 3, [§2.4](#24-entrada-real-por-pdf-grupo-3)),
+a mesma filosofia de confiabilidade passa a valer **antes dos agentes**: decidir
+se um documento pode seguir, precisa de nova tentativa ou deve ser bloqueado —
+sem nunca aceitar em silêncio um arquivo ou texto inadequado. Isso vive em
+[`src/validacao_entrada.py`](src/validacao_entrada.py) e reusa a MESMA trilha de
+eventos (`validacao_events.jsonl`), o MESMO `run_id` e o MESMO espelhamento no
+trace do Grupo 3 — não há segundo sistema de logs nem outro identificador.
+
+**Duas verificações determinísticas (sem LLM):**
+
+| Etapa | Função | Verifica |
+|---|---|---|
+| Antes da extração | `classificar_arquivo_pdf` | arquivo inexistente, não-arquivo, formato ≠ `.pdf`, vazio, sem cabeçalho `%PDF` (corrompido), `/Encrypt` (protegido). |
+| Depois da extração | `classificar_documento_extraido` | texto vazio, muito curto (< 200 caracteres), caracteres ilegíveis (> 30%), baixa densidade por página (< 200 car./página) e avisos do extrator. |
+
+**Política de decisão — quando seguir, alertar, retentar ou bloquear:**
+
+| Decisão | Quando | Efeito | Categoria de evento |
+|---|---|---|---|
+| **OK** | arquivo e texto em condições. | Segue para os agentes. | `passou_de_primeira` |
+| **ALERTA** | texto curto, ilegível, baixa densidade ou avisos do extrator. | **Segue**, marcado para revisão humana (não é silencioso). | `alerta_entrada` |
+| **RETRY** | texto vazio (PDF escaneado/protegido). | Nova tentativa **só** se houver estratégia de reextração (ex.: OCR); ela é registrada como `corrigido` apenas se o texto realmente mudar. | `falhou_recuperavel` → `corrigido` → `passou_apos_correcao` |
+| **BLOQUEAR** | arquivo ruim, ou texto irrecuperável sem estratégia. | Levanta `EntradaInvalidaError`; `main.py` encerra com mensagem clara e código ≠ 0. | `bloqueado` |
+
+**Por que retry só às vezes:** repetir a leitura de um arquivo corrompido,
+inexistente ou protegido nunca muda o resultado — esses casos bloqueiam de
+imediato (`permite_retry=False`). Retry é reservado ao que uma nova tentativa
+pode de fato resolver (texto ausente → reextrair com OCR). E uma reextração que
+devolve o mesmo texto **não** é registrada como "correção" (evita marcar
+correção onde os dados não mudaram).
+
+**Integração combinada com o Grupo 3 (mínima):** o arquivo é validado em
+`run_demo` antes de extrair; o documento é validado dentro de `extract_pdf_input`
+logo após a extração; e a própria chamada de extração é envolvida por um
+`try/except` que transforma uma falha do parser (PDF protegido por senha,
+corrompido de um jeito que só o extrator detecta) em evento estruturado via
+`registrar_falha_extracao` — em vez de um traceback solto. O orquestrador
+`validar_entrada_com_retry` expõe o ciclo completo (arquivo → extração →
+documento → retry) pronto para o Grupo 3 ligar uma estratégia de OCR quando
+quiser — sem redesenhar o pipeline.
+
+**Rodando a demo** (offline, sem PDF real — usa o contrato `ExtractedDocument`
+e arquivos de fixture temporários):
+
+```bash
+python src/demos/demo_entrada_pdf.py
+```
+
+Ela apresenta os quatro casos pedidos — documento que passa, caso com alerta,
+falha recuperável (reextração) e bloqueio com motivo claro — todos sob o mesmo
+`run_id`, e imprime a linha do tempo lida de volta do arquivo de eventos.
+
+**Testes:** [`src/tests/test_validacao_entrada.py`](src/tests/test_validacao_entrada.py)
+cobre os checks de arquivo (fixtures em `tmp_path`), os de documento (contrato
+`ExtractedDocument`), a emissão de eventos com `run_id` e os quatro cenários do
+orquestrador de retry.
+
+**Fora de escopo (dos outros grupos):** não implementamos o extrator de PDF nem
+o OCR (Grupo 3), e não calculamos tokens/métricas (Grupo 2).
 
 ---
 
@@ -427,9 +635,9 @@ Seção transparente sobre o que **não** é "real" hoje:
 | **Fases 1–3 no modo Mock** | Lidas de [`src/mocks/peer_review_mock.json`](src/mocks/peer_review_mock.json). No modo API, são chamadas reais ao provedor escolhido. |
 | **Fase 4 (relatório)** | **Nunca** mockada — é pura formatação em Python, idêntica nos dois modos. |
 | **Entrada do artigo** | Usa um `.txt` de exemplo ([`src/examples/example_article.txt`](src/examples/example_article.txt)). **Ainda não há** ingestão/parse de PDF. |
-| **Validação & retry** | **Integrado** — ver [§4](#4-validação-retry-e-confiabilidade-grupo-1). Retry automático com corrector em modo Mock (offline) e API (provedor escolhido). `PipelineValidationError` bloqueia propagação de dados inválidos. |
+| **Validação & retry** | **Integrado** — ver [§4](#4-validação-retry-e-confiabilidade-grupo-1). Retry automático com corrector em modo Mock (offline) e API (provedor escolhido). `PipelineValidationError` bloqueia propagação de dados inválidos. Eventos estruturados em `src/logs/validacao_events.jsonl`, com `run_id` **unificado** com o tracer do Grupo 3 quando presente, e espelhados em `observability.emit_event()` — ver [§8](#8-observabilidade-e-traces-grupo-3). |
 | **Tools de auditoria** | **Integradas** — ver [§5](#5-tools-determinísticas-de-auditoria-grupo-2). `validar_completude` (Fase 1), `checar_coerencia` (chamada por dentro da Fase 3) e `auditar_decisao_final` (Fase 3) — todas ativas. |
-| **Adaptação de pareceres legados de revisor** | O [`src/legacy_adapter.py`](src/legacy_adapter.py) converte o **veredito do editor** legado; o parecer **de revisor** legado não tem as 4 dimensões e, por isso, **não** é adaptado automaticamente (exige nova revisão — limitação documentada). |
+| **Adaptação de pareceres legados de revisor** | O adaptador arquivado em [`src/archive/legacy_adapter.py`](src/archive/legacy_adapter.py) (sem uso ativo) converte o **veredito do editor** legado; o parecer **de revisor** legado não tem as 4 dimensões e, por isso, **não** é adaptado automaticamente (exige nova revisão — limitação documentada). |
 
 > O conteúdo do JSON de mock é **fictício**, porém **válido** contra os schemas —
 > incluindo um caso realista em que o `domain_expert` muda de posição na leitura
@@ -438,7 +646,150 @@ Seção transparente sobre o que **não** é "real" hoje:
 
 ---
 
-## 7. Observabilidade e Traces (Grupo 3)
+## 7. Métricas de Execução e Resumo Auditável (Grupo 2)
+
+Além das três tools de auditoria (ver seção de Tools Determinísticas), o
+Grupo 2 também instrumenta a EXECUÇÃO do pipeline: cada rodada gera um
+conjunto de eventos estruturados e um resumo agregado, pensados para evoluir
+depois para métricas ADK/OpenTelemetry sem depender de parsing de texto solto.
+
+### O que foi adicionado
+
+Vive em [`src/metrics/`](src/metrics/), sem dependências externas:
+
+| Arquivo | O que é |
+|---|---|
+| `eventos.py` | `ExecutionEvent` — evento atômico (fase, tipo, nome, status, duração, detalhes). |
+| `coletor.py` | `ExecutionCollector` — acumula eventos de uma execução; dois context managers (`fase()`, `tool()`) medem duração e registram sucesso/falha automaticamente. |
+| `adk_usage.py` | Tokens reais: lê o `usage_metadata` dos `Event` do ADK (entrada, resposta, pensamento, cache, total + modelo/agente/`invocation_id`), com dedup de parciais/repetidos e custo preparado via preço configurado. |
+| `resumo.py` | `gerar_resumo()` — agrega os eventos em um `ResumoExecucao`: duração total, duração por fase, nº validações/retries/falhas, tools chamadas, tokens (por agente, por fase e da execução), decisão final, status final, alertas. |
+| `exportar.py` | `imprimir_resumo()` (tabela no terminal) e `salvar_resumo_json()`. |
+
+### Como se integra ao pipeline
+
+Importação guardada, no mesmo padrão das tools: se `src/metrics/` não
+existir, o pipeline roda normalmente, sem instrumentação. Quando existe,
+`run_demo()` cria um `ExecutionCollector` e o pendura em
+`context.config["_metrics_collector"]` — a mesma convenção de chave "privada"
+já usada por `_auditoria_veredito` e `_mock_cache`. Cada fase mede sua própria
+duração com `coletor.fase(self.name)`; cada chamada de tool é medida junto do
+seu evento de tool; cada validação (`validar_com_tentativas`) é traduzida em
+eventos de validação/retry/falha a partir do `ResultadoValidacao` já retornado.
+
+O resumo é montado em `run_demo()`, depois que `pipeline.run()` retorna (assim
+inclui a duração da própria Fase 4). Ele é incluído em
+`final_report.json["resumo_execucao"]` e também salvo separadamente em
+`src/outputs/resumo_execucao.json`.
+
+### Tokens reais (usage_metadata do ADK)
+
+No modo API, os três loops de agente (`reviewer_agent.py`, `cross_review.py`,
+`editor_agent.py`) passam cada `Event` do Runner para
+`registrar_usage_adk(event, fase=...)` — ao lado do `trace_adk_event` do
+Grupo 3, consumindo o MESMO stream de eventos. Cada resposta de modelo vira um
+evento `chamada_llm` com os tokens do `usage_metadata` (`prompt`, `candidates`,
+`thoughts`, `cached`, `total`), o modelo (`model_version`), o agente
+(`author`), a fase e o `invocation_id`.
+
+Regras importantes (detalhes e schema em
+[`docs/metricas_reference.md §5`](docs/metricas_reference.md)):
+
+- **Indisponível ≠ zero:** campo que o ADK não informou fica `null` no JSON e
+  `n/d` no terminal — nunca `0`, e nunca estimado por tamanho de texto.
+  Chamada sem `usage_metadata` ainda é registrada, com aviso em `alertas`.
+- **Sem contagem duplicada:** parciais de streaming são ignorados (usage
+  cumulativo — só a resposta final conta) e o registro deduplica por
+  `event.id` (ou `invocation_id + author`).
+- **Agregação:** `tokens_execucao` (categorias da execução completa),
+  `tokens_por_agente` e `tokens_por_fase` (soma de `tokens_total`), além de
+  `chamadas_llm` e `modelo_usado`.
+- **Custo preparado, não ativado:** `custo_estimado` só é calculado se houver
+  preço configurado via `GRUPO2_PRECO_USD_MILHAO_TOKENS_ENTRADA`/`_SAIDA`
+  (nenhum preço fixo no código); sem preço, permanece `null`.
+- No modo **mock** não há chamada LLM — a seção de tokens indica isso
+  explicitamente, e todos os campos ficam `null`/`n/d`.
+
+### Exemplo de resumo gerado (modo mock)
+
+```
+==========================================================================
+  RESUMO DA EXECUÇÃO — run_id=a8ffbc92-984f-4fba-9174-0add31fe98ed
+==========================================================================
+Status final:        sucesso
+Decisão final:       3
+Revisão humana:      não recomendada
+Duração total:       < 0.01 s
+
+Duração por fase:
+  fase_1_revisao_independente              < 0.01 s
+  fase_2_leitura_cruzada                   < 0.01 s
+  fase_3_editor_chefe                      < 0.01 s
+  fase_4_relatorio_final                   < 0.01 s
+
+Validações: 7    Retries: 0    Falhas: 0
+
+Tools chamadas:
+  validar_completude                       3x
+  auditar_decisao_final                    1x
+  checar_coerencia                         1x
+
+Tokens (usage_metadata do ADK):
+  (nenhuma chamada LLM registrada — ex.: modo mock)
+
+Alertas:
+  (nenhum)
+==========================================================================
+```
+
+Em execução real (modo API), a seção de tokens mostra chamadas LLM, modelo,
+tokens da execução completa (entrada/resposta/pensamento/cache/total) e os
+totais por agente e por fase — com `n/d` onde o ADK não informou o dado.
+
+Durações são medidas em **segundos**; em modo mock as fases rodam tão rápido
+que aparecem como `< 0.01 s` (ver `_fmt_s` em
+[`docs/metricas_reference.md`](docs/metricas_reference.md) para a regra de
+arredondamento na exibição — o JSON sempre grava o float completo).
+
+### Como rodar
+
+```bash
+# Testes das métricas (offline, sem API key)
+.venv/bin/pytest src/metrics/tests/ -v
+
+# Pipeline completo em modo mock — imprime o resumo no final
+.venv/bin/python main.py mock
+cat src/outputs/resumo_execucao.json
+```
+
+### Decisões de projeto
+
+- **Por que `context.config` e não um novo atributo em `PipelineContext`?**
+  Para não alterar `pipeline_base.py` (orquestração genérica, fora do escopo
+  do Grupo 2) — `config` já é usado como "estado interno de execução" por
+  outras partes do sistema.
+- **Por que medir a fase por dentro do `run()` de cada fase, e não com um
+  hook em `Pipeline.run()`?** Porque `pipeline_base.py` não tem
+  `on_phase_start`/`on_phase_end` hoje, e criar um não é responsabilidade
+  desta atividade.
+- **Tokens** (`tokens_totais`, `modelo_usado`, `chamadas_llm`,
+  `tokens_execucao`, `tokens_por_agente`, `tokens_por_fase`) são preenchidos
+  a partir do `usage_metadata` real do ADK quando há execução com Gemini;
+  `custo_estimado` fica preparado (preço via variáveis de ambiente) — ver
+  [`docs/metricas_reference.md §5`](docs/metricas_reference.md) e o caminho
+  de evolução até OpenTelemetry.
+
+### O que ficou fora desta etapa
+
+- Nenhuma hierarquia de span/parent_span nem bridge com o `Runner` do ADK
+  (território do Grupo 3).
+- `duracao_total_s` já é tempo de parede (medido pelo `ExecutionCollector`,
+  início ao fim da execução), não soma de fases. Mas `duracao_soma_fases_s`
+  (a soma) continua assumindo fases sequenciais; se o pipeline passar a
+  rodar fases em paralelo, esse número específico precisaria ser revisto.
+
+---
+
+## 8. Observabilidade e Traces (Grupo 3)
 
 Base de observabilidade próxima do padrão **Google ADK** (eventos, sessões,
 traces). Responde à pergunta **"por onde a execução passou?"**: ao final de uma
@@ -486,21 +837,28 @@ com os campos que respondem às perguntas exigidas:
 
 ### Como entender o trace gerado
 
-A reconstrução imprime a árvore da execução, por exemplo:
+A reconstrução imprime a árvore da execução (durações em **segundos**), por exemplo:
 
 ```
-✓ <run> peer_review [7 ms]
-  ✓ <phase> fase_1_revisao_independente [2 ms]
+✓ <run> peer_review [0.05 s]
+  ✓ <phase> fase_0_extracao_pdf (autor: grupo3) [0.48 s]
+    · ✓ documento_extraido [grupo3] — document_id=doc_3a1f9c2e8b7d4a05, num_pages=8, extractor=liteparse
+  ✓ <phase> fase_1_revisao_independente [0.02 s]
     · ✓ parecer_validado [statistician] — tentativas=1, validado_por=grupo1
     · ✓ completude [grupo2] — revisor=statistician, score=1.0, completo=True
-  ✓ <phase> fase_2_leitura_cruzada [1 ms]
+  ✓ <phase> fase_2_leitura_cruzada [0.01 s]
     · ✓ leitura_cruzada_concluida [sistema] — mudaram_de_posicao=['domain_expert']
-  ✓ <phase> fase_3_editor_chefe [0 ms]
+  ✓ <phase> fase_3_editor_chefe [0.01 s]
     · ✓ auditoria_veredito [grupo2] — requer_revisao_humana=False
-  ✓ <phase> fase_4_relatorio_final [1 ms]
+  ✓ <phase> fase_4_relatorio_final [0.01 s]
 
 tokens: não reportados nesta execução (modo mock ou provedor sem medição)
 ```
+
+> **Durações em segundos:** o campo `duration_s` do evento (e a apresentação da
+> timeline) usa **segundos**. Traces antigos com `duration_ms` continuam legíveis:
+> `TraceEvent.from_dict` converte o valor automaticamente. A fase 0 (extração de
+> PDF) entra na mesma árvore quando a entrada é um PDF real.
 
 O `final_report.json` passa a carregar o `run_id` que o gerou — o relatório
 **aponta para a execução** que o produziu.
@@ -529,6 +887,12 @@ Uma linha, sem acoplamento (no-op fora de uma execução):
 from observability import emit_event
 emit_event("validacao_ok", author="grupo1", attributes={"tentativas": 1})
 ```
+
+> **Já integrado com o Grupo 1:** `eventos_validacao.py` chama exatamente esse
+> `emit_event()` a partir de `emitir_evento()`, e `Pipeline.run()` sincroniza
+> `context.run_id` com `tracer.run_id` — ver [§4](#4-validação-retry-e-confiabilidade-grupo-1).
+> Rode `python src/demo_observabilidade.py` (ou `python main.py mock`) para ver
+> as tentativas/retries/correções do Grupo 1 na mesma árvore reconstruída aqui.
 
 ### Decisões de projeto (curtas)
 
@@ -566,7 +930,7 @@ Cobre os pontos que a demo em modo mock não exercita:
 
 ---
 
-## 8. Extensibilidade
+## 9. Extensibilidade
 
 A separação **orquestração × domínio** permite reusar a mesma arquitetura de 4
 fases em outros problemas multiagentes. A receita conceitual:
@@ -615,6 +979,12 @@ python main.py api
 $env:LLM_PROVIDER="maritaca"; python main.py api
 $env:LLM_PROVIDER="openai";   python main.py api
 
+# PDF REAL de ponta a ponta (extração + agentes ADK + relatório; requer .env):
+python main.py --pdf caminho/do/artigo.pdf
+
+# Extração real do PDF + fases dos agentes offline (mock):
+python main.py mock --pdf caminho/do/artigo.pdf
+
 # Testes offline da seleção de provedor/modelo:
 python -m pytest src/tests -q
 
@@ -622,7 +992,10 @@ python -m pytest src/tests -q
 python src/tools/demo_tools.py
 
 # Demo offline da camada de validação/retry do Grupo 1 (sem API key):
-python src/demo_validacao.py
+python src/demos/demo_validacao.py
+
+# Demo offline dos eventos estruturados de validação/retry do Grupo 1 (sem API key):
+python src/demos/demo_eventos.py
 
 # Demo offline da observabilidade/traces do Grupo 3 (sem API key):
 python src/demo_observabilidade.py
@@ -630,8 +1003,14 @@ python src/demo_observabilidade.py
 # Testes das tools (Grupo 2):
 .venv/bin/pytest src/tools/tests/ -v
 
+# Testes dos eventos estruturados (Grupo 1):
+.venv/bin/pytest src/tests/ -v
+
 # Testes da observabilidade (Grupo 3):
 .venv/bin/python -m pytest src/observability/tests/ -v
+
+# Testes da entrada por PDF (contrato + extrator + modo mock preservado, Grupo 3):
+.venv/bin/python -m pytest src/extraction/tests/ src/tests/test_extracao_e_mock.py -v
 
 # Demos isoladas de fases específicas (usam a API real):
 python src/reviewer_agent.py     # apenas a Fase 1 (avaliação independente)
