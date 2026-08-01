@@ -8,6 +8,15 @@
       "caminho_local": null,
       "caracteristicas": ["smoke_test", "sem_pdf_real"],
       "observacoes": "Usado só para validar a ferramenta em modo mock, sem custo. Substituir/completar com os PDFs reais do corpus (grupos de IA e psicologia) quando estiverem disponíveis."
+    },
+    {
+      "id": "icd_hallucinations_2312_15710",
+      "titulo": "Alleviating Hallucinations of Large Language Models through Induced Hallucinations",
+      "area": "inteligencia_artificial",
+      "fonte_url": "https://arxiv.org/pdf/2312.15710v2",
+      "caminho_local": null,
+      "caracteristicas": ["duas_colunas", "tabelas", "formulas_matematicas", "citacoes_extensas", "medio"],
+      "observacoes": "arXiv 2312.15710v2 (Zhang, Cui, Bi, Shi). Formato padrao ACL. Caracteristicas de layout (colunas/paginas) a confirmar apos a extracao real — ajustar aqui se a extracao mostrar algo diferente."
     }
   ]
 }
