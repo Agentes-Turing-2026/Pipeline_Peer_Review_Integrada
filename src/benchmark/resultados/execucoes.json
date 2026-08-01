@@ -26,6 +26,36 @@
       "quantidade_falhas": 0,
       "alertas": [],
       "erro": null
+    },
+    "icd_hallucinations_2312_15710": {
+      "doc_id": "icd_hallucinations_2312_15710",
+      "titulo": "Alleviating Hallucinations of Large Language Models through Induced Hallucinations",
+      "area": "inteligencia_artificial",
+      "caracteristicas": [
+        "duas_colunas",
+        "tabelas",
+        "formulas_matematicas",
+        "citacoes_extensas",
+        "medio"
+      ],
+      "mode": "mock",
+      "timestamp": "2026-08-01T17:45:22.880217+00:00",
+      "run_id": "run_ac94ee9ba556492c",
+      "resultado": "sucesso",
+      "decisao_final": 3,
+      "requer_revisao_humana": false,
+      "duracao_total_s": 0.3242720590060344,
+      "tokens_totais": null,
+      "custo_estimado": null,
+      "quantidade_tools_chamadas": {
+        "validar_completude": 3,
+        "auditar_decisao_final": 1,
+        "checar_coerencia": 1
+      },
+      "quantidade_retries": 0,
+      "quantidade_falhas": 0,
+      "alertas": [],
+      "erro": null
     }
   }
 }
