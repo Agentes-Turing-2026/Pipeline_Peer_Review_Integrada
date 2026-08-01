@@ -124,8 +124,13 @@ def resolver_pdf_local(doc: DocumentoCorpus, cache_dir: Path) -> Path | None:
     if destino.exists():
         return destino
 
+    # arXiv (e outras fontes) devolvem 403 para requisições sem User-Agent reconhecível.
+    requisicao = urllib.request.Request(
+        doc.fonte_url,
+        headers={"User-Agent": "Mozilla/5.0 (compatible; PipelinePeerReview-Benchmark/1.0)"},
+    )
     try:
-        with urllib.request.urlopen(doc.fonte_url) as resposta:
+        with urllib.request.urlopen(requisicao) as resposta:
             conteudo = resposta.read()
     except (urllib.error.URLError, OSError) as exc:
         raise RuntimeError(
