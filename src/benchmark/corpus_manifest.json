@@ -17,6 +17,42 @@
       "caminho_local": null,
       "caracteristicas": ["duas_colunas", "tabelas", "formulas_matematicas", "citacoes_extensas", "medio"],
       "observacoes": "arXiv 2312.15710v2 (Zhang, Cui, Bi, Shi). Formato padrao ACL. Caracteristicas de layout (colunas/paginas) a confirmar apos a extracao real — ajustar aqui se a extracao mostrar algo diferente."
+    },
+    {
+      "id": "acl_emnlp2024_116",
+      "titulo": "Embedding and Gradient Say Wrong: A White-Box Method for Hallucination Detection",
+      "area": "inteligencia_artificial",
+      "fonte_url": "https://aclanthology.org/2024.emnlp-main.116.pdf",
+      "caminho_local": null,
+      "caracteristicas": ["duas_colunas", "tabelas", "citacoes_extensas", "medio"],
+      "observacoes": "ACL Anthology, EMNLP 2024 main, paginas 1950-1959 (10p). CC-BY 4.0."
+    },
+    {
+      "id": "arxiv_2507_04137",
+      "titulo": "Detecting Token-Level Hallucinations Using Variance Signals: A Reference-Free Approach",
+      "area": "inteligencia_artificial",
+      "fonte_url": "https://arxiv.org/pdf/2507.04137v3",
+      "caminho_local": null,
+      "caracteristicas": ["medio", "autor_unico"],
+      "observacoes": "arXiv 2507.04137v3 (Keshav Kumar). Layout (colunas) a confirmar apos extracao real."
+    },
+    {
+      "id": "arxiv_2606_00819",
+      "titulo": "Mitigating Hallucinations in Large Language Models Via Decoder Layer Skipping",
+      "area": "inteligencia_artificial",
+      "fonte_url": "https://arxiv.org/pdf/2606.00819v1",
+      "caminho_local": null,
+      "caracteristicas": ["curto"],
+      "observacoes": "arXiv 2606.00819v1. 5 paginas conforme comentario dos autores — caso de teste para documento curto."
+    },
+    {
+      "id": "comdem_17665",
+      "titulo": "Hallucination Detection in Large Language Models via Multi-Granular Uncertainty Quantification",
+      "area": "inteligencia_artificial",
+      "fonte_url": "https://comdem.org/index.php/comdem/article/download/17665/12131",
+      "caminho_local": null,
+      "caracteristicas": ["medio", "tabelas"],
+      "observacoes": "Computer and Decision Making (COMDEM), paginas 805-819 (15p), CC-BY 4.0. Qualidade editorial do periodico incerta (nao e o foco do teste, mas registrar caso a extracao mostre algo atipico)."
     }
   ]
 }
