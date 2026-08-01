@@ -53,6 +53,42 @@
       "caminho_local": null,
       "caracteristicas": ["medio", "tabelas"],
       "observacoes": "Computer and Decision Making (COMDEM), paginas 805-819 (15p), CC-BY 4.0. Qualidade editorial do periodico incerta (nao e o foco do teste, mas registrar caso a extracao mostre algo atipico)."
+    },
+    {
+      "id": "psicologia_neuropsi_escaneado",
+      "titulo": "Avaliação Neuropsicológica e Funções Cognitivas (trecho digitalizado)",
+      "area": "psicologia",
+      "fonte_url": null,
+      "caminho_local": "src/benchmark/cache_pdfs/1 Avaliação Neuropsi e Funções Cognitivas_2025 (Livro Neuropsicologia Clínica)_cópia.pdf",
+      "caracteristicas": ["escaneado", "baixa_qualidade", "curto", "sem_camada_de_texto"],
+      "observacoes": "Producer: Epson Scan 2, sem texto pesquisavel nos metadados, 9p/5.4MB. Extrator roda com ocr_enabled=False por padrao (src/extraction/extractor.py) — esperado aviso de possivel escaneamento e/ou bloqueio na validacao do Grupo 1. Este e o teste principal do caminho entrada_bloqueada/aviso que ainda nao tinhamos exercitado com dado real."
+    },
+    {
+      "id": "psicologia_respiracao_monografia",
+      "titulo": "Técnicas de respiração diafragmática (monografia)",
+      "area": "psicologia",
+      "fonte_url": null,
+      "caminho_local": "src/benchmark/cache_pdfs/Artigo sobre técnicas de respiração diafragmática-2024.pdf",
+      "caracteristicas": ["longo", "monografia_tcc", "nao_e_artigo_de_periodico"],
+      "observacoes": "48 paginas — 3x o maior documento ja testado (15p). NAO rodar em api sem antes checar em mock quantas paginas o extrator confirma e sem estimar volume de token por chamada."
+    },
+    {
+      "id": "psicologia_slides_modalidades_grupais",
+      "titulo": "Modalidades grupais (slide de aula)",
+      "area": "psicologia",
+      "fonte_url": null,
+      "caminho_local": "src/benchmark/cache_pdfs/Modalidades grupais- slides.pdf.pdf",
+      "caracteristicas": ["slide", "nao_e_artigo_academico"],
+      "observacoes": "Canva, 12p, widescreen. Nome de arquivo com extensao duplicada .pdf.pdf — preservado assim de proposito, e o nome real em disco."
+    },
+    {
+      "id": "psicologia_slides_ciclo_sono",
+      "titulo": "Ciclo sono-vigília — Parte 06 (material de curso)",
+      "area": "psicologia",
+      "fonte_url": null,
+      "caminho_local": "src/benchmark/cache_pdfs/Parte 06 - Ciclo sono vigilia Abril 2026.pdf",
+      "caracteristicas": ["slide", "nao_e_artigo_academico", "apresentacao_curso"],
+      "observacoes": "PowerPoint, 38p, material IPOG. 'Parte 06' indica modulo fatiado de uma serie maior."
     }
   ]
 }
