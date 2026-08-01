@@ -1,0 +1,285 @@
+{
+  "gerado_em": "2026-08-01T19:23:47.919900+00:00",
+  "atencao": [
+    "psicologia_neuropsi_escaneado"
+  ],
+  "tabela": {
+    "exemplo_mock": {
+      "doc_id": "exemplo_mock",
+      "titulo": "Artigo de exemplo (smoke test sem PDF real)",
+      "area": "smoke_test",
+      "caracteristicas": [
+        "smoke_test",
+        "sem_pdf_real"
+      ],
+      "mode": "mock",
+      "timestamp": "2026-08-01T17:22:53.424716+00:00",
+      "run_id": "run_27f1b5130fd64f77",
+      "resultado": "sucesso",
+      "decisao_final": 3,
+      "requer_revisao_humana": false,
+      "duracao_total_s": 0.03751346499484498,
+      "tokens_totais": null,
+      "custo_estimado": null,
+      "quantidade_tools_chamadas": {
+        "validar_completude": 3,
+        "auditar_decisao_final": 1,
+        "checar_coerencia": 1
+      },
+      "quantidade_retries": 0,
+      "quantidade_falhas": 0,
+      "alertas": [],
+      "erro": null
+    },
+    "icd_hallucinations_2312_15710": {
+      "doc_id": "icd_hallucinations_2312_15710",
+      "titulo": "Alleviating Hallucinations of Large Language Models through Induced Hallucinations",
+      "area": "inteligencia_artificial",
+      "caracteristicas": [
+        "duas_colunas",
+        "tabelas",
+        "formulas_matematicas",
+        "citacoes_extensas",
+        "medio"
+      ],
+      "mode": "api",
+      "timestamp": "2026-08-01T17:57:48.045820+00:00",
+      "run_id": "run_e9752afbf95c4e17",
+      "resultado": "sucesso",
+      "decisao_final": 2,
+      "requer_revisao_humana": false,
+      "duracao_total_s": 59.48066684701189,
+      "tokens_totais": 155144,
+      "custo_estimado": null,
+      "quantidade_tools_chamadas": {
+        "validar_completude": 3,
+        "auditar_decisao_final": 1,
+        "checar_coerencia": 1
+      },
+      "quantidade_retries": 0,
+      "quantidade_falhas": 0,
+      "alertas": [],
+      "erro": null
+    },
+    "arxiv_2507_04137": {
+      "doc_id": "arxiv_2507_04137",
+      "titulo": "Detecting Token-Level Hallucinations Using Variance Signals: A Reference-Free Approach",
+      "area": "inteligencia_artificial",
+      "caracteristicas": [
+        "medio",
+        "autor_unico"
+      ],
+      "mode": "api",
+      "timestamp": "2026-08-01T18:28:24.377398+00:00",
+      "run_id": "run_3805cb31a4ba4f57",
+      "resultado": "sucesso",
+      "decisao_final": 1,
+      "requer_revisao_humana": false,
+      "duracao_total_s": 58.3996520590008,
+      "tokens_totais": 81898,
+      "custo_estimado": null,
+      "quantidade_tools_chamadas": {
+        "validar_completude": 3,
+        "auditar_decisao_final": 1,
+        "checar_coerencia": 1
+      },
+      "quantidade_retries": 0,
+      "quantidade_falhas": 0,
+      "alertas": [],
+      "erro": null
+    },
+    "arxiv_2606_00819": {
+      "doc_id": "arxiv_2606_00819",
+      "titulo": "Mitigating Hallucinations in Large Language Models Via Decoder Layer Skipping",
+      "area": "inteligencia_artificial",
+      "caracteristicas": [
+        "curto"
+      ],
+      "mode": "api",
+      "timestamp": "2026-08-01T18:29:22.786499+00:00",
+      "run_id": "run_c3f3a6a8b7824436",
+      "resultado": "sucesso",
+      "decisao_final": 2,
+      "requer_revisao_humana": false,
+      "duracao_total_s": 40.376010588995996,
+      "tokens_totais": 94321,
+      "custo_estimado": null,
+      "quantidade_tools_chamadas": {
+        "validar_completude": 3,
+        "auditar_decisao_final": 1,
+        "checar_coerencia": 1
+      },
+      "quantidade_retries": 0,
+      "quantidade_falhas": 0,
+      "alertas": [],
+      "erro": null
+    },
+    "acl_emnlp2024_116": {
+      "doc_id": "acl_emnlp2024_116",
+      "titulo": "Embedding and Gradient Say Wrong: A White-Box Method for Hallucination Detection",
+      "area": "inteligencia_artificial",
+      "caracteristicas": [
+        "duas_colunas",
+        "tabelas",
+        "citacoes_extensas",
+        "medio"
+      ],
+      "mode": "api",
+      "timestamp": "2026-08-01T18:30:03.173002+00:00",
+      "run_id": "run_30c1def12ec3412d",
+      "resultado": "sucesso",
+      "decisao_final": 2,
+      "requer_revisao_humana": false,
+      "duracao_total_s": 38.60362954399898,
+      "tokens_totais": 114943,
+      "custo_estimado": null,
+      "quantidade_tools_chamadas": {
+        "validar_completude": 3,
+        "auditar_decisao_final": 1,
+        "checar_coerencia": 1
+      },
+      "quantidade_retries": 0,
+      "quantidade_falhas": 0,
+      "alertas": [],
+      "erro": null
+    },
+    "comdem_17665": {
+      "doc_id": "comdem_17665",
+      "titulo": "Hallucination Detection in Large Language Models via Multi-Granular Uncertainty Quantification",
+      "area": "inteligencia_artificial",
+      "caracteristicas": [
+        "medio",
+        "tabelas"
+      ],
+      "mode": "api",
+      "timestamp": "2026-08-01T18:30:41.793523+00:00",
+      "run_id": "run_7a8a0710e7a64266",
+      "resultado": "sucesso",
+      "decisao_final": 2,
+      "requer_revisao_humana": false,
+      "duracao_total_s": 43.33423655499064,
+      "tokens_totais": 124642,
+      "custo_estimado": null,
+      "quantidade_tools_chamadas": {
+        "validar_completude": 3,
+        "auditar_decisao_final": 1,
+        "checar_coerencia": 1
+      },
+      "quantidade_retries": 0,
+      "quantidade_falhas": 0,
+      "alertas": [],
+      "erro": null
+    },
+    "psicologia_neuropsi_escaneado": {
+      "doc_id": "psicologia_neuropsi_escaneado",
+      "titulo": "Avaliação Neuropsicológica e Funções Cognitivas (trecho digitalizado)",
+      "area": "psicologia",
+      "caracteristicas": [
+        "escaneado",
+        "baixa_qualidade",
+        "curto",
+        "sem_camada_de_texto"
+      ],
+      "mode": "mock",
+      "timestamp": "2026-08-01T19:12:43.212821+00:00",
+      "run_id": null,
+      "resultado": "entrada_bloqueada",
+      "decisao_final": null,
+      "requer_revisao_humana": null,
+      "duracao_total_s": null,
+      "tokens_totais": null,
+      "custo_estimado": null,
+      "quantidade_tools_chamadas": null,
+      "quantidade_retries": null,
+      "quantidade_falhas": null,
+      "alertas": [],
+      "erro": {
+        "tipo": "EntradaInvalidaError",
+        "mensagem": "a extração não produziu texto utilizável (possível PDF escaneado ou protegido); uma nova tentativa com OCR pode recuperar o conteúdo"
+      }
+    },
+    "psicologia_respiracao_monografia": {
+      "doc_id": "psicologia_respiracao_monografia",
+      "titulo": "Técnicas de respiração diafragmática (monografia)",
+      "area": "psicologia",
+      "caracteristicas": [
+        "longo",
+        "monografia_tcc",
+        "nao_e_artigo_de_periodico"
+      ],
+      "mode": "api",
+      "timestamp": "2026-08-01T19:21:05.384010+00:00",
+      "run_id": "run_d0ef77a1aec04366",
+      "resultado": "sucesso",
+      "decisao_final": 1,
+      "requer_revisao_humana": false,
+      "duracao_total_s": 56.71400036900013,
+      "tokens_totais": 168648,
+      "custo_estimado": null,
+      "quantidade_tools_chamadas": {
+        "validar_completude": 3,
+        "auditar_decisao_final": 1,
+        "checar_coerencia": 1
+      },
+      "quantidade_retries": 0,
+      "quantidade_falhas": 0,
+      "alertas": [],
+      "erro": null
+    },
+    "psicologia_slides_modalidades_grupais": {
+      "doc_id": "psicologia_slides_modalidades_grupais",
+      "titulo": "Modalidades grupais (slide de aula)",
+      "area": "psicologia",
+      "caracteristicas": [
+        "slide",
+        "nao_e_artigo_academico"
+      ],
+      "mode": "api",
+      "timestamp": "2026-08-01T19:18:52.384801+00:00",
+      "run_id": "run_75997f23d7ff4d09",
+      "resultado": "sucesso",
+      "decisao_final": 2,
+      "requer_revisao_humana": false,
+      "duracao_total_s": 46.0323577010131,
+      "tokens_totais": 38643,
+      "custo_estimado": null,
+      "quantidade_tools_chamadas": {
+        "validar_completude": 3,
+        "auditar_decisao_final": 1,
+        "checar_coerencia": 1
+      },
+      "quantidade_retries": 0,
+      "quantidade_falhas": 0,
+      "alertas": [],
+      "erro": null
+    },
+    "psicologia_slides_ciclo_sono": {
+      "doc_id": "psicologia_slides_ciclo_sono",
+      "titulo": "Ciclo sono-vigília — Parte 06 (material de curso)",
+      "area": "psicologia",
+      "caracteristicas": [
+        "slide",
+        "nao_e_artigo_academico",
+        "apresentacao_curso"
+      ],
+      "mode": "api",
+      "timestamp": "2026-08-01T19:19:38.426909+00:00",
+      "run_id": "run_3e82229954624753",
+      "resultado": "sucesso",
+      "decisao_final": 2,
+      "requer_revisao_humana": false,
+      "duracao_total_s": 42.02710155500972,
+      "tokens_totais": 50278,
+      "custo_estimado": null,
+      "quantidade_tools_chamadas": {
+        "validar_completude": 3,
+        "auditar_decisao_final": 1,
+        "checar_coerencia": 1
+      },
+      "quantidade_retries": 0,
+      "quantidade_falhas": 0,
+      "alertas": [],
+      "erro": null
+    }
+  }
+}

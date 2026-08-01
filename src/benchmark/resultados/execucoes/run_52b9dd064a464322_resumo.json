@@ -1,0 +1,31 @@
+{
+  "run_id": "run_52b9dd064a464322",
+  "duracao_total_s": 0.10517588799120858,
+  "duracao_soma_fases_s": 0.07661868001741823,
+  "duracao_por_fase_s": {
+    "fase_0_extracao_pdf": 0.067072702004225,
+    "fase_1_revisao_independente": 0.00364371101022698,
+    "fase_2_leitura_cruzada": 0.003364403994055465,
+    "fase_3_editor_chefe": 0.0018617050081957132,
+    "fase_4_relatorio_final": 0.0006761580007150769
+  },
+  "quantidade_validacoes": 7,
+  "quantidade_retries": 0,
+  "quantidade_falhas": 0,
+  "quantidade_tools_chamadas": {
+    "validar_completude": 3,
+    "auditar_decisao_final": 1,
+    "checar_coerencia": 1
+  },
+  "requer_revisao_humana": false,
+  "decisao_final": 3,
+  "status_final": "sucesso",
+  "alertas": [],
+  "tokens_totais": null,
+  "custo_estimado": null,
+  "modelo_usado": null,
+  "chamadas_llm": null,
+  "tokens_execucao": null,
+  "tokens_por_agente": {},
+  "tokens_por_fase": {}
+}

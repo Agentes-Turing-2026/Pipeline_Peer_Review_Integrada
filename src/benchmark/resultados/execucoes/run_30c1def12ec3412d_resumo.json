@@ -1,0 +1,49 @@
+{
+  "run_id": "run_30c1def12ec3412d",
+  "duracao_total_s": 38.60362954399898,
+  "duracao_soma_fases_s": 38.53678763199423,
+  "duracao_por_fase_s": {
+    "fase_0_extracao_pdf": 0.19272859799093567,
+    "fase_1_revisao_independente": 11.988777934006066,
+    "fase_2_leitura_cruzada": 9.116822227995726,
+    "fase_3_editor_chefe": 17.23663594899699,
+    "fase_4_relatorio_final": 0.0018229230045108125
+  },
+  "quantidade_validacoes": 7,
+  "quantidade_retries": 0,
+  "quantidade_falhas": 0,
+  "quantidade_tools_chamadas": {
+    "validar_completude": 3,
+    "auditar_decisao_final": 1,
+    "checar_coerencia": 1
+  },
+  "requer_revisao_humana": false,
+  "decisao_final": 2,
+  "status_final": "sucesso",
+  "alertas": [],
+  "tokens_totais": 114943,
+  "custo_estimado": null,
+  "modelo_usado": "gpt-5.6-luna",
+  "chamadas_llm": 7,
+  "tokens_execucao": {
+    "tokens_entrada": 104372,
+    "tokens_resposta": 10571,
+    "tokens_pensamento": 1390,
+    "tokens_cache": 0,
+    "tokens_total": 114943
+  },
+  "tokens_por_agente": {
+    "copyeditor_reviewer": 14075,
+    "statistician_reviewer": 14297,
+    "domain_expert_reviewer": 14391,
+    "copyeditor_reviewer_cross": 17723,
+    "domain_expert_reviewer_cross": 17829,
+    "statistician_reviewer_cross": 17986,
+    "editor_in_chief": 18642
+  },
+  "tokens_por_fase": {
+    "fase_1_revisao_independente": 42763,
+    "fase_2_leitura_cruzada": 53538,
+    "fase_3_editor_chefe": 18642
+  }
+}
