@@ -1,6 +1,6 @@
 # Comparativo de execuções — benchmark (Grupo 2)
 
-Gerado em: 2026-08-01T19:13:38.327978+00:00
+Gerado em: 2026-08-01T19:23:47.919900+00:00
 
 ## ⚠ Atenção
 
@@ -17,6 +17,6 @@ Gerado em: 2026-08-01T19:13:38.327978+00:00
 | exemplo_mock | Artigo de exemplo (smoke test sem PDF real) | smoke_test | smoke_test, sem_pdf_real | mock | 2026-08-01T17:22:53.424716+00:00 | run_27f1b5130fd64f77 | sucesso | 3 | não | 0.0375 | — | — | validar_completude=3; auditar_decisao_final=1; checar_coerencia=1 | 0 | 0 | (nenhum) | — |
 | icd_hallucinations_2312_15710 | Alleviating Hallucinations of Large Language Models through Induced Hallucinations | inteligencia_artificial | duas_colunas, tabelas, formulas_matematicas, citacoes_extensas, medio | api | 2026-08-01T17:57:48.045820+00:00 | run_e9752afbf95c4e17 | sucesso | 2 | não | 59.4807 | 155144 | — | validar_completude=3; auditar_decisao_final=1; checar_coerencia=1 | 0 | 0 | (nenhum) | — |
 | psicologia_neuropsi_escaneado | Avaliação Neuropsicológica e Funções Cognitivas (trecho digitalizado) | psicologia | escaneado, baixa_qualidade, curto, sem_camada_de_texto | mock | 2026-08-01T19:12:43.212821+00:00 | — | entrada_bloqueada | — | — | — | — | — | — | — | — | (nenhum) | tipo=EntradaInvalidaError; mensagem=a extração não produziu texto utilizável (possível PDF escaneado ou protegido); uma nova tentativa com OCR pode recuperar o conteúdo |
-| psicologia_respiracao_monografia | Técnicas de respiração diafragmática (monografia) | psicologia | longo, monografia_tcc, nao_e_artigo_de_periodico | mock | 2026-08-01T19:12:43.325143+00:00 | run_d519031d9e7b494c | sucesso | 3 | não | 0.3743 | — | — | validar_completude=3; auditar_decisao_final=1; checar_coerencia=1 | 0 | 0 | (nenhum) | — |
-| psicologia_slides_ciclo_sono | Ciclo sono-vigília — Parte 06 (material de curso) | psicologia | slide, nao_e_artigo_academico, apresentacao_curso | mock | 2026-08-01T19:12:44.027305+00:00 | run_52b9dd064a464322 | sucesso | 3 | não | 0.1052 | — | — | validar_completude=3; auditar_decisao_final=1; checar_coerencia=1 | 0 | 0 | (nenhum) | — |
-| psicologia_slides_modalidades_grupais | Modalidades grupais (slide de aula) | psicologia | slide, nao_e_artigo_academico | mock | 2026-08-01T19:12:43.703372+00:00 | run_ae364fab5f104a79 | sucesso | 3 | não | 0.3209 | — | — | validar_completude=3; auditar_decisao_final=1; checar_coerencia=1 | 0 | 0 | (nenhum) | — |
+| psicologia_respiracao_monografia | Técnicas de respiração diafragmática (monografia) | psicologia | longo, monografia_tcc, nao_e_artigo_de_periodico | api | 2026-08-01T19:21:05.384010+00:00 | run_d0ef77a1aec04366 | sucesso | 1 | não | 56.7140 | 168648 | — | validar_completude=3; auditar_decisao_final=1; checar_coerencia=1 | 0 | 0 | (nenhum) | — |
+| psicologia_slides_ciclo_sono | Ciclo sono-vigília — Parte 06 (material de curso) | psicologia | slide, nao_e_artigo_academico, apresentacao_curso | api | 2026-08-01T19:19:38.426909+00:00 | run_3e82229954624753 | sucesso | 2 | não | 42.0271 | 50278 | — | validar_completude=3; auditar_decisao_final=1; checar_coerencia=1 | 0 | 0 | (nenhum) | — |
+| psicologia_slides_modalidades_grupais | Modalidades grupais (slide de aula) | psicologia | slide, nao_e_artigo_academico | api | 2026-08-01T19:18:52.384801+00:00 | run_75997f23d7ff4d09 | sucesso | 2 | não | 46.0324 | 38643 | — | validar_completude=3; auditar_decisao_final=1; checar_coerencia=1 | 0 | 0 | (nenhum) | — |
