@@ -21,6 +21,10 @@ src/logs/
 outputs/
 logs/
 
+# PDFs baixados para o cache do benchmark (Grupo 2) — manifesto e
+# resultados/ vão pro git, os PDFs em si não.
+src/benchmark/cache_pdfs/
+
 # Editores / SO
 .vscode/
 .idea/
