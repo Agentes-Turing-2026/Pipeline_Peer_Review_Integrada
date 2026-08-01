@@ -966,6 +966,39 @@ mesmos.
 
 ---
 
+## 10. Benchmark e Diagnóstico (Grupo 2)
+
+Além das métricas de uma execução isolada (seção 7), o Grupo 2 também
+mantém uma ferramenta para rodar o pipeline sobre um **corpus de PDFs
+reais** — não só o artigo de exemplo embutido — e acumular evidência
+auditável de como o pipeline se comporta com documentos variados (tamanhos,
+formatos, qualidades de PDF diferentes), tanto em modo mock quanto com
+chamadas reais de API.
+
+Vive em [`src/benchmark/`](src/benchmark/): um manifesto de corpus
+(`corpus_manifest.json`), um executor em lote (`executar.py`, sempre
+sequencial e com seleção explícita de documentos e modo) e um comparativo
+entre execuções já registradas (`comparar.py`). A ferramenta só **consome**
+o que `pipeline.run_demo()` e `metrics/resumo.py` já produzem — não
+duplica lógica de métrica. Ver
+[`docs/benchmark_reference.md`](docs/benchmark_reference.md) para o schema
+completo do manifesto, os números atuais do corpus e os achados já
+coletados (ex.: o bloqueio de entrada funcionando para PDF escaneado, e o
+pipeline não diferenciando slides de artigos acadêmicos).
+
+```bash
+# Modo mock (offline, sem custo) — seleção explícita, sem modo "roda tudo"
+.venv/bin/python -m src.benchmark.executar --mode mock --docs exemplo_mock
+
+# Modo api (chamadas reais ao provedor configurado) — mesmo comando, outro modo
+.venv/bin/python -m src.benchmark.executar --mode api --docs icd_hallucinations_2312_15710
+
+# Comparativo entre tudo que já foi executado (não roda o pipeline de novo)
+.venv/bin/python -m src.benchmark.comparar
+```
+
+---
+
 ## Apêndice — comandos rápidos
 
 ```bash
