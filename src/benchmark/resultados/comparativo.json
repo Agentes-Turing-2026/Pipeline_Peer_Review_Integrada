@@ -1,5 +1,5 @@
 {
-  "gerado_em": "2026-08-01T17:59:25.276648+00:00",
+  "gerado_em": "2026-08-01T18:20:16.717878+00:00",
   "atencao": [],
   "tabela": {
     "exemplo_mock": {
@@ -48,6 +48,115 @@
       "requer_revisao_humana": false,
       "duracao_total_s": 59.48066684701189,
       "tokens_totais": 155144,
+      "custo_estimado": null,
+      "quantidade_tools_chamadas": {
+        "validar_completude": 3,
+        "auditar_decisao_final": 1,
+        "checar_coerencia": 1
+      },
+      "quantidade_retries": 0,
+      "quantidade_falhas": 0,
+      "alertas": [],
+      "erro": null
+    },
+    "arxiv_2507_04137": {
+      "doc_id": "arxiv_2507_04137",
+      "titulo": "Detecting Token-Level Hallucinations Using Variance Signals: A Reference-Free Approach",
+      "area": "inteligencia_artificial",
+      "caracteristicas": [
+        "medio",
+        "autor_unico"
+      ],
+      "mode": "mock",
+      "timestamp": "2026-08-01T18:19:19.988358+00:00",
+      "run_id": "run_c2f8308cb2414d14",
+      "resultado": "sucesso",
+      "decisao_final": 3,
+      "requer_revisao_humana": false,
+      "duracao_total_s": 0.33335668600921053,
+      "tokens_totais": null,
+      "custo_estimado": null,
+      "quantidade_tools_chamadas": {
+        "validar_completude": 3,
+        "auditar_decisao_final": 1,
+        "checar_coerencia": 1
+      },
+      "quantidade_retries": 0,
+      "quantidade_falhas": 0,
+      "alertas": [],
+      "erro": null
+    },
+    "arxiv_2606_00819": {
+      "doc_id": "arxiv_2606_00819",
+      "titulo": "Mitigating Hallucinations in Large Language Models Via Decoder Layer Skipping",
+      "area": "inteligencia_artificial",
+      "caracteristicas": [
+        "curto"
+      ],
+      "mode": "mock",
+      "timestamp": "2026-08-01T18:19:21.155110+00:00",
+      "run_id": "run_a0105079d7de41af",
+      "resultado": "sucesso",
+      "decisao_final": 3,
+      "requer_revisao_humana": false,
+      "duracao_total_s": 0.31394783200812526,
+      "tokens_totais": null,
+      "custo_estimado": null,
+      "quantidade_tools_chamadas": {
+        "validar_completude": 3,
+        "auditar_decisao_final": 1,
+        "checar_coerencia": 1
+      },
+      "quantidade_retries": 0,
+      "quantidade_falhas": 0,
+      "alertas": [],
+      "erro": null
+    },
+    "acl_emnlp2024_116": {
+      "doc_id": "acl_emnlp2024_116",
+      "titulo": "Embedding and Gradient Say Wrong: A White-Box Method for Hallucination Detection",
+      "area": "inteligencia_artificial",
+      "caracteristicas": [
+        "duas_colunas",
+        "tabelas",
+        "citacoes_extensas",
+        "medio"
+      ],
+      "mode": "mock",
+      "timestamp": "2026-08-01T18:19:23.025279+00:00",
+      "run_id": "run_482b4c0e29694acb",
+      "resultado": "sucesso",
+      "decisao_final": 3,
+      "requer_revisao_humana": false,
+      "duracao_total_s": 0.2534785330062732,
+      "tokens_totais": null,
+      "custo_estimado": null,
+      "quantidade_tools_chamadas": {
+        "validar_completude": 3,
+        "auditar_decisao_final": 1,
+        "checar_coerencia": 1
+      },
+      "quantidade_retries": 0,
+      "quantidade_falhas": 0,
+      "alertas": [],
+      "erro": null
+    },
+    "comdem_17665": {
+      "doc_id": "comdem_17665",
+      "titulo": "Hallucination Detection in Large Language Models via Multi-Granular Uncertainty Quantification",
+      "area": "inteligencia_artificial",
+      "caracteristicas": [
+        "medio",
+        "tabelas"
+      ],
+      "mode": "mock",
+      "timestamp": "2026-08-01T18:19:25.963369+00:00",
+      "run_id": "run_910fb2dc1aa843a5",
+      "resultado": "sucesso",
+      "decisao_final": 3,
+      "requer_revisao_humana": false,
+      "duracao_total_s": 0.33582261599076446,
+      "tokens_totais": null,
       "custo_estimado": null,
       "quantidade_tools_chamadas": {
         "validar_completude": 3,
