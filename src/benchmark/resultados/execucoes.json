@@ -1,0 +1,31 @@
+{
+  "execucoes": {
+    "exemplo_mock": {
+      "doc_id": "exemplo_mock",
+      "titulo": "Artigo de exemplo (smoke test sem PDF real)",
+      "area": "smoke_test",
+      "caracteristicas": [
+        "smoke_test",
+        "sem_pdf_real"
+      ],
+      "mode": "mock",
+      "timestamp": "2026-08-01T17:22:53.424716+00:00",
+      "run_id": "run_27f1b5130fd64f77",
+      "resultado": "sucesso",
+      "decisao_final": 3,
+      "requer_revisao_humana": false,
+      "duracao_total_s": 0.03751346499484498,
+      "tokens_totais": null,
+      "custo_estimado": null,
+      "quantidade_tools_chamadas": {
+        "validar_completude": 3,
+        "auditar_decisao_final": 1,
+        "checar_coerencia": 1
+      },
+      "quantidade_retries": 0,
+      "quantidade_falhas": 0,
+      "alertas": [],
+      "erro": null
+    }
+  }
+}
