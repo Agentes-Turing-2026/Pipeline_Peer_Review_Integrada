@@ -1,0 +1,13 @@
+{
+  "documentos": [
+    {
+      "id": "exemplo_mock",
+      "titulo": "Artigo de exemplo (smoke test sem PDF real)",
+      "area": "smoke_test",
+      "fonte_url": null,
+      "caminho_local": null,
+      "caracteristicas": ["smoke_test", "sem_pdf_real"],
+      "observacoes": "Usado só para validar a ferramenta em modo mock, sem custo. Substituir/completar com os PDFs reais do corpus (grupos de IA e psicologia) quando estiverem disponíveis."
+    }
+  ]
+}
