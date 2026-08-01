@@ -1,6 +1,8 @@
 {
-  "gerado_em": "2026-08-01T18:38:19.656271+00:00",
-  "atencao": [],
+  "gerado_em": "2026-08-01T19:13:38.327978+00:00",
+  "atencao": [
+    "psicologia_neuropsi_escaneado"
+  ],
   "tabela": {
     "exemplo_mock": {
       "doc_id": "exemplo_mock",
@@ -157,6 +159,117 @@
       "requer_revisao_humana": false,
       "duracao_total_s": 43.33423655499064,
       "tokens_totais": 124642,
+      "custo_estimado": null,
+      "quantidade_tools_chamadas": {
+        "validar_completude": 3,
+        "auditar_decisao_final": 1,
+        "checar_coerencia": 1
+      },
+      "quantidade_retries": 0,
+      "quantidade_falhas": 0,
+      "alertas": [],
+      "erro": null
+    },
+    "psicologia_neuropsi_escaneado": {
+      "doc_id": "psicologia_neuropsi_escaneado",
+      "titulo": "Avaliação Neuropsicológica e Funções Cognitivas (trecho digitalizado)",
+      "area": "psicologia",
+      "caracteristicas": [
+        "escaneado",
+        "baixa_qualidade",
+        "curto",
+        "sem_camada_de_texto"
+      ],
+      "mode": "mock",
+      "timestamp": "2026-08-01T19:12:43.212821+00:00",
+      "run_id": null,
+      "resultado": "entrada_bloqueada",
+      "decisao_final": null,
+      "requer_revisao_humana": null,
+      "duracao_total_s": null,
+      "tokens_totais": null,
+      "custo_estimado": null,
+      "quantidade_tools_chamadas": null,
+      "quantidade_retries": null,
+      "quantidade_falhas": null,
+      "alertas": [],
+      "erro": {
+        "tipo": "EntradaInvalidaError",
+        "mensagem": "a extração não produziu texto utilizável (possível PDF escaneado ou protegido); uma nova tentativa com OCR pode recuperar o conteúdo"
+      }
+    },
+    "psicologia_respiracao_monografia": {
+      "doc_id": "psicologia_respiracao_monografia",
+      "titulo": "Técnicas de respiração diafragmática (monografia)",
+      "area": "psicologia",
+      "caracteristicas": [
+        "longo",
+        "monografia_tcc",
+        "nao_e_artigo_de_periodico"
+      ],
+      "mode": "mock",
+      "timestamp": "2026-08-01T19:12:43.325143+00:00",
+      "run_id": "run_d519031d9e7b494c",
+      "resultado": "sucesso",
+      "decisao_final": 3,
+      "requer_revisao_humana": false,
+      "duracao_total_s": 0.37429570700624026,
+      "tokens_totais": null,
+      "custo_estimado": null,
+      "quantidade_tools_chamadas": {
+        "validar_completude": 3,
+        "auditar_decisao_final": 1,
+        "checar_coerencia": 1
+      },
+      "quantidade_retries": 0,
+      "quantidade_falhas": 0,
+      "alertas": [],
+      "erro": null
+    },
+    "psicologia_slides_modalidades_grupais": {
+      "doc_id": "psicologia_slides_modalidades_grupais",
+      "titulo": "Modalidades grupais (slide de aula)",
+      "area": "psicologia",
+      "caracteristicas": [
+        "slide",
+        "nao_e_artigo_academico"
+      ],
+      "mode": "mock",
+      "timestamp": "2026-08-01T19:12:43.703372+00:00",
+      "run_id": "run_ae364fab5f104a79",
+      "resultado": "sucesso",
+      "decisao_final": 3,
+      "requer_revisao_humana": false,
+      "duracao_total_s": 0.3209301159949973,
+      "tokens_totais": null,
+      "custo_estimado": null,
+      "quantidade_tools_chamadas": {
+        "validar_completude": 3,
+        "auditar_decisao_final": 1,
+        "checar_coerencia": 1
+      },
+      "quantidade_retries": 0,
+      "quantidade_falhas": 0,
+      "alertas": [],
+      "erro": null
+    },
+    "psicologia_slides_ciclo_sono": {
+      "doc_id": "psicologia_slides_ciclo_sono",
+      "titulo": "Ciclo sono-vigília — Parte 06 (material de curso)",
+      "area": "psicologia",
+      "caracteristicas": [
+        "slide",
+        "nao_e_artigo_academico",
+        "apresentacao_curso"
+      ],
+      "mode": "mock",
+      "timestamp": "2026-08-01T19:12:44.027305+00:00",
+      "run_id": "run_52b9dd064a464322",
+      "resultado": "sucesso",
+      "decisao_final": 3,
+      "requer_revisao_humana": false,
+      "duracao_total_s": 0.10517588799120858,
+      "tokens_totais": null,
       "custo_estimado": null,
       "quantidade_tools_chamadas": {
         "validar_completude": 3,
