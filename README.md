@@ -43,7 +43,8 @@ orquestração.
 ├── requirements.txt             # dependências Python
 ├── .env.example                 # template das variáveis de ambiente (modo API)
 ├── docs/
-│   └── schema_reference.md       # documentação técnica detalhada dos schemas
+│   ├── schema_reference.md       # documentação técnica detalhada dos schemas
+│   └── persistencia_e_retomada.md # Grupo 1 — relatório técnico de checkpoint/retomada
 └── src/
     ├── pipeline_base.py          # Orquestração GENÉRICA (Pipeline, PipelinePhase, PipelineContext)
     ├── pipeline.py               # As 4 fases concretas + modos (API/Mock) + demo
@@ -568,6 +569,9 @@ o OCR (Grupo 3), e não calculamos tokens/métricas (Grupo 2).
 Uma execução longa que falha na fase 3 não pode obrigar ninguém a refazer as
 fases 1 e 2 — nem a pagar por elas de novo. O pipeline salva um **checkpoint por
 fase** e, numa retomada pelo mesmo `run_id`, pula tudo que já concluiu.
+
+> Registro técnico completo (decisões, correções, limitações):
+> [`docs/persistencia_e_retomada.md`](docs/persistencia_e_retomada.md).
 
 ```bash
 python main.py mock                          # anote o run_id impresso ao final

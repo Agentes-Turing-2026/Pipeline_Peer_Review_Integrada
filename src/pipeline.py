@@ -1066,7 +1066,11 @@ def run_demo(
     # Estado auxiliar da execução: métricas já coletadas e auditoria do veredito
     # de tentativas anteriores. É o que faz a retomada terminar com um resumo da
     # execução INTEIRA, e não só das fases que rodaram depois da falha.
-    estado_anterior = ckpt.carregar_estado("estado") or _estado_vazio()
+    # Tolerante a arquivo ilegível: perder as métricas acumuladas degrada o
+    # resumo, mas abortar por causa delas custaria a retomada inteira. O `meta`
+    # acima é lido de forma ESTRITA justamente por decidir conduta (se a
+    # execução já foi concluída) — ver CheckpointManager.carregar_estado.
+    estado_anterior = ckpt.carregar_estado("estado", tolerar_corrompido=True) or _estado_vazio()
     execucoes = int(estado_anterior.get("execucoes", 0)) + 1
 
     # Métricas de execução (Grupo 2): coletor guardado — se metrics/ não

@@ -32,8 +32,11 @@ pela escrita parcial.
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger("pipeline.persistencia")
 
 
 class CheckpointManager:
@@ -131,9 +134,39 @@ class CheckpointManager:
         """
         return self._escrever_atomico(self.caminho_estado(nome), dados)
 
-    def carregar_estado(self, nome: str) -> dict[str, Any] | None:
-        """Carrega um estado auxiliar, ou None se ele ainda não existe."""
+    def carregar_estado(
+        self, nome: str, *, tolerar_corrompido: bool = False
+    ) -> dict[str, Any] | None:
+        """Carrega um estado auxiliar, ou None se ele ainda não existe.
+
+        ``tolerar_corrompido`` decide o que fazer com um sidecar ilegível, e a
+        escolha depende do que aquele estado governa:
+
+        - ``False`` (padrão) — o erro sobe. É o certo para estado que decide
+          conduta, como o ``meta`` que diz se a execução já foi concluída:
+          tratá-lo como ausente faria o pipeline re-executar e sobrescrever os
+          artefatos de uma execução completa, que é justamente o que a
+          persistência existe para evitar.
+        - ``True`` — registra um aviso, preserva o arquivo ruim como
+          ``.corrompido`` (para diagnóstico, e para não ser sobrescrito em
+          silêncio na próxima gravação) e devolve ``None``. É o certo para
+          estado puramente informativo, como as métricas acumuladas: perdê-las
+          degrada o resumo, enquanto abortar por causa delas custaria a
+          retomada inteira — que é o que de fato importa preservar.
+        """
         path = self.caminho_estado(nome)
         if not path.exists():
             return None
-        return json.loads(path.read_text(encoding="utf-8"))
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError, UnicodeDecodeError):
+            if not tolerar_corrompido:
+                raise
+            preservado = path.with_suffix(path.suffix + ".corrompido")
+            path.replace(preservado)
+            logger.warning(
+                "Estado auxiliar '%s' do run %s está ilegível; seguindo sem ele. "
+                "Arquivo preservado em %s.",
+                nome, self.run_id, preservado,
+            )
+            return None

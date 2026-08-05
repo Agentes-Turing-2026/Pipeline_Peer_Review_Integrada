@@ -382,6 +382,32 @@ def test_estado_auxiliar_nao_e_confundido_com_uma_fase(tmp_path):
     assert ckpt.carregar_estado("estado") is not None, "limpar fases não apaga o estado"
 
 
+def test_estado_ilegivel_nao_impede_a_retomada(ambiente):
+    """Métricas corrompidas degradam o resumo; não podem custar a retomada.
+
+    O sidecar de estado é informativo. Abortar por causa dele deixaria a
+    execução sem forma de ser retomada — o oposto do que a persistência existe
+    para garantir. O arquivo ruim é preservado para diagnóstico, e a lacuna
+    aparece como alerta no resumo em vez de passar batida.
+    """
+    run_id = "run_estado_corrompido"
+    with _falha_em(EditorVerdictPhase, "falha simulada na fase 3"):
+        with pytest.raises(RuntimeError):
+            run_demo(mode="mock", run_id=run_id)
+
+    estado = ambiente.checkpoints / f"{run_id}.estado.json"
+    estado.write_text("{ isto não é JSON válido", encoding="utf-8")
+
+    retomado = run_demo(mode="mock", run_id=run_id)
+
+    assert retomado.data["decisao"], "a retomada precisa concluir mesmo assim"
+    assert (ambiente.checkpoints / f"{run_id}.estado.json.corrompido").exists()
+    alertas = retomado.data["resumo_execucao"]["alertas"]
+    assert any("não aparecem neste resumo" in alerta for alerta in alertas), (
+        "a perda das métricas restauradas tem que ser denunciada, não silenciada"
+    )
+
+
 def test_coletor_restaurado_preserva_duracao_e_acumula_tempo():
     """Eventos restaurados mantêm a duração ORIGINAL e somam ao tempo de parede."""
     anterior = ExecutionCollector(run_id="run_y")
