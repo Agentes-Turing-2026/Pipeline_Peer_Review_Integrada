@@ -11,6 +11,7 @@ Uso:
     python main.py --pdf caminho/artigo.pdf # PDF REAL: extração + execução completa com ADK
     python main.py mock --pdf artigo.pdf    # extração real do PDF + fases com respostas mock
     python main.py --resume run_abc123      # retoma uma execução interrompida (pula fases já concluídas)
+    python main.py --resume run_abc123 --force  # refaz do zero uma execução já concluída (mesmo run_id)
 
 O modo também pode ser definido pela variável de ambiente ``PIPELINE_MODE``; a
 flag de linha de comando tem precedência sobre ela.
@@ -57,17 +58,30 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         metavar="RUN_ID",
         help="Retoma uma execução interrompida por run_id (reusa os checkpoints "
-        "de src/logs/checkpoints/<run_id>/, pulando fases já concluídas). Sem "
-        "--pdf/modo, reaproveita o pdf_path/mode salvos na execução original.",
+        "de src/logs/checkpoints/<run_id>/, pulando fases já concluídas, "
+        "inclusive a extração do PDF). Sem --pdf/modo, reaproveita o "
+        "pdf_path/mode salvos na execução original. Retomar uma execução JÁ "
+        "concluída não re-executa nada e não regrava os artefatos.",
     )
-    return parser.parse_args(argv)
+    parser.add_argument(
+        "--force",
+        dest="force",
+        action="store_true",
+        help="Só com --resume: descarta os checkpoints e as métricas da execução "
+        "e refaz TUDO sob o mesmo run_id, regravando os artefatos. É o jeito "
+        "explícito de refazer uma execução já concluída.",
+    )
+    args = parser.parse_args(argv)
+    if args.force and not args.resume:
+        parser.error("--force só faz sentido junto com --resume <RUN_ID>.")
+    return args
 
 
 def main() -> None:
     """Roda o pipeline completo, com modo, PDF e retomada opcionais vindos da linha de comando."""
     args = _parse_args()
     try:
-        run_demo(mode=args.mode, pdf_path=args.pdf, run_id=args.resume)
+        run_demo(mode=args.mode, pdf_path=args.pdf, run_id=args.resume, forcar=args.force)
     except EntradaInvalidaError as exc:
         # Entrada bloqueada pela validação do Grupo 1: mensagem clara (não um
         # traceback), e código de saída != 0 — a falha não passa despercebida.

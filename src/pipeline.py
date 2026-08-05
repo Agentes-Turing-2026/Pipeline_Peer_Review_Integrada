@@ -30,6 +30,7 @@ import os
 import sys
 from contextlib import nullcontext
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 
@@ -105,6 +106,12 @@ except Exception:  # noqa: BLE001
 
 LOG_DIR = HERE / "logs"
 LOG_DIR.mkdir(exist_ok=True)
+
+# Raiz dos artefatos de saída (``outputs/<run_id>/final_report.{md,json}``).
+# Constante de módulo — e não ``HERE / "outputs"`` embutido no meio de
+# ``run_demo`` — para que os testes possam redirecioná-la para um diretório
+# temporário, como já fazem com LOG_DIR, sem escrever no repositório real.
+OUTPUT_DIR = HERE / "outputs"
 
 _handler = logging.FileHandler(LOG_DIR / "pipeline.log", encoding="utf-8")
 _handler.setFormatter(
@@ -825,6 +832,85 @@ def extract_pdf_input(
 
 
 # ---------------------------------------------------------------------------
+# Estado auxiliar da execução (retomada) — Grupo 1
+# ---------------------------------------------------------------------------
+# Tudo que precisa sobreviver a uma retomada mas NÃO é saída de fase vive no
+# sidecar `<run_id>.estado.json` (ver persistencia.py): as métricas já
+# coletadas, a auditoria do veredito e o tempo de parede acumulado. Sem isso,
+# uma retomada reconstrói os dados das fases (que estão nos checkpoints) mas
+# perde tudo que é lateral a elas, e termina com um resumo que descreve só o
+# pedaço re-executado.
+
+ESTADO_VERSAO = 1
+
+
+def _estado_vazio(execucoes: int = 0) -> dict:
+    """Estado auxiliar sem nenhum histórico (execução nova ou `--force`)."""
+    return {
+        "versao": ESTADO_VERSAO,
+        "execucoes": execucoes,
+        "duracao_acumulada_s": 0.0,
+        "auditoria_veredito": None,
+        "eventos_metricas": [],
+    }
+
+
+def _alertar_lacunas_no_resumo(resumo, ckpt: CheckpointManager) -> list[str]:
+    """Denuncia, no próprio resumo, fases concluídas que não aparecem nele.
+
+    Rede de segurança contra a regressão que esta correção resolve: se uma fase
+    tem checkpoint em disco mas nenhuma duração no resumo, as métricas dela se
+    perderam em algum lugar do caminho. Melhor um alerta explícito num resumo
+    auditável do que um resumo silenciosamente incompleto — que é exatamente o
+    que acontecia antes.
+    """
+    if resumo is None:
+        return []
+    faltando = sorted(
+        fase for fase in ckpt.fases_concluidas() if fase not in resumo.duracao_por_fase_s
+    )
+    if faltando:
+        resumo.alertas.append(
+            "Fases com checkpoint salvo que não aparecem neste resumo "
+            f"(métricas não restauradas): {', '.join(faltando)}"
+        )
+    return faltando
+
+
+def _relatorio_ja_concluido(ckpt: CheckpointManager, out_dir: Path) -> FinalReport | None:
+    """Recupera o relatório de uma execução já concluída, sem re-executar nada.
+
+    Preferência pelos arquivos gravados em ``outputs/<run_id>/`` (é o artefato
+    oficial da execução). Se eles tiverem sido apagados, reconstrói a partir do
+    checkpoint da fase 4 — e nesse caso vale regravá-los, porque aí não há
+    relatório anterior sendo sobrescrito, só um artefato ausente sendo
+    restaurado. ``None`` quando não há nem uma coisa nem outra.
+    """
+    md_path = out_dir / "final_report.md"
+    json_path = out_dir / "final_report.json"
+    if md_path.exists() and json_path.exists():
+        return FinalReport(
+            markdown=md_path.read_text(encoding="utf-8"),
+            data=json.loads(json_path.read_text(encoding="utf-8")),
+        )
+
+    raw = ckpt.load(FinalReportPhase.name)
+    if raw is None:
+        return None
+    report = FinalReportPhase().deserialize_output(raw)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    md_path.write_text(report.markdown, encoding="utf-8")
+    json_path.write_text(
+        json.dumps(report.data, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+    print(
+        "[peer_review] Relatório final restaurado do checkpoint da fase 4 "
+        f"(os arquivos em {out_dir} não existiam mais)."
+    )
+    return report
+
+
+# ---------------------------------------------------------------------------
 # Demonstração ponta a ponta
 # ---------------------------------------------------------------------------
 
@@ -833,6 +919,7 @@ def run_demo(
     pdf_path: str | Path | None = None,
     extractor: PdfExtractor | None = None,
     run_id: str | None = None,
+    forcar: bool = False,
 ) -> FinalReport:
     """Roda o pipeline completo (PDF real ou artigo de exemplo) e salva os resultados.
 
@@ -857,24 +944,81 @@ def run_demo(
         Identificador de uma execução anterior a retomar. Quando informado,
         os checkpoints já salvos em ``src/logs/checkpoints/<run_id>/`` são
         carregados e as fases já concluídas são puladas (ver
-        ``Pipeline.run()`` em ``pipeline_base.py``). Se ``pdf_path``/``mode``
+        ``Pipeline.run()`` em ``pipeline_base.py``). Isso inclui a fase 0: um
+        PDF já extraído NÃO é extraído de novo. Se ``pdf_path``/``mode``
         não forem passados explicitamente, são recuperados do arquivo de
         metadados gravado na execução original
         (``src/logs/checkpoints/<run_id>.meta.json``). ``None`` (padrão)
         inicia uma execução nova, com um run_id gerado automaticamente.
+    forcar:
+        Só faz sentido junto com ``run_id``. Descarta os checkpoints e as
+        métricas da execução e roda TUDO de novo sob o mesmo ``run_id``,
+        regravando os artefatos. É o jeito explícito de refazer uma execução
+        já concluída — que, por padrão, é um no-op justamente para não
+        sobrescrever um relatório bom.
     """
-    # Retomada: recupera pdf_path/mode da execução original quando não
-    # informados explicitamente nesta chamada — sem isso, retomar com um PDF
-    # ou modo diferente do original geraria um relatório inconsistente sem
-    # nenhum erro visível.
+    ckpt_dir = LOG_DIR / "checkpoints"
+    meta_salva: dict = {}
+
     if run_id:
-        meta_anterior = LOG_DIR / "checkpoints" / f"{run_id}.meta.json"
-        if meta_anterior.exists():
-            meta_salva = json.loads(meta_anterior.read_text(encoding="utf-8"))
-            if pdf_path is None and meta_salva.get("pdf_path"):
-                pdf_path = meta_salva["pdf_path"]
-            if mode is None and meta_salva.get("mode"):
-                mode = meta_salva["mode"]
+        # A retomada precisa do gerenciador ANTES de resolver modo/PDF: é dele
+        # que saem os metadados da execução original e o estado auxiliar.
+        ckpt_anterior = CheckpointManager(ckpt_dir, run_id)
+        meta_salva = ckpt_anterior.carregar_estado("meta") or {}
+        fases_ja_concluidas = ckpt_anterior.fases_concluidas()
+
+        if not meta_salva and not fases_ja_concluidas:
+            # Retomar um run_id inexistente não é erro fatal (a execução segue
+            # com esse identificador), mas passar batido seria enganoso: o
+            # usuário acharia que retomou algo.
+            print(
+                f"[peer_review] AVISO: nenhuma execução anterior encontrada para "
+                f"run_id={run_id} em {ckpt_dir}. Seguindo como execução NOVA com esse id."
+            )
+
+        # Recupera pdf_path/mode da execução original quando não informados
+        # explicitamente nesta chamada — sem isso, retomar com um PDF ou modo
+        # diferente do original geraria um relatório inconsistente sem nenhum
+        # erro visível.
+        if pdf_path is None and meta_salva.get("pdf_path"):
+            pdf_path = meta_salva["pdf_path"]
+        if mode is None and meta_salva.get("mode"):
+            mode = meta_salva["mode"]
+
+        if meta_salva.get("status") == "concluida" and not forcar:
+            # Execução já terminou: não há nada a retomar. Re-executar aqui
+            # significaria regravar final_report.md/json e resumo_execucao.json
+            # por cima de artefatos completos — o pior resultado possível para
+            # quem só queria conferir uma execução antiga.
+            relatorio = _relatorio_ja_concluido(ckpt_anterior, OUTPUT_DIR / run_id)
+            if relatorio is not None:
+                print(
+                    f"[peer_review] Execução {run_id} já está CONCLUÍDA "
+                    f"({meta_salva.get('concluida_em', 'data desconhecida')}). "
+                    "Nada foi re-executado e nenhum artefato foi regravado."
+                )
+                print(f"Artefatos preservados em: {OUTPUT_DIR / run_id}")
+                print(f"Para refazer esta execução: python main.py --resume {run_id} --force")
+                return relatorio
+            print(
+                f"[peer_review] AVISO: {run_id} está marcada como concluída, mas não "
+                "sobrou relatório nem checkpoint da fase 4. Re-executando o que faltar."
+            )
+
+        if forcar:
+            removidas = ckpt_anterior.limpar_fases()
+            # As métricas salvas também vão embora: como TODAS as fases rodam
+            # de novo, mantê-las faria cada fase ser contada duas vezes no
+            # resumo. O trace e o validacao_events.jsonl continuam acumulando —
+            # o histórico forense da execução não se perde.
+            estado_atual = ckpt_anterior.carregar_estado("estado") or {}
+            ckpt_anterior.salvar_estado(
+                "estado", _estado_vazio(int(estado_atual.get("execucoes", 0)))
+            )
+            print(
+                f"[peer_review] --force: {len(removidas)} checkpoint(s) descartado(s) "
+                f"({', '.join(removidas) or 'nenhum'}). A execução {run_id} será refeita do zero."
+            )
 
     config: dict = {}
     if mode is not None:
@@ -909,18 +1053,21 @@ def run_demo(
 
     # Persistência e retomada (Grupo 1): checkpoint por fase em disco. O
     # sidecar `<run_id>.meta.json` (irmão da pasta `<run_id>/`, não dentro
-    # dela — para não poluir `fases_concluidas()`) grava pdf_path/mode só na
-    # primeira execução, para uma retomada futura recuperá-los.
-    ckpt = CheckpointManager(LOG_DIR / "checkpoints", run_id)
-    meta_path = LOG_DIR / "checkpoints" / f"{run_id}.meta.json"
-    if not meta_path.exists():
-        meta_path.write_text(
-            json.dumps(
-                {"pdf_path": str(pdf_path) if pdf_path else None, "mode": resolved.value},
-                ensure_ascii=False,
-            ),
-            encoding="utf-8",
-        )
+    # dela — para não poluir `fases_concluidas()`) preserva pdf_path/mode da
+    # PRIMEIRA execução, para uma retomada futura recuperá-los, e carrega o
+    # status que distingue "interrompida" de "concluída".
+    ckpt = CheckpointManager(ckpt_dir, run_id)
+    meta = dict(meta_salva)
+    meta.setdefault("pdf_path", str(pdf_path) if pdf_path else None)
+    meta.setdefault("mode", resolved.value)
+    meta["status"] = "em_andamento"
+    ckpt.salvar_estado("meta", meta)
+
+    # Estado auxiliar da execução: métricas já coletadas e auditoria do veredito
+    # de tentativas anteriores. É o que faz a retomada terminar com um resumo da
+    # execução INTEIRA, e não só das fases que rodaram depois da falha.
+    estado_anterior = ckpt.carregar_estado("estado") or _estado_vazio()
+    execucoes = int(estado_anterior.get("execucoes", 0)) + 1
 
     # Métricas de execução (Grupo 2): coletor guardado — se metrics/ não
     # existir por algum motivo, o pipeline roda normalmente, sem instrumentação.
@@ -929,6 +1076,7 @@ def run_demo(
     coletor: ExecutionCollector | None = (
         ExecutionCollector(run_id=run_id) if ExecutionCollector is not None else None
     )
+    eventos_restaurados = 0
     if coletor is not None:
         config["_metrics_collector"] = coletor
         # Tokens reais (usage_metadata do ADK): registra o coletor no consumidor
@@ -936,6 +1084,56 @@ def run_demo(
         # contexto global do tracer; sem execução instrumentada, é no-op lá.
         if definir_coletor_adk is not None:
             definir_coletor_adk(coletor)
+        eventos_salvos = estado_anterior.get("eventos_metricas") or []
+        if eventos_salvos:
+            eventos_restaurados = coletor.restaurar(
+                eventos_salvos,
+                duracao_anterior_s=float(estado_anterior.get("duracao_acumulada_s") or 0.0),
+            )
+            print(
+                f"[peer_review] Retomada: {eventos_restaurados} evento(s) de métrica "
+                "restaurado(s) das fases já concluídas."
+            )
+
+    # A auditoria do veredito é produzida pela fase 3 e consumida pela fase 4
+    # através do config. Numa retomada em que a fase 3 vem do checkpoint, ela
+    # não é reproduzida — e o relatório final sairia com auditoria_veredito=null.
+    auditoria_veredito = estado_anterior.get("auditoria_veredito")
+    if auditoria_veredito is not None:
+        config["_auditoria_veredito"] = auditoria_veredito
+
+    def _salvar_estado(contexto: PipelineContext | None = None) -> None:
+        """Persiste o estado auxiliar no ponto em que a execução está agora.
+
+        Chamado nas FRONTEIRAS de sucesso (fase 0 extraída, cada fase concluída,
+        fim da execução) — nunca no caminho de falha. É deliberado: persistir os
+        eventos de uma tentativa que falhou faria a retomada bem-sucedida herdar
+        `quantidade_falhas` e `status_final="falha"` de um problema já resolvido.
+        O rastro da tentativa que falhou continua no trace e em
+        validacao_events.jsonl, que são append-only.
+
+        ``contexto`` é o PipelineContext da fase que acabou de concluir. Ele
+        precisa vir por parâmetro porque ``PipelineContext`` COPIA o config
+        recebido: o que a fase 3 grava em ``context.config["_auditoria_veredito"]``
+        nunca chega ao ``config`` desta função.
+        """
+        nonlocal auditoria_veredito
+        if contexto is not None and contexto.config.get("_auditoria_veredito") is not None:
+            auditoria_veredito = contexto.config["_auditoria_veredito"]
+        ckpt.salvar_estado(
+            "estado",
+            {
+                "versao": ESTADO_VERSAO,
+                "execucoes": execucoes,
+                "duracao_acumulada_s": (
+                    coletor.duracao_execucao_s if coletor is not None else 0.0
+                ),
+                "auditoria_veredito": auditoria_veredito,
+                "eventos_metricas": (
+                    coletor.eventos_como_dict() if coletor is not None else []
+                ),
+            },
+        )
 
     pipeline = build_peer_review_pipeline(tracer=tracer)
     print(
@@ -944,8 +1142,9 @@ def run_demo(
     )
 
     resumo = None
+    fases_restauradas: list[str] = []
 
-    out_dir = HERE / "outputs" / run_id
+    out_dir = OUTPUT_DIR / run_id
     out_dir.mkdir(parents=True, exist_ok=True)
 
     def _run_and_save() -> FinalReport:
@@ -953,21 +1152,49 @@ def run_demo(
         # Fase 0 (apenas com PDF): extração determinística, dentro da mesma
         # linha do tempo (mesmo run_id) das demais fases.
         if pdf_path is not None:
-            # Grupo 1 — validação do ARQUIVO antes de extrair (inexistente,
-            # formato incorreto, corrompido, protegido). Bloqueia sem retry.
-            validar_arquivo_pdf(pdf_path, run_id=run_id, fase=EXTRACTION_PHASE, exigir=True)
-            doc = extract_pdf_input(
-                pdf_path, extractor=extractor, tracer=tracer, run_id=run_id, coletor=coletor,
-            )
+            doc_salvo = ckpt.load(EXTRACTION_PHASE)
+            if doc_salvo is not None:
+                # Retomada: a extração já aconteceu e seu resultado está em
+                # disco. Repeti-la seria refazer trabalho determinístico que já
+                # deu certo — e exigiria que o PDF original ainda existisse no
+                # mesmo caminho. O arquivo NÃO é revalidado aqui: ele já passou
+                # por validar_arquivo_pdf + validar_documento_extraido na
+                # execução original, e esses eventos estão no
+                # validacao_events.jsonl deste mesmo run_id.
+                doc = ExtractedDocument.from_dict(doc_salvo)
+                fases_restauradas.append(EXTRACTION_PHASE)
+                logger.info(
+                    "Fase 0 restaurada do checkpoint: '%s' (%d página(s)) — extração não repetida.",
+                    doc.filename, doc.num_pages,
+                )
+                print(
+                    f"[peer_review] Fase 0: '{doc.filename}' (checkpoint restaurado) — "
+                    "PDF não foi extraído de novo"
+                )
+                emit_event(
+                    "documento_restaurado", author="grupo1", phase=EXTRACTION_PHASE, kind="tool",
+                    attributes={**doc.to_metadata(), "checkpoint_restaurado": True},
+                )
+            else:
+                # Grupo 1 — validação do ARQUIVO antes de extrair (inexistente,
+                # formato incorreto, corrompido, protegido). Bloqueia sem retry.
+                validar_arquivo_pdf(pdf_path, run_id=run_id, fase=EXTRACTION_PHASE, exigir=True)
+                doc = extract_pdf_input(
+                    pdf_path, extractor=extractor, tracer=tracer, run_id=run_id, coletor=coletor,
+                )
+                # A fase 0 vira checkpoint como as demais: é uma etapa concluída
+                # da execução, e é o que permite pular a extração na retomada.
+                ckpt.save(EXTRACTION_PHASE, doc.to_dict())
+                _salvar_estado()
+                print(
+                    f"[peer_review] Fase 0: '{doc.filename}' extraído por {doc.extractor} "
+                    f"{doc.extractor_version} — {doc.num_pages} página(s) em "
+                    f"{doc.extraction_duration_s:.2f} s"
+                    + (f" — AVISOS: {'; '.join(doc.warnings)}" if doc.warnings else "")
+                )
             article_text = doc.text
             config["article_ref"] = doc.filename
             config["document_meta"] = doc.to_metadata()
-            print(
-                f"[peer_review] Fase 0: '{doc.filename}' extraído por {doc.extractor} "
-                f"{doc.extractor_version} — {doc.num_pages} página(s) em "
-                f"{doc.extraction_duration_s:.2f} s"
-                + (f" — AVISOS: {'; '.join(doc.warnings)}" if doc.warnings else "")
-            )
         else:
             article_path = HERE / "examples" / "example_article.txt"
             article_text = article_path.read_text(encoding="utf-8")
@@ -987,13 +1214,29 @@ def run_demo(
 
         result = pipeline.run(
             initial_input=article_text, config=config, verbose=True, checkpoint_manager=ckpt,
+            # Salva as métricas na MESMA fronteira em que o checkpoint da fase é
+            # gravado: se a fase seguinte falhar, checkpoint e métricas ficam
+            # descrevendo exatamente o mesmo ponto da execução.
+            on_phase_end=lambda _fase, ctx: _salvar_estado(ctx),
         )
+        fases_restauradas.extend(result.fases_restauradas)
         report_local: FinalReport = result.final
         # Grupo 2 — agrega as métricas de execução (eventos, duração, retries) no
-        # relatório, para que o JSON salvo já inclua o resumo auditável.
+        # relatório, para que o JSON salvo já inclua o resumo auditável. Numa
+        # retomada, o coletor já vem semeado com os eventos das fases
+        # restauradas, então este resumo cobre a execução inteira.
         if coletor is not None and gerar_resumo is not None:
             resumo = gerar_resumo(coletor.eventos, run_id=coletor.run_id, duracao_total_s=coletor.duracao_execucao_s)
+            _alertar_lacunas_no_resumo(resumo, ckpt)
             report_local.data["resumo_execucao"] = resumo.to_dict()
+        # Proveniência da retomada: o relatório passa a dizer o que rodou agora
+        # e o que veio do disco, em vez de apresentar tudo como se fosse de uma
+        # única passagem.
+        report_local.data["retomada"] = {
+            "execucoes": execucoes,
+            "fases_restauradas": list(fases_restauradas),
+            "eventos_metricas_restaurados": eventos_restaurados,
+        }
         # A gravação em disco é um passo pós-pipeline: envolvemos num span "report"
         # (irmão das fases, sob o run) para que "arquivos_gerados" fique ancorado
         # nele — e não solto sob o <run>, como acontecia ao emitir depois que o
@@ -1016,6 +1259,18 @@ def run_demo(
                     "decisao": report_local.data.get("decisao"),
                 },
             )
+        # Só AQUI a execução vira "concluída": depois que os artefatos finais
+        # estão em disco. Marcar antes deixaria um run_id que se diz pronto sem
+        # relatório algum — e uma retomada dele viraria um no-op sem entrega.
+        _salvar_estado()
+        ckpt.salvar_estado(
+            "meta",
+            {
+                **meta,
+                "status": "concluida",
+                "concluida_em": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            },
+        )
         return report_local
 
     try:
