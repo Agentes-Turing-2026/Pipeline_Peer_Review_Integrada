@@ -12,7 +12,13 @@
 # adk) não tinha nada garantindo essa mesma versão — podia cair em algo bem
 # mais antigo que o modo API, com geração de JSON schema diferente.
 pydantic==2.13.4
-python-dotenv>=1.0
+# python-dotenv fixado (não mais solto em >=1.0): o google-adk==1.27.5 já
+# declara python-dotenv>=1.0.0,<2.0.0 como dependência própria (o litellm
+# também depende dele, mais solto ainda). Hoje o 2.0 nem existe no PyPI, então
+# a faixa solta e a fixada resolvem pro mesmo lugar por coincidência de
+# calendário — fixar remove essa dependência de "ainda não saiu uma versão
+# nova" continuar sendo verdade no futuro.
+python-dotenv==1.2.2
 #
 # Modo API (chamadas reais ao provedor de LLM) também precisa de:
 google-adk==1.27.5
@@ -33,4 +39,7 @@ litellm==1.82.6
 # dois acima já os prende numa faixa estreita, sem precisar de pin próprio.
 #
 # Testes automatizados:
-pytest>=8.0
+# Fixado em 9.1.1 (não mais solto em >=8.0): a extra "test" do próprio
+# google-adk==1.27.5 exige pytest>=9.0.0,<10.0.0 — nosso piso antigo (>=8.0)
+# estava desatualizado em relação a isso, mesmo resolvendo certo hoje.
+pytest==9.1.1
