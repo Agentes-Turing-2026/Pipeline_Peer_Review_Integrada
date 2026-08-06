@@ -1,0 +1,212 @@
+{
+  "gerado_em": "2026-08-06T19:06:27.556053+00:00",
+  "conclusao": "2 documento(s) comparável(is) (sucesso nos dois lados) de 2 rodado(s).\nChamadas LLM: sem dado (nenhuma chamada real medida — modo mock).\nDuração total: -48.6% em média sem leitura cruzada.\nTokens totais: sem dado (modo mock não mede tokens).\nCusto estimado: sem dado (sem preço configurado/tokens medidos).\nDecisão final MUDOU em 0/2 documento(s).\nQuantidade de críticas: variação média de +0.0 crítica(s) ao desativar a leitura cruzada.\nLeitura sugerida: se a decisão final e a quantidade de críticas NÃO mudam entre as duas variantes, a leitura cruzada está pagando custo/tempo adicionais sem alterar o resultado nestes documentos — o valor dela, se houver, está na qualidade argumentativa da resposta aos pares (texto de 'resposta_aos_pares' em cada final_report.md), não capturada numericamente aqui.",
+  "pares": {
+    "exemplo_mock": {
+      "doc_id": "exemplo_mock",
+      "titulo": "Artigo de exemplo (smoke test sem PDF real)",
+      "mode": "mock",
+      "provider": null,
+      "model": null,
+      "timestamp": "2026-08-06T16:12:53.848882+00:00",
+      "com_cross_review": {
+        "doc_id": "exemplo_mock",
+        "titulo": "Artigo de exemplo (smoke test sem PDF real)",
+        "area": "smoke_test",
+        "caracteristicas": [
+          "smoke_test",
+          "sem_pdf_real"
+        ],
+        "mode": "mock",
+        "provider": null,
+        "model": null,
+        "structured_output": null,
+        "cross_review_enabled": true,
+        "timestamp": "2026-08-06T16:12:53.814833+00:00",
+        "run_id": "run_1db61fe2bcfa4ada",
+        "resultado": "sucesso",
+        "decisao_final": 3,
+        "requer_revisao_humana": false,
+        "duracao_total_s": 0.012073799996869639,
+        "tokens_totais": null,
+        "custo_estimado": null,
+        "chamadas_llm": null,
+        "modelo_usado": null,
+        "quantidade_tools_chamadas": {
+          "validar_completude": 3,
+          "auditar_decisao_final": 1,
+          "checar_coerencia": 1
+        },
+        "quantidade_retries": 0,
+        "quantidade_falhas": 0,
+        "alertas": [],
+        "notas_por_revisor": {
+          "statistician": 3,
+          "domain_expert": 3,
+          "copyeditor": 2
+        },
+        "quantidade_criticas": 5,
+        "quantidade_criticas_bloqueantes": 1,
+        "erro": null
+      },
+      "sem_cross_review": {
+        "doc_id": "exemplo_mock",
+        "titulo": "Artigo de exemplo (smoke test sem PDF real)",
+        "area": "smoke_test",
+        "caracteristicas": [
+          "smoke_test",
+          "sem_pdf_real"
+        ],
+        "mode": "mock",
+        "provider": null,
+        "model": null,
+        "structured_output": null,
+        "cross_review_enabled": false,
+        "timestamp": "2026-08-06T16:12:53.831839+00:00",
+        "run_id": "run_db970c76700243f5",
+        "resultado": "sucesso",
+        "decisao_final": 3,
+        "requer_revisao_humana": false,
+        "duracao_total_s": 0.012034100014716387,
+        "tokens_totais": null,
+        "custo_estimado": null,
+        "chamadas_llm": null,
+        "modelo_usado": null,
+        "quantidade_tools_chamadas": {
+          "validar_completude": 3,
+          "auditar_decisao_final": 1,
+          "checar_coerencia": 1
+        },
+        "quantidade_retries": 0,
+        "quantidade_falhas": 0,
+        "alertas": [],
+        "notas_por_revisor": {
+          "statistician": 3,
+          "domain_expert": 3,
+          "copyeditor": 2
+        },
+        "quantidade_criticas": 5,
+        "quantidade_criticas_bloqueantes": 1,
+        "erro": null
+      },
+      "delta": {
+        "duracao_total_s_variacao_pct": -0.328810997064261,
+        "tokens_totais_variacao_pct": null,
+        "custo_estimado_variacao_pct": null,
+        "chamadas_llm_variacao_pct": null,
+        "comparavel": true,
+        "decisao_mudou": false,
+        "notas_por_revisor_mudaram": false,
+        "quantidade_criticas_delta": 0,
+        "quantidade_criticas_bloqueantes_delta": 0,
+        "requer_revisao_humana_mudou": false
+      }
+    },
+    "icd_hallucinations_2312_15710": {
+      "doc_id": "icd_hallucinations_2312_15710",
+      "titulo": "Alleviating Hallucinations of Large Language Models through Induced Hallucinations",
+      "mode": "mock",
+      "provider": null,
+      "model": null,
+      "timestamp": "2026-08-06T19:06:27.555738+00:00",
+      "com_cross_review": {
+        "doc_id": "icd_hallucinations_2312_15710",
+        "titulo": "Alleviating Hallucinations of Large Language Models through Induced Hallucinations",
+        "area": "inteligencia_artificial",
+        "caracteristicas": [
+          "duas_colunas",
+          "tabelas",
+          "formulas_matematicas",
+          "citacoes_extensas",
+          "medio"
+        ],
+        "mode": "mock",
+        "provider": null,
+        "model": null,
+        "structured_output": null,
+        "cross_review_enabled": true,
+        "timestamp": "2026-08-06T19:06:24.886663+00:00",
+        "run_id": "run_a70124b879264223",
+        "resultado": "sucesso",
+        "decisao_final": 3,
+        "requer_revisao_humana": false,
+        "duracao_total_s": 2.581645500002196,
+        "tokens_totais": null,
+        "custo_estimado": null,
+        "chamadas_llm": null,
+        "modelo_usado": null,
+        "quantidade_tools_chamadas": {
+          "validar_completude": 3,
+          "auditar_decisao_final": 1,
+          "checar_coerencia": 1
+        },
+        "quantidade_retries": 0,
+        "quantidade_falhas": 0,
+        "alertas": [],
+        "notas_por_revisor": {
+          "statistician": 3,
+          "domain_expert": 3,
+          "copyeditor": 2
+        },
+        "quantidade_criticas": 5,
+        "quantidade_criticas_bloqueantes": 1,
+        "erro": null
+      },
+      "sem_cross_review": {
+        "doc_id": "icd_hallucinations_2312_15710",
+        "titulo": "Alleviating Hallucinations of Large Language Models through Induced Hallucinations",
+        "area": "inteligencia_artificial",
+        "caracteristicas": [
+          "duas_colunas",
+          "tabelas",
+          "formulas_matematicas",
+          "citacoes_extensas",
+          "medio"
+        ],
+        "mode": "mock",
+        "provider": null,
+        "model": null,
+        "structured_output": null,
+        "cross_review_enabled": false,
+        "timestamp": "2026-08-06T19:06:27.472152+00:00",
+        "run_id": "run_4143dd84630b49f4",
+        "resultado": "sucesso",
+        "decisao_final": 3,
+        "requer_revisao_humana": false,
+        "duracao_total_s": 0.07977780001237988,
+        "tokens_totais": null,
+        "custo_estimado": null,
+        "chamadas_llm": null,
+        "modelo_usado": null,
+        "quantidade_tools_chamadas": {
+          "validar_completude": 3,
+          "auditar_decisao_final": 1,
+          "checar_coerencia": 1
+        },
+        "quantidade_retries": 0,
+        "quantidade_falhas": 0,
+        "alertas": [],
+        "notas_por_revisor": {
+          "statistician": 3,
+          "domain_expert": 3,
+          "copyeditor": 2
+        },
+        "quantidade_criticas": 5,
+        "quantidade_criticas_bloqueantes": 1,
+        "erro": null
+      },
+      "delta": {
+        "duracao_total_s_variacao_pct": -96.90980810447012,
+        "tokens_totais_variacao_pct": null,
+        "custo_estimado_variacao_pct": null,
+        "chamadas_llm_variacao_pct": null,
+        "comparavel": true,
+        "decisao_mudou": false,
+        "notas_por_revisor_mudaram": false,
+        "quantidade_criticas_delta": 0,
+        "quantidade_criticas_bloqueantes_delta": 0,
+        "requer_revisao_humana_mudou": false
+      }
+    }
+  }
+}

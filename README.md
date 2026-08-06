@@ -300,6 +300,13 @@ flowchart LR
 | 3 | **Editor-Chefe** | Sintetiza os pareceres finais em uma **decisão editorial única**, preservando todas as críticas. | `EditorVerdictSchema` |
 | 4 | **Relatório Final** | Consolida tudo num relatório legível + JSON. Pura formatação, **sem LLM**. | `FinalReport` (md + dados) |
 
+> `run_demo(cross_review=False)` (ou `python main.py --no-cross-review`)
+> desativa a Fase 2: nenhuma chamada LLM nela — cada revisor "mantém" o
+> parecer da Fase 1, e a Fase 3 em diante roda sem alterações, porque
+> `CrossReviewSchema` continua sendo o contrato de saída da fase, só que
+> preenchido deterministicamente. É a variante experimental do benchmark de
+> custo/eficiência do Grupo 2 (seção 10, "Ablação") — não o comportamento padrão.
+
 ### Os schemas como contratos
 
 Os três schemas vivem em [`src/review_schema.py`](src/review_schema.py) e são a
@@ -661,7 +668,8 @@ Vive em [`src/metrics/`](src/metrics/), sem dependências externas:
 |---|---|
 | `eventos.py` | `ExecutionEvent` — evento atômico (fase, tipo, nome, status, duração, detalhes). |
 | `coletor.py` | `ExecutionCollector` — acumula eventos de uma execução; dois context managers (`fase()`, `tool()`) medem duração e registram sucesso/falha automaticamente. |
-| `adk_usage.py` | Tokens reais: lê o `usage_metadata` dos `Event` do ADK (entrada, resposta, pensamento, cache, total + modelo/agente/`invocation_id`), com dedup de parciais/repetidos e custo preparado via preço configurado. |
+| `adk_usage.py` | Tokens reais: lê o `usage_metadata` dos `Event` do ADK (entrada, resposta, pensamento, cache, total + modelo/agente/`invocation_id`), com dedup de parciais/repetidos e o cálculo de custo (`estimar_custo_usd`) a partir de um preço. |
+| `precos_modelos.py` | Resolve QUAL preço usar (`resolver_precos()`): variável de ambiente configurada manualmente vence; sem ela, tenta `litellm.model_cost` (se o pacote estiver instalado — reaproveita a tabela que ele já mantém, não cobre Maritaca); sem isso, cai numa tabela de preços OFICIAIS estática por provedor/modelo (Gemini, OpenAI, Maritaca — fontes documentadas no módulo). É o que ativa `custo_estimado` sem exigir configuração manual. |
 | `resumo.py` | `gerar_resumo()` — agrega os eventos em um `ResumoExecucao`: duração total, duração por fase, nº validações/retries/falhas, tools chamadas, tokens (por agente, por fase e da execução), decisão final, status final, alertas. |
 | `exportar.py` | `imprimir_resumo()` (tabela no terminal) e `salvar_resumo_json()`. |
 
@@ -703,9 +711,18 @@ Regras importantes (detalhes e schema em
 - **Agregação:** `tokens_execucao` (categorias da execução completa),
   `tokens_por_agente` e `tokens_por_fase` (soma de `tokens_total`), além de
   `chamadas_llm` e `modelo_usado`.
-- **Custo preparado, não ativado:** `custo_estimado` só é calculado se houver
-  preço configurado via `GRUPO2_PRECO_USD_MILHAO_TOKENS_ENTRADA`/`_SAIDA`
-  (nenhum preço fixo no código); sem preço, permanece `null`.
+- **Custo ativado.** `custo_estimado` é calculado sempre que há tokens
+  medidos E um preço resolvido para a execução. O preço vem, em ordem: (1)
+  `GRUPO2_PRECO_USD_MILHAO_TOKENS_ENTRADA`/`_SAIDA`, se as DUAS estiverem
+  configuradas — override manual, sempre vence; (2) `litellm.model_cost`, se
+  o pacote `litellm` estiver instalado (já é dependência do projeto para
+  Maritaca/OpenAI — aqui só reaproveitamos a tabela de preços que ele já
+  mantém, sem dependência nova; não cobre a Maritaca); (3) senão, a tabela de
+  preços OFICIAIS de `metrics/precos_modelos.py`, indexada pelo
+  provedor/modelo que a execução já resolveu via `model_provider`. Sem preço
+  configurado e sem entrada reconhecida em nenhuma fonte, `custo_estimado`
+  permanece `null` — nunca `0`. Ver
+  [`docs/metricas_reference.md §5.3`](docs/metricas_reference.md).
 - No modo **mock** não há chamada LLM — a seção de tokens indica isso
   explicitamente, e todos os campos ficam `null`/`n/d`.
 
@@ -773,10 +790,11 @@ cat src/outputs/resumo_execucao.json
   desta atividade.
 - **Tokens** (`tokens_totais`, `modelo_usado`, `chamadas_llm`,
   `tokens_execucao`, `tokens_por_agente`, `tokens_por_fase`) são preenchidos
-  a partir do `usage_metadata` real do ADK quando há execução com Gemini;
-  `custo_estimado` fica preparado (preço via variáveis de ambiente) — ver
-  [`docs/metricas_reference.md §5`](docs/metricas_reference.md) e o caminho
-  de evolução até OpenTelemetry.
+  a partir do `usage_metadata` real do ADK quando há execução com um
+  provedor real; `custo_estimado` é calculado a partir do preço resolvido em
+  `precos_modelos.resolver_precos()` (ambiente > tabela oficial > `null`) —
+  ver [`docs/metricas_reference.md §5`](docs/metricas_reference.md) e o
+  caminho de evolução até OpenTelemetry.
 
 ### O que ficou fora desta etapa
 
@@ -977,14 +995,25 @@ chamadas reais de API.
 
 Vive em [`src/benchmark/`](src/benchmark/): um manifesto de corpus
 (`corpus_manifest.json`), um executor em lote (`executar.py`, sempre
-sequencial e com seleção explícita de documentos e modo) e um comparativo
-entre execuções já registradas (`comparar.py`). A ferramenta só **consome**
-o que `pipeline.run_demo()` e `metrics/resumo.py` já produzem — não
-duplica lógica de métrica. Ver
+sequencial e com seleção explícita de documentos e modo), um comparativo
+entre execuções já registradas (`comparar.py`) e um comparativo PAREADO
+com/sem leitura cruzada (`ablacao_cross_review.py`, ver abaixo). A
+ferramenta só **consome** o que `pipeline.run_demo()` e `metrics/resumo.py`
+já produzem — não duplica lógica de métrica. Ver
 [`docs/benchmark_reference.md`](docs/benchmark_reference.md) para o schema
 completo do manifesto, os números atuais do corpus e os achados já
 coletados (ex.: o bloqueio de entrada funcionando para PDF escaneado, e o
 pipeline não diferenciando slides de artigos acadêmicos).
+
+Cada execução registrada por `executar.py` agora identifica completamente
+**provedor, modelo, `structured_output` e se a leitura cruzada estava
+ativa** (campos `provider`/`model`/`structured_output`/
+`cross_review_enabled`, `null` em modo mock — nenhuma chamada real
+aconteceu), além de sinais objetivos de **qualidade** do veredito
+(`notas_por_revisor`, `quantidade_criticas`, `quantidade_criticas_bloqueantes`)
+e `chamadas_llm`/`modelo_usado` do resumo — o que faltava para comparar
+execuções entre si de forma confiável (ver
+[`docs/benchmark_reference.md §6`](docs/benchmark_reference.md)).
 
 ```bash
 # Modo mock (offline, sem custo) — seleção explícita, sem modo "roda tudo"
@@ -993,9 +1022,35 @@ pipeline não diferenciando slides de artigos acadêmicos).
 # Modo api (chamadas reais ao provedor configurado) — mesmo comando, outro modo
 .venv/bin/python -m src.benchmark.executar --mode api --docs icd_hallucinations_2312_15710
 
+# Mesmo documento, variante experimental sem leitura cruzada (Fase 2 sem LLM)
+.venv/bin/python -m src.benchmark.executar --mode api --docs icd_hallucinations_2312_15710 --cross-review off
+
 # Comparativo entre tudo que já foi executado (não roda o pipeline de novo)
 .venv/bin/python -m src.benchmark.comparar
 ```
+
+### Ablação: pipeline completo vs. sem leitura cruzada
+
+`ablacao_cross_review.py` responde à pergunta que motivou esta atividade —
+quanto a leitura cruzada (Fase 2: 3 chamadas LLM adicionais, uma por
+revisor) melhora a resposta frente ao custo/tempo extra dela? Roda o MESMO
+documento, no MESMO modo/provedor/modelo, DUAS vezes (`cross_review=True` e
+`cross_review=False`) e grava as duas execuções lado a lado com o delta
+entre elas (tokens, duração, custo, chamadas LLM, decisão final, quantidade
+de críticas):
+
+```bash
+# Cada doc_id roda DUAS vezes — em modo api, o dobro do custo de executar.py
+.venv/bin/python -m src.benchmark.ablacao_cross_review --mode mock --docs exemplo_mock
+.venv/bin/python -m src.benchmark.ablacao_cross_review --mode api --docs icd_hallucinations_2312_15710
+```
+
+Resultado em [`src/benchmark/resultados/ablacao_cross_review.md`](src/benchmark/resultados/ablacao_cross_review.md)
+(tabela) e `.json` (dados completos, inclusive os dois registros brutos de
+cada lado). A "qualidade" comparada é um proxy OBJETIVO (críticas, notas,
+decisão) — o texto das críticas em si (`final_report.md` de cada execução)
+ainda precisa de leitura humana para uma conclusão qualitativa completa; a
+ferramenta prepara os números, não substitui essa leitura.
 
 ---
 
@@ -1011,6 +1066,10 @@ python main.py api
 # Mesmo pipeline, outro provedor — sem tocar em código (PowerShell):
 $env:LLM_PROVIDER="maritaca"; python main.py api
 $env:LLM_PROVIDER="openai";   python main.py api
+
+# Variante experimental sem leitura cruzada (Fase 2 sem chamada LLM, Grupo 2):
+python main.py mock --no-cross-review
+python main.py api --no-cross-review
 
 # PDF REAL de ponta a ponta (extração + agentes ADK + relatório; requer .env):
 python main.py --pdf caminho/do/artigo.pdf
