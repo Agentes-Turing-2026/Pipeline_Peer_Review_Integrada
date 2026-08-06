@@ -45,15 +45,22 @@ def _sep(titulo: str = "") -> None:
 
 
 def _limpar_execucao_anterior() -> None:
-    """Remove checkpoints de uma rodada anterior desta demo, para ela ser
-    reproduzível (sempre falha e retoma do zero, em vez de já achar tudo
-    concluído de uma execução passada com o mesmo run_id fixo)."""
-    ckpt_dir = SRC / "logs" / "checkpoints" / DEMO_RUN_ID
+    """Remove TUDO que uma rodada anterior desta demo deixou para trás.
+
+    O run_id é fixo, então a demo precisa começar do zero toda vez (sempre falha
+    e retoma, em vez de já achar tudo concluído). Apagar só os checkpoints não
+    basta: o sidecar de estado sobreviveria, e a rodada nova restauraria as
+    métricas da rodada passada por cima das suas — dobrando as contagens do
+    resumo. É o mesmo motivo pelo qual ``--force`` descarta checkpoints e
+    métricas juntos.
+    """
+    ckpt_raiz = SRC / "logs" / "checkpoints"
+    ckpt_dir = ckpt_raiz / DEMO_RUN_ID
     if ckpt_dir.exists():
         shutil.rmtree(ckpt_dir)
-    meta_path = SRC / "logs" / "checkpoints" / f"{DEMO_RUN_ID}.meta.json"
-    if meta_path.exists():
-        meta_path.unlink()
+    # Pega meta, estado e eventuais restos de .corrompido de uma vez.
+    for sidecar in ckpt_raiz.glob(f"{DEMO_RUN_ID}.*"):
+        sidecar.unlink()
 
 
 def main() -> None:
