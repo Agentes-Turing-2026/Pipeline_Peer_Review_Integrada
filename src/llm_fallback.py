@@ -12,11 +12,19 @@ Como se encaixa no restante do pipeline:
   modelo dos agentes. Quando a reserva está configurada (``LLM_FALLBACK_*``),
   ele passa a devolver o ``ModeloComFallback`` criado aqui — um ``BaseLlm``
   comum do ADK que embrulha os dois modelos reais. Os agentes não mudam.
-- Cada troca emite eventos via ``observability.emit_event`` (no-op fora de uma
-  execução com tracer): ``llm_fallback_acionado``, ``llm_fallback_respondeu`` e
-  ``llm_fallback_esgotado``, sempre com provedor inicial, motivo da falha,
-  opção reserva e qual modelo respondeu. Esses eventos são o gancho para o
-  enriquecimento de traces e métricas (trabalho da Pessoa 2 do grupo).
+- Cada TENTATIVA (principal e, se houver troca, reserva) vira um sub-span
+  ``llm_tentativa_principal``/``llm_tentativa_reserva`` no trace (início, fim,
+  duração, status). Cada TROCA de modelo emite, nas duas trilhas de
+  observabilidade do pipeline, sempre com provedor inicial, motivo da falha,
+  opção reserva e qual modelo respondeu:
+    * traces (``observability.emit_event``, Grupo 3): ``llm_fallback_acionado``,
+      ``llm_fallback_respondeu`` e ``llm_fallback_esgotado``;
+    * métricas (``ExecutionCollector.registrar(tipo="fallback_llm")``, Grupo 2):
+      mesmos três desfechos, agregados em ``ResumoExecucao.fallbacks_llm`` e
+      nos contadores ``quantidade_fallbacks_*`` (ver
+      ``docs/metricas_reference.md`` §6).
+  As duas trilhas são no-op fora de uma execução instrumentada (sem tracer /
+  sem coletor registrado).
 
 Configuração (ver ``model_provider.resolver_config_fallback``):
 
@@ -31,7 +39,12 @@ como antes (uma falha de API interrompe a execução).
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
+
+#: Mesmo domínio de metrics.eventos.StatusEvento — repetido aqui (sem importar
+#: metrics, que é opcional) só para tipar o status repassado a
+#: ExecutionCollector.registrar().
+_StatusMetrica = Literal["sucesso", "falha", "aviso"]
 
 # ---------------------------------------------------------------------------
 # Classificação da falha: temporária (vale trocar de modelo) x permanente
@@ -124,16 +137,93 @@ def classificar_falha_temporaria(exc: BaseException) -> str | None:
 
 
 # ---------------------------------------------------------------------------
-# Eventos para traces/métricas (gancho para a Pessoa 2)
+# Eventos para traces/métricas
+#
+# Cada troca de modelo alimenta as DUAS trilhas de observabilidade do
+# pipeline, a partir do MESMO conjunto de fatos (provedor inicial, motivo da
+# falha, opção fallback, quem respondeu):
+#
+#   - traces  (src/observability/, Grupo 3): emit_event(...) ancorado no span
+#     da execução/fase atual — aparece na linha do tempo reconstruída por
+#     render_timeline().
+#   - métricas (src/metrics/, Grupo 2): ExecutionCollector.registrar(...) com
+#     tipo="fallback_llm" — aparece em ResumoExecucao (quantidade_fallbacks_*
+#     e fallbacks_llm), ver docs/metricas_reference.md §6.
+#
+# Ambas são NO-OP fora de uma execução instrumentada (sem tracer / sem
+# coletor registrado) — a troca de modelo em si nunca depende delas.
 # ---------------------------------------------------------------------------
 
-def _emit(name: str, status: str, attributes: dict[str, Any]) -> None:
-    """Emite o evento na execução atual; sem tracer/observabilidade, é no-op."""
+def _fase_atual() -> str | None:
+    """Fase do pipeline em curso (via metrics.coletor), ou None se indisponível.
+
+    Import tardio e guardado: ``metrics`` pode não estar instalado (uso avulso
+    de ``llm_fallback.py`` fora do pipeline) e, mesmo instalado, só há uma fase
+    "atual" dentro de um ``with coletor.fase(...)`` — o que cobre exatamente o
+    trecho em que os agentes (e o corretor de retry) chamam o modelo.
+    """
+    try:
+        from metrics.coletor import obter_fase_atual
+    except ImportError:
+        return None
+    return obter_fase_atual()
+
+
+def _emit(name: str, status: str, attributes: dict[str, Any], *, papel: str | None) -> None:
+    """Emite o evento de TRACE na execução atual; sem tracer, é no-op."""
     try:
         from observability import emit_event
     except ImportError:  # observabilidade indisponível (ex.: uso avulso)
         return
-    emit_event(name, author="grupo3_fallback", status=status, attributes=attributes)
+    emit_event(
+        name,
+        author=papel or "llm_fallback",
+        phase=_fase_atual(),
+        status=status,
+        attributes=attributes,
+    )
+
+
+def _registrar_metrica(
+    *, evento: str, status: _StatusMetrica, papel: str | None, detalhes: dict[str, Any]
+) -> None:
+    """Registra a troca de modelo no ExecutionCollector da execução atual.
+
+    Mesmo padrão de no-op de ``_emit``: sem ``metrics`` instalado ou sem
+    coletor registrado para esta execução (``metrics.adk_usage.
+    definir_coletor_adk``, ligado pelo pipeline), não faz nada.
+    """
+    try:
+        from metrics.adk_usage import obter_coletor_adk
+    except ImportError:
+        return
+    coletor = obter_coletor_adk()
+    if coletor is None:
+        return
+    coletor.registrar(
+        fase=_fase_atual() or "desconhecida",
+        tipo="fallback_llm",
+        nome=papel or "llm",
+        status=status,
+        evento=evento,
+        **detalhes,
+    )
+
+
+def _span(name: str, *, papel: str | None, attributes: dict[str, Any]):
+    """Sub-span de UMA tentativa de chamada ao modelo (no-op sem tracer).
+
+    Cada tentativa (principal ou reserva) vira um span próprio, com início,
+    fim, duração e status — é o que faz "cada tentativa" aparecer no trace,
+    além dos eventos de desfecho (acionado/respondeu/esgotado).
+    """
+    try:
+        from observability import trace_span
+    except ImportError:
+        from contextlib import nullcontext
+
+        return nullcontext()
+    return trace_span(name, kind="call", phase=_fase_atual(), author=papel or "llm_fallback", attributes=attributes)
 
 
 def _resumo_erro(exc: BaseException) -> str:
@@ -148,15 +238,32 @@ def emitir_fallback_acionado(
     erro: BaseException, papel: str | None = None,
 ) -> None:
     """Registra que o principal falhou por motivo temporário e a reserva entrou."""
+    erro_resumido = _resumo_erro(erro)
     _emit(
         "llm_fallback_acionado",
         status="alerta",
+        papel=papel,
         attributes={
             "provedor_inicial": rotulo_primario,
             "motivo_da_falha": motivo,
-            "erro": _resumo_erro(erro),
+            "erro": erro_resumido,
             "opcao_fallback": rotulo_reserva,
             "papel": papel,
+        },
+    )
+    _registrar_metrica(
+        evento="acionado",
+        status="aviso",
+        papel=papel,
+        detalhes={
+            "provedor_inicial": rotulo_primario,
+            "motivo_falha": motivo,
+            "opcao_fallback": rotulo_reserva,
+            "erro": erro_resumido,
+            "mensagem": (
+                f"fallback acionado: '{rotulo_primario}' falhou ({motivo}) — "
+                f"tentando reserva '{rotulo_reserva}'"
+            ),
         },
     )
 
@@ -168,10 +275,21 @@ def emitir_fallback_respondeu(
     _emit(
         "llm_fallback_respondeu",
         status="ok",
+        papel=papel,
         attributes={
             "provedor_inicial": rotulo_primario,
             "modelo_que_respondeu": rotulo_reserva,
             "papel": papel,
+        },
+    )
+    _registrar_metrica(
+        evento="respondeu",
+        status="sucesso",
+        papel=papel,
+        detalhes={
+            "provedor_inicial": rotulo_primario,
+            "opcao_fallback": rotulo_reserva,
+            "modelo_que_respondeu": rotulo_reserva,
         },
     )
 
@@ -181,14 +299,30 @@ def emitir_fallback_esgotado(
     erro: BaseException, papel: str | None = None,
 ) -> None:
     """Registra que principal E reserva falharam — a execução vai parar."""
+    erro_resumido = _resumo_erro(erro)
     _emit(
         "llm_fallback_esgotado",
         status="erro",
+        papel=papel,
         attributes={
             "provedor_inicial": rotulo_primario,
             "opcao_fallback": rotulo_reserva,
-            "erro_da_reserva": _resumo_erro(erro),
+            "erro_da_reserva": erro_resumido,
             "papel": papel,
+        },
+    )
+    _registrar_metrica(
+        evento="esgotado",
+        status="falha",
+        papel=papel,
+        detalhes={
+            "provedor_inicial": rotulo_primario,
+            "opcao_fallback": rotulo_reserva,
+            "erro_final": erro_resumido,
+            "mensagem": (
+                f"fallback esgotado: principal '{rotulo_primario}' e reserva "
+                f"'{rotulo_reserva}' falharam"
+            ),
         },
     )
 
@@ -239,10 +373,15 @@ def _classe_modelo_com_fallback():
             try:
                 respostas = []
                 llm_request.model = self.modelo_primario.model
-                async for resposta in self.modelo_primario.generate_content_async(
-                    llm_request, stream
+                with _span(
+                    "llm_tentativa_principal",
+                    papel=self.papel,
+                    attributes={"modelo": self.rotulo_primario, "papel": self.papel},
                 ):
-                    respostas.append(resposta)
+                    async for resposta in self.modelo_primario.generate_content_async(
+                        llm_request, stream
+                    ):
+                        respostas.append(resposta)
             except Exception as exc:  # noqa: BLE001 — classificado logo abaixo
                 motivo = classificar_falha_temporaria(exc)
                 if motivo is None:
@@ -265,10 +404,15 @@ def _classe_modelo_com_fallback():
                 llm_request.config = config_original
             llm_request.model = self.modelo_reserva.model
             try:
-                async for resposta in self.modelo_reserva.generate_content_async(
-                    llm_request, stream
+                with _span(
+                    "llm_tentativa_reserva",
+                    papel=self.papel,
+                    attributes={"modelo": self.rotulo_reserva, "papel": self.papel},
                 ):
-                    yield resposta
+                    async for resposta in self.modelo_reserva.generate_content_async(
+                        llm_request, stream
+                    ):
+                        yield resposta
             except Exception as exc:  # noqa: BLE001 — só para registrar; re-levanta
                 emitir_fallback_esgotado(
                     rotulo_primario=self.rotulo_primario,

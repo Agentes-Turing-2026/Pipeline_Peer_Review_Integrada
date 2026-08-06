@@ -509,8 +509,14 @@ def completar_texto(
     cfg = exigir_api_key(config, papel)
     cfg_reserva = resolver_config_fallback(config, papel)
 
+    from llm_fallback import _span  # mesmo span de tentativa do ModeloComFallback
+
     try:
-        return _completar_texto_unico(cfg, prompt)
+        with _span(
+            "llm_tentativa_principal", papel=papel,
+            attributes={"modelo": cfg.rotulo, "papel": papel},
+        ):
+            return _completar_texto_unico(cfg, prompt)
     except Exception as exc:  # noqa: BLE001 — classificado logo abaixo
         if cfg_reserva is None:
             raise
@@ -529,7 +535,11 @@ def completar_texto(
             motivo=motivo, erro=exc, papel=papel,
         )
         try:
-            texto = _completar_texto_unico(cfg_reserva, prompt)
+            with _span(
+                "llm_tentativa_reserva", papel=papel,
+                attributes={"modelo": cfg_reserva.rotulo, "papel": papel},
+            ):
+                texto = _completar_texto_unico(cfg_reserva, prompt)
         except Exception as exc_reserva:  # noqa: BLE001 — registra e re-levanta
             emitir_fallback_esgotado(
                 rotulo_primario=cfg.rotulo, rotulo_reserva=cfg_reserva.rotulo,

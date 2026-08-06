@@ -22,6 +22,13 @@ pipeline.py):
                              pensamento/cache/total (int ou None = indisponível,
                              nunca 0 no lugar de ausente), modelo, agente,
                              invocation_id e event_id.
+  - tipo="fallback_llm"   -> uma troca de modelo por falha temporária
+                             (registrada por llm_fallback.py). detalhes traz
+                             evento ("acionado"|"respondeu"|"esgotado"),
+                             provedor_inicial, motivo_falha (só "acionado"),
+                             opcao_fallback e modelo_que_respondeu (só
+                             "respondeu"); o PAPEL vai no campo `nome` do
+                             evento (ex.: "editor"), não em detalhes. Ver §6.
   - detalhes={"requer_revisao_humana": True} em QUALQUER evento -> liga a
     flag agregada de revisão humana no resumo.
   - status="aviso" em qualquer evento -> vira um item em `alertas`
@@ -94,6 +101,20 @@ class ResumoExecucao:
     """tokens_total somado por agente; valor None = agente chamou, consumo indisponível."""
     tokens_por_fase: dict[str, int | None] = field(default_factory=dict)
     """tokens_total somado por fase; valor None = fase teve chamadas, consumo indisponível."""
+    # Fallback de LLM (llm_fallback.py): cada troca de modelo por falha
+    # temporária vira um evento tipo="fallback_llm" (ver §1); agregados aqui
+    # para o resumo mostrar, sem precisar reler o trace, quantas trocas
+    # aconteceram e o desfecho de cada uma.
+    quantidade_fallbacks_acionados: int = 0
+    """Quantas vezes o modelo principal falhou (temporário) e a reserva entrou."""
+    quantidade_fallbacks_respondidos: int = 0
+    """Quantas trocas terminaram com a reserva respondendo com sucesso."""
+    quantidade_fallbacks_esgotados: int = 0
+    """Quantas trocas terminaram com principal E reserva falhando."""
+    fallbacks_llm: list[dict[str, Any]] = field(default_factory=list)
+    """Uma entrada por evento fallback_llm, na ordem em que ocorreram: fase,
+    papel, o desfecho (evento), provedor_inicial, motivo_falha,
+    opcao_fallback e modelo_que_respondeu (quando aplicável)."""
 
     def to_dict(self) -> dict[str, Any]:
         """Serializa o resumo em um dict simples, pronto para JSON."""
@@ -117,6 +138,10 @@ class ResumoExecucao:
             "tokens_execucao": self.tokens_execucao,
             "tokens_por_agente": self.tokens_por_agente,
             "tokens_por_fase": self.tokens_por_fase,
+            "quantidade_fallbacks_acionados": self.quantidade_fallbacks_acionados,
+            "quantidade_fallbacks_respondidos": self.quantidade_fallbacks_respondidos,
+            "quantidade_fallbacks_esgotados": self.quantidade_fallbacks_esgotados,
+            "fallbacks_llm": self.fallbacks_llm,
         }
 
 
@@ -186,6 +211,10 @@ def gerar_resumo(
     alertas: list[str] = []
     houve_falha = False
     houve_aviso = False
+    quantidade_fallbacks_acionados = 0
+    quantidade_fallbacks_respondidos = 0
+    quantidade_fallbacks_esgotados = 0
+    fallbacks_llm: list[dict[str, Any]] = []
 
     for evento in eventos:
         if evento.tipo == "fase" and evento.duracao_s is not None:
@@ -198,6 +227,27 @@ def gerar_resumo(
             quantidade_retries += 1
         if evento.tipo == "falha":
             quantidade_falhas += 1
+        if evento.tipo == "fallback_llm":
+            desfecho = evento.detalhes.get("evento")
+            if desfecho == "acionado":
+                quantidade_fallbacks_acionados += 1
+            elif desfecho == "respondeu":
+                quantidade_fallbacks_respondidos += 1
+            elif desfecho == "esgotado":
+                quantidade_fallbacks_esgotados += 1
+            fallbacks_llm.append(
+                {
+                    "fase": evento.fase,
+                    "papel": evento.nome,
+                    "evento": desfecho,
+                    "status": evento.status,
+                    "timestamp": evento.timestamp,
+                    "provedor_inicial": evento.detalhes.get("provedor_inicial"),
+                    "motivo_falha": evento.detalhes.get("motivo_falha"),
+                    "opcao_fallback": evento.detalhes.get("opcao_fallback"),
+                    "modelo_que_respondeu": evento.detalhes.get("modelo_que_respondeu"),
+                }
+            )
         if evento.detalhes.get("requer_revisao_humana") is True:
             requer_revisao_humana = True
         if evento.tipo == "decisao_final" and "decisao" in evento.detalhes:
@@ -279,4 +329,8 @@ def gerar_resumo(
         tokens_execucao=tokens_execucao,
         tokens_por_agente=tokens_por_agente,
         tokens_por_fase=tokens_por_fase,
+        quantidade_fallbacks_acionados=quantidade_fallbacks_acionados,
+        quantidade_fallbacks_respondidos=quantidade_fallbacks_respondidos,
+        quantidade_fallbacks_esgotados=quantidade_fallbacks_esgotados,
+        fallbacks_llm=fallbacks_llm,
     )

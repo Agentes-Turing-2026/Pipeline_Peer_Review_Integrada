@@ -314,6 +314,195 @@ def test_troca_emite_eventos_no_trace():
     assert respondeu.attributes["modelo_que_respondeu"] == "maritaca:reserva"
 
 
+def test_cada_tentativa_vira_um_span_no_trace():
+    """Principal E reserva aparecem como sub-spans próprios (início/fim/duração)."""
+    from observability import MemoryExporter, Tracer
+    from observability.events import EventType
+
+    exporter = MemoryExporter()
+    tracer = Tracer(exporter=exporter)
+
+    modelo = _wrapper(
+        _modelo_que_falha(RateLimitError("quota"), nome="principal"),
+        _modelo_que_responde("ok", nome="reserva"),
+    )
+    with tracer.run("teste_fallback"):
+        _rodar(modelo, _novo_request(model=modelo.model))
+
+    nomes_span = [
+        e.name for e in exporter.events
+        if e.event_type in (EventType.SPAN_START.value, EventType.SPAN_END.value)
+    ]
+    assert "llm_tentativa_principal" in nomes_span
+    assert "llm_tentativa_reserva" in nomes_span
+
+    fim_principal = next(
+        e for e in exporter.events
+        if e.name == "llm_tentativa_principal" and e.event_type == EventType.SPAN_END.value
+    )
+    assert fim_principal.status == "erro"  # a tentativa principal falhou
+    assert fim_principal.duration_s is not None
+
+    fim_reserva = next(
+        e for e in exporter.events
+        if e.name == "llm_tentativa_reserva" and e.event_type == EventType.SPAN_END.value
+    )
+    assert fim_reserva.status == "ok"  # a reserva respondeu
+
+
+def test_sem_fallback_a_tentativa_principal_ainda_vira_span():
+    """Mesmo sem troca, a tentativa (bem-sucedida) do principal fica no trace."""
+    from observability import MemoryExporter, Tracer
+    from observability.events import EventType
+
+    exporter = MemoryExporter()
+    tracer = Tracer(exporter=exporter)
+
+    modelo = _wrapper(
+        _modelo_que_responde("resposta do principal", nome="principal"),
+        _modelo_que_falha(AssertionError("a reserva NÃO devia ser chamada")),
+    )
+    with tracer.run("teste_fallback"):
+        _rodar(modelo, _novo_request(model=modelo.model))
+
+    fim_principal = next(
+        e for e in exporter.events
+        if e.name == "llm_tentativa_principal" and e.event_type == EventType.SPAN_END.value
+    )
+    assert fim_principal.status == "ok"
+    assert not any(e.name == "llm_tentativa_reserva" for e in exporter.events)
+
+
+def test_eventos_de_fallback_trazem_papel_e_fase_no_trace():
+    """author/phase do evento de trace refletem o papel e a fase da execução."""
+    from observability import MemoryExporter, Tracer
+    from metrics.coletor import ExecutionCollector
+
+    exporter = MemoryExporter()
+    tracer = Tracer(exporter=exporter)
+    coletor = ExecutionCollector(run_id="run-trace-fase")
+
+    modelo = criar_modelo_com_fallback(
+        modelo_primario=_modelo_que_falha(RateLimitError("quota"), nome="principal"),
+        modelo_reserva=_modelo_que_responde("ok", nome="reserva"),
+        rotulo_primario="gemini:principal",
+        rotulo_reserva="maritaca:reserva",
+        papel="editor",
+    )
+    with tracer.run("teste_fallback"):
+        with coletor.fase("fase_3_editor_chefe"):
+            _rodar(modelo, _novo_request(model=modelo.model))
+
+    acionado = next(e for e in exporter.events if e.name == "llm_fallback_acionado")
+    assert acionado.author == "editor"
+    assert acionado.phase == "fase_3_editor_chefe"
+
+
+# ---------------------------------------------------------------------------
+# Integração com métricas (ExecutionCollector / Grupo 2)
+# ---------------------------------------------------------------------------
+
+def test_troca_registra_eventos_fallback_llm_no_coletor():
+    """A troca também aparece nas MÉTRICAS: tipo="fallback_llm" no coletor."""
+    from metrics.coletor import ExecutionCollector
+    from metrics.adk_usage import definir_coletor_adk
+
+    coletor = ExecutionCollector(run_id="run-metricas-fallback")
+    definir_coletor_adk(coletor)
+    try:
+        modelo = _wrapper(
+            _modelo_que_falha(RateLimitError("quota"), nome="principal"),
+            _modelo_que_responde("ok", nome="reserva"),
+        )
+        with coletor.fase("fase_1_revisao_independente"):
+            _rodar(modelo, _novo_request(model=modelo.model))
+    finally:
+        definir_coletor_adk(None)
+
+    fallback_eventos = [e for e in coletor.eventos if e.tipo == "fallback_llm"]
+    assert [e.detalhes["evento"] for e in fallback_eventos] == ["acionado", "respondeu"]
+
+    acionado = fallback_eventos[0]
+    assert acionado.fase == "fase_1_revisao_independente"
+    assert acionado.status == "aviso"
+    assert acionado.detalhes["provedor_inicial"] == "gemini:principal"
+    assert acionado.detalhes["motivo_falha"] == MOTIVO_LIMITE_REQUISICOES
+    assert acionado.detalhes["opcao_fallback"] == "maritaca:reserva"
+
+    respondeu = fallback_eventos[1]
+    assert respondeu.status == "sucesso"
+    assert respondeu.detalhes["modelo_que_respondeu"] == "maritaca:reserva"
+
+
+def test_esgotamento_registra_falha_no_coletor():
+    """Principal e reserva falhando: métrica de status="falha" para auditoria."""
+    from metrics.coletor import ExecutionCollector
+    from metrics.adk_usage import definir_coletor_adk
+
+    coletor = ExecutionCollector(run_id="run-metricas-esgotado")
+    definir_coletor_adk(coletor)
+    try:
+        modelo = _wrapper(
+            _modelo_que_falha(RateLimitError("quota"), nome="principal"),
+            _modelo_que_falha(ServiceUnavailableError("down"), nome="reserva"),
+        )
+        with coletor.fase("fase_2_leitura_cruzada"):
+            with pytest.raises(ServiceUnavailableError):
+                _rodar(modelo, _novo_request(model=modelo.model))
+    finally:
+        definir_coletor_adk(None)
+
+    fallback_eventos = [e for e in coletor.eventos if e.tipo == "fallback_llm"]
+    assert [e.detalhes["evento"] for e in fallback_eventos] == ["acionado", "esgotado"]
+    esgotado = fallback_eventos[1]
+    assert esgotado.status == "falha"
+    assert esgotado.detalhes["opcao_fallback"] == "maritaca:reserva"
+
+
+def test_sem_coletor_registrado_nao_gera_metrica_nem_erro():
+    """Sem definir_coletor_adk(...), a troca continua funcionando (no-op nas métricas)."""
+    from metrics.adk_usage import obter_coletor_adk
+
+    assert obter_coletor_adk() is None  # nada registrado nesta execução de teste
+
+    modelo = _wrapper(
+        _modelo_que_falha(RateLimitError("quota"), nome="principal"),
+        _modelo_que_responde("ok", nome="reserva"),
+    )
+    respostas = _rodar(modelo, _novo_request(model=modelo.model))
+    assert respostas[0].content.parts[0].text == "ok"
+
+
+def test_resumo_agrega_fallbacks_acionados_e_respondidos():
+    """gerar_resumo() conta as trocas e lista o desfecho de cada uma."""
+    from metrics.coletor import ExecutionCollector
+    from metrics.adk_usage import definir_coletor_adk
+    from metrics.resumo import gerar_resumo
+
+    coletor = ExecutionCollector(run_id="run-resumo-fallback")
+    definir_coletor_adk(coletor)
+    try:
+        modelo = _wrapper(
+            _modelo_que_falha(RateLimitError("quota"), nome="principal"),
+            _modelo_que_responde("ok", nome="reserva"),
+        )
+        with coletor.fase("fase_1_revisao_independente"):
+            _rodar(modelo, _novo_request(model=modelo.model))
+    finally:
+        definir_coletor_adk(None)
+
+    resumo = gerar_resumo(coletor.eventos, run_id=coletor.run_id)
+    assert resumo.quantidade_fallbacks_acionados == 1
+    assert resumo.quantidade_fallbacks_respondidos == 1
+    assert resumo.quantidade_fallbacks_esgotados == 0
+    assert len(resumo.fallbacks_llm) == 2
+    assert resumo.fallbacks_llm[0]["provedor_inicial"] == "gemini:principal"
+    assert resumo.fallbacks_llm[0]["motivo_falha"] == MOTIVO_LIMITE_REQUISICOES
+    assert resumo.fallbacks_llm[1]["modelo_que_respondeu"] == "maritaca:reserva"
+    # O aviso do "acionado" também aparece na lista de alertas do resumo.
+    assert any("fallback acionado" in alerta for alerta in resumo.alertas)
+
+
 # ---------------------------------------------------------------------------
 # Integração com build_model
 # ---------------------------------------------------------------------------

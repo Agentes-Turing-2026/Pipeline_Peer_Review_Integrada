@@ -15,12 +15,27 @@ threads reais, isso precisa ser revisitado.
 
 from __future__ import annotations
 
+import contextvars
 import time
 from contextlib import contextmanager
 from typing import Any, Iterator
 from uuid import uuid4
 
 from .eventos import ExecutionEvent, StatusEvento, TipoEvento
+
+# Fase da execução em curso, válida durante um `with coletor.fase(nome): ...`.
+# Mesmo padrão de contexto global do tracer (Grupo 3): permite que código que
+# não recebe `fase` por parâmetro (ex.: llm_fallback.py, chamado de dentro do
+# modelo, não da fase) descubra em qual fase está rodando, sem acoplamento
+# direto ao pipeline. Fora de qualquer fase medida, o valor é None.
+_fase_atual: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "metrics_fase_atual", default=None
+)
+
+
+def obter_fase_atual() -> str | None:
+    """Nome da fase em execução (dentro de um `coletor.fase(...)`), ou None."""
+    return _fase_atual.get()
 
 
 class ExecutionCollector:
@@ -92,6 +107,7 @@ class ExecutionCollector:
         RE-LEVANTA a exceção (não engole erro do pipeline).
         """
         inicio = time.perf_counter()
+        token = _fase_atual.set(nome)
         try:
             yield
         except Exception as exc:
@@ -104,6 +120,8 @@ class ExecutionCollector:
         else:
             duracao_s = time.perf_counter() - inicio
             self.registrar(fase=nome, tipo="fase", nome=nome, status="sucesso", duracao_s=duracao_s)
+        finally:
+            _fase_atual.reset(token)
 
     @contextmanager
     def tool(self, nome: str, *, fase: str) -> Iterator[None]:

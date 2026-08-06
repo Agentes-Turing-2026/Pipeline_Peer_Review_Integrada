@@ -741,6 +741,20 @@ Regras importantes (detalhes e schema em
 - No modo **mock** não há chamada LLM — a seção de tokens indica isso
   explicitamente, e todos os campos ficam `null`/`n/d`.
 
+### Fallback de LLM (troca de modelo por falha temporária)
+
+Quando `LLM_FALLBACK_*` está configurado (ver
+[`src/llm_fallback.py`](src/llm_fallback.py)), cada troca de modelo também
+entra no resumo: `quantidade_fallbacks_acionados`,
+`quantidade_fallbacks_respondidos`, `quantidade_fallbacks_esgotados` e a
+lista `fallbacks_llm` (uma entrada por evento, com fase, papel, provedor
+inicial, motivo da falha, opção fallback e qual modelo respondeu). Mesma
+regra de agregação genérica das demais métricas: um fallback "esgotado"
+(principal e reserva falharam) marca `status_final = "falha"`; um "acionado"
+vira um item em `alertas`. Sem reserva configurada, todos os campos ficam
+zerados/vazios. Detalhes completos em
+[`docs/metricas_reference.md §6`](docs/metricas_reference.md).
+
 ### Exemplo de resumo gerado (modo mock)
 
 ```
@@ -910,6 +924,25 @@ Tokens são capturados do `usage_metadata` do ADK, preenchido tanto pela rota
 nativa do Gemini quanto pelo `LiteLlm` (Maritaca/OpenAI). **Quando o provedor não
 reporta medição, o resumo diz "não reportados" em vez de exibir zeros** —
 `resumir_tokens()` distingue "não medido" de "consumiu zero".
+
+### Fallback de LLM: cada tentativa e troca no trace
+
+Quando a reserva está configurada (`LLM_FALLBACK_PROVIDER`/`LLM_FALLBACK_MODEL`,
+ver [`src/llm_fallback.py`](src/llm_fallback.py)), a linha do tempo mostra tanto
+CADA TENTATIVA quanto CADA TROCA de modelo:
+
+- `llm_tentativa_principal` / `llm_tentativa_reserva`: um sub-span por
+  tentativa (início, fim, duração, status) — inclusive quando o principal
+  responde de primeira, sem troca nenhuma.
+- `llm_fallback_acionado` / `llm_fallback_respondeu` / `llm_fallback_esgotado`:
+  os três desfechos de uma troca, sempre com **provedor inicial**, **motivo
+  da falha** (`timeout`/`limite_de_requisicoes`/`erro_de_rede`/
+  `indisponibilidade_da_api`), **opção fallback** e **qual modelo respondeu**.
+
+Os mesmos fatos alimentam as MÉTRICAS (seção 7): `tipo="fallback_llm"` no
+`ExecutionCollector`, agregado em `ResumoExecucao.fallbacks_llm` e nos
+contadores `quantidade_fallbacks_acionados/respondidos/esgotados` — ver
+[`docs/metricas_reference.md §6`](docs/metricas_reference.md).
 
 ### Como os outros grupos entram na MESMA execução
 
