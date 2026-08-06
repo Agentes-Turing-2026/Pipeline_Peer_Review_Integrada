@@ -281,12 +281,19 @@ execução já rodada (histórico completo), não deduplicado por documento como
   inicialização mostra `modelo=openai:gpt-5.6-luna`, mas
   `resumo_execucao.json["modelo_usado"]` traz só `"gpt-5.6-luna"`). Isso é
   comportamento esperado do dado que o ADK devolve, não um bug do
-  benchmark nem de `metrics/adk_usage.py`. `"gpt-5.6-luna"` não corresponde a
-  nenhum modelo público documentado da OpenAI — plausivelmente um gateway/
-  proxy usado nesta execução reescreve o nome do modelo na resposta. Por
-  isso `metrics/precos_modelos.py` (custo, §7) precifica pelo modelo
-  CONFIGURADO (`provider`/`model` do registro, §3.1), nunca por
-  `modelo_usado` — o único jeito de não quebrar diante dessa divergência.
+  benchmark nem de `metrics/adk_usage.py`.
+  **Correção (2026-08-06):** uma versão anterior deste documento especulava
+  que `"gpt-5.6-luna"` era um gateway/proxy que reescrevia o nome do modelo,
+  por não corresponder a nenhum modelo conhecido no momento da primeira
+  redação. Isso estava errado — confirmado por chamada real à API (com uma
+  chave de teste) e por busca na documentação oficial da OpenAI, GPT-5.6
+  Luna é um modelo real e atual (lançado em 2026-07-09, a variante mais
+  rápida/barata da família GPT-5.6), só posterior ao corte de conhecimento
+  do agente que escreveu a versão original deste texto. `metrics/precos_modelos.py`
+  (custo, §7) já tem o preço dele na tabela oficial. O PRINCÍPIO continua
+  válido — precificar pelo modelo CONFIGURADO (`provider`/`model` do
+  registro, §3.1), nunca pelo `modelo_usado` devolvido, ainda é o certo para
+  o caso genérico de um gateway/proxy real — só o exemplo estava errado.
 
 ---
 
@@ -310,11 +317,14 @@ execução já rodada (histórico completo), não deduplicado por documento como
   `docs/metricas_reference.md §5.3` para a precedência completa. Continua
   `null` quando: (a) o modo é mock (nenhuma chamada LLM, nenhum token
   medido); (b) o modelo configurado não está reconhecido em NENHUMA das três
-  fontes (ex.: um modelo muito novo); (c) o provedor é um gateway/proxy com
-  preço diferente do público e ninguém configurou o preço real por ambiente
-  — nesse caso o custo calculado automaticamente SERIA impreciso, então vale
-  configurar `GRUPO2_PRECO_USD_MILHAO_TOKENS_ENTRADA`/`_SAIDA` manualmente
-  antes de rodar (ver o achado sobre `"gpt-5.6-luna"` acima).
+  fontes (ex.: um modelo muito novo — foi exatamente o caso do
+  `"gpt-5.6-luna"` até ele ser adicionado à tabela oficial, ver o achado
+  acima); (c) o provedor é de fato um gateway/proxy com tabela de preço
+  PRÓPRIA, diferente da pública, e ninguém configurou o preço real por
+  ambiente — nesse caso o custo calculado automaticamente pela tabela
+  pública SERIA impreciso, então vale configurar
+  `GRUPO2_PRECO_USD_MILHAO_TOKENS_ENTRADA`/`_SAIDA` manualmente antes de
+  rodar.
 - **Os 8 registros `api` já commitados em `execucoes.json` são anteriores a
   esta ativação** — não têm `custo_estimado` retroativo (o preço não foi
   aplicado sobre uma execução passada, só é calculado NA hora da execução).

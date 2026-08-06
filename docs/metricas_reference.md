@@ -274,18 +274,25 @@ final (`estimar_custo_usd`).
    oficial — `custo_estimado` permanece `None` (custo desconhecido, nunca 0).
 
 **A tabela precifica pelo modelo CONFIGURADO, não pelo `model_version` cru
-que o ADK devolve.** Os dois podem divergir — o benchmark já registrou um
-caso real em que a execução foi configurada com o provedor `openai`, mas o
-`Event` do ADK devolveu `model_version="gpt-5.6-luna"` (ver
-[`docs/benchmark_reference.md §6`](benchmark_reference.md)), um identificador
-que não corresponde a nenhum modelo público documentado — plausivelmente um
-gateway/proxy que reescreve o nome do modelo na resposta. Precificar pelo
-nome CONFIGURADO (o que a chave de API de fato contratou) é robusto a essa
-divergência; precificar pelo nome devolvido não seria — por isso
-`resolver_precos` nunca olha para `detalhes["modelo"]` dos eventos
+que o ADK devolve.** Os dois PODEM divergir — em geral, se o provedor da
+execução for um gateway/proxy que reescreve o nome do modelo na resposta.
+Precificar pelo nome CONFIGURADO (o que a chave de API de fato contratou) é
+robusto a essa divergência; precificar pelo nome devolvido não seria — por
+isso `resolver_precos` nunca olha para `detalhes["modelo"]` dos eventos
 `chamada_llm`. Se o provedor da sua execução for um gateway com tabela de
 preço própria (diferente da pública), configure o preço real via ambiente
 (prioridade 1) em vez de confiar no fallback da tabela.
+
+> **Nota de correção (2026-08-06):** uma versão anterior deste parágrafo
+> citava `model_version="gpt-5.6-luna"` (visto num registro real do
+> benchmark) como exemplo de identificador de gateway/proxy que não
+> corresponderia a nenhum modelo público — essa suposição estava errada
+> (baseada no corte de conhecimento do agente que escreveu o texto
+> original, anterior ao lançamento do modelo). GPT-5.6 Luna é um modelo real
+> e atual da OpenAI (lançado em 2026-07-09); a tabela oficial já tem o preço
+> dele. Ver [`docs/benchmark_reference.md §6`](benchmark_reference.md) para
+> o achado corrigido. O princípio do parágrafo acima continua válido — só o
+> exemplo específico estava errado.
 
 ### 5.4. Como gerar e onde aparece
 

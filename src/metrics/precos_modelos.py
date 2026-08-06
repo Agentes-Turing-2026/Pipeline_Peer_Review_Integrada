@@ -38,6 +38,13 @@ Fontes oficiais consultadas em 2026-08-06 (USD por milhão de tokens):
   bloqueado por 403 no momento da consulta; valores confirmados por agregadores
   independentes — OpenRouter, pricepertoken.com — que refletem a tabela
   oficial: gpt-4o-mini US$0,15/US$0,60; gpt-4o US$2,50/US$10,00).
+- OpenAI gpt-5.6-luna: https://openai.com/index/advancing-the-price-performance-frontier-with-gpt-5-6/
+  (fetch direto bloqueado por 403; preço padrão pós-corte de 30/07/2026,
+  confirmado por CNBC, Axios, VentureBeat e por ``litellm.model_cost``, todos
+  convergindo em US$0,20/US$1,20 — a OpenRouter mostra US$0,10/US$0,60, mas
+  marcado como promoção própria da plataforma "50% off", não o preço-lista da
+  OpenAI). GPT-5.6 é um lançamento posterior ao corte de conhecimento deste
+  agente (ver nota de correção abaixo).
 - Maritaca Sabiá 4 / Sabiazinho 4: https://docs.maritaca.ai/pt/precos (preços
   em R$; convertidos para USD pela cotação aproximada informada na própria
   página, US$1 ≈ R$5,14). Sabiá-3 não aparece mais na tabela oficial atual
@@ -46,12 +53,24 @@ Fontes oficiais consultadas em 2026-08-06 (USD por milhão de tokens):
   ``model_provider.PROVEDORES[Provider.MARITACA].modelo_padrao == "sabia-3"``
   ainda é o default do provedor neste repositório.
 
-**Limitação conhecida e deliberada.** A tabela é indexada pelo modelo
-CONFIGURADO (``model_provider.resolver_config``), não pelo ``model_version``
-cru que o ADK devolve no evento — os dois podem divergir (ex.: um gateway/proxy
-que reescreve o nome do modelo na resposta; ``docs/benchmark_reference.md §6``
-documenta um caso real, ``modelo_usado="gpt-5.6-luna"`` para um provedor
-configurado como ``openai``). Precificar pelo nome configurado é o que faz
+**Correção (2026-08-06): "gpt-5.6-luna" NÃO é um gateway/proxy.** Uma versão
+anterior deste módulo (e de ``docs/benchmark_reference.md``/
+``docs/metricas_reference.md``) especulava que ``modelo_usado="gpt-5.6-luna"``
+— visto num registro real do benchmark, com o provedor configurado como
+``openai`` — era um identificador de build/gateway que não batia com nenhum
+modelo público. Essa suposição era baseada no corte de conhecimento deste
+agente (anterior ao lançamento do GPT-5.6) e estava ERRADA: confirmado por
+chamada real à API (com uma chave fornecida para teste) e por busca na
+documentação oficial, "GPT-5.6 Luna" é um modelo real e atual da OpenAI (a
+variante mais rápida/barata da família GPT-5.6, lançada em 2026-07-09). A
+tabela abaixo já reflete isso.
+
+**O princípio de design permanece válido, mesmo com a correção acima.** A
+tabela é indexada pelo modelo CONFIGURADO (``model_provider.resolver_config``),
+não pelo ``model_version`` cru que o ADK devolve no evento — os dois AINDA
+PODEM divergir em outros cenários reais (um gateway/proxy que de fato
+reescreve o nome do modelo na resposta continua sendo possível, só não era o
+caso do "gpt-5.6-luna"). Precificar pelo nome configurado é o que faz
 sentido: é o modelo que a chave de API de fato contratou, e é estável mesmo
 quando o provedor devolve um identificador de build/snapshot diferente. Se o
 provedor da execução for um gateway com tabela de preço PRÓPRIA (diferente da
@@ -111,6 +130,16 @@ TABELA_PRECOS_OFICIAIS: tuple[tuple[str, str, PrecosModelo, str], ...] = (
         PrecosModelo(usd_por_milhao_tokens_entrada=2.50, usd_por_milhao_tokens_saida=10.00),
         "https://openai.com/api/pricing — gpt-4o (consultado em 2026-08-06; "
         "citado como exemplo de override em README.md §2.3).",
+    ),
+    (
+        "openai", "gpt-5.6-luna",
+        PrecosModelo(usd_por_milhao_tokens_entrada=0.20, usd_por_milhao_tokens_saida=1.20),
+        "https://openai.com/index/advancing-the-price-performance-frontier-with-gpt-5-6/ "
+        "— GPT-5.6 Luna, preço padrão pós-corte de 30/07/2026 (lançamento em "
+        "01/06/2026 era US$1,00/US$6,00; confirmado por CNBC/Axios/VentureBeat "
+        "e por litellm.model_cost, consultado em 2026-08-06). Verificado como "
+        "modelo real via chamada de teste com chave fornecida pelo usuário — "
+        "NÃO é um gateway/proxy, ver nota de correção no docstring do módulo.",
     ),
     (
         "maritaca", "sabiazinho-4",

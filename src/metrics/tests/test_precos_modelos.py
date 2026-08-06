@@ -22,6 +22,23 @@ from metrics.precos_modelos import (  # noqa: E402
     resolver_precos,
 )
 
+# ``resolver_precos`` importa ``model_provider`` (e ``_preco_via_litellm``
+# importa ``litellm``) de forma PREGUIÇOSA — só na primeira chamada. Os dois
+# módulos chamam ``load_dotenv()`` na própria importação. Se essa primeira
+# importação acontecesse DENTRO de um teste (depois do fixture
+# ``ambiente_limpo`` já ter limpado o ambiente), um ``.env`` real no
+# diretório de trabalho repovoaria ``LLM_PROVIDER``/``LLM_MODEL`` que o
+# fixture acabou de remover — fragilidade real, não só deste arquivo de
+# teste: qualquer dev com um ``.env`` de verdade para testar o modo API
+# hitaria isso. Importar aqui, na coleta (antes de qualquer fixture rodar),
+# garante que o ``load_dotenv()`` de cada módulo dispare só uma vez, cedo,
+# e que o ``monkeypatch.delenv`` de cada teste realmente valha depois.
+import model_provider  # noqa: E402,F401
+try:
+    import litellm  # noqa: E402,F401
+except ImportError:
+    pass
+
 #: Mesma lista de test_model_provider.py: precisa sair do ambiente do teste
 #: para não herdar configuração do .env/shell de quem roda os testes.
 _VARIAVEIS = [

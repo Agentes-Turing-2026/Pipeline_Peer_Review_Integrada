@@ -89,20 +89,27 @@ zero).
 uma vez por execução e passa `precos=` para as duas chamadas de
 `gerar_resumo()` (sucesso e falha parcial).
 
-### 3.3. Duas descobertas ao longo do trabalho
+### 3.3. Descobertas ao longo do trabalho
 
 - **A tabela precifica pelo modelo CONFIGURADO, não pelo devolvido pelo
-  ADK.** O benchmark já tinha um caso real em que a execução foi configurada
-  com `LLM_PROVIDER=openai`, mas o `Event` do ADK devolveu
-  `model_version="gpt-5.6-luna"` — um nome que não corresponde a nenhum
-  modelo público documentado (provavelmente um gateway/proxy que reescreve o
-  nome na resposta). Precificar pelo nome CONFIGURADO é robusto a essa
-  divergência; precificar pelo nome devolvido não seria.
+  ADK** — decisão de design que continua valendo para o caso genérico de um
+  gateway/proxy real que reescreva o nome do modelo na resposta.
 - **`litellm.model_cost` não cobre a Maritaca.** Verificado manualmente:
   nenhuma entrada `"sabia*"` nem `"openai/sabia*"` na tabela do `litellm`.
   Para esse provedor, a camada 3 (tabela estática própria) é a única fonte
   automática — foi por isso que ela precisou existir mesmo depois de eu
   descobrir a alternativa via `litellm`.
+- **Correção de um engano meu:** eu tinha documentado (aqui, em
+  `docs/metricas_reference.md` e em `docs/benchmark_reference.md`) que
+  `"gpt-5.6-luna"` — visto num registro real do benchmark, com
+  `LLM_PROVIDER=openai` — era provavelmente um gateway/proxy, porque não
+  reconhecia esse nome de modelo. Estava errado: é um modelo real e atual da
+  OpenAI (GPT-5.6 Luna, lançado em 2026-07-09), só posterior ao meu corte de
+  conhecimento. Confirmei com uma chamada real à API (chave fornecida pelo
+  usuário para teste) e com a documentação oficial da OpenAI, e corrigi os
+  três documentos — a tabela de preços já tem a entrada dele
+  (US$0,20/US$1,20 por milhão de tokens, preço padrão pós-corte de
+  30/07/2026).
 
 ### 3.4. Testes
 
@@ -240,13 +247,22 @@ Isso corrigiu uma lacuna inicial: as primeiras validações tinham usado só o
 artigo de exemplo embutido (sem PDF real), o que teria deixado a Fase 0
 inteiramente sem cobertura nesta entrega.
 
-### 7.3. O que não foi validado
+### 7.3. Atualização — uma chamada real foi feita
 
-**Chamadas LLM reais** (tokens/custo/qualidade de verdade vindos de um
-provedor de fato) — não há chave de API disponível neste ambiente, e a
-decisão foi não gastar orçamento de API sem uma chave fornecida
-explicitamente. Os comandos exatos para rodar isso depois, com uma chave
-real, estão na seção 8.
+Depois da redação original desta seção, o usuário forneceu uma chave real da
+OpenAI para um teste pontual. Foi feita **uma única chamada mínima**
+(`model_provider.completar_texto()`, fora do pipeline completo, para não
+gastar em Fases 1-3 antes de confirmar que a chave/modelo funcionavam) —
+confirmou que o provedor `openai` com `LLM_MODEL=gpt-5.6-luna` responde de
+verdade, e essa investigação foi o que revelou que `"gpt-5.6-luna"` é um
+modelo real da OpenAI, não um gateway/proxy (correção registrada em §3.3).
+
+**O que continua não validado:** uma execução completa do pipeline (7
+chamadas LLM reais: 3 revisores + 3 leituras cruzadas + 1 editor) com tokens/
+custo/qualidade de ponta a ponta, e a comparação pareada
+(`ablacao_cross_review.py`) com dados reais dos dois lados. Isso depende de
+quanto orçamento o usuário quer gastar — os comandos exatos estão na
+seção 8.
 
 ---
 
@@ -266,7 +282,7 @@ python -m src.benchmark.executar --mode api --docs icd_hallucinations_2312_15710
 # Comparação pareada (tabela + conclusão) — cada doc_id roda 2x:
 python -m src.benchmark.ablacao_cross_review --mode api --docs icd_hallucinations_2312_15710,acl_emnlp2024_116,arxiv_2606_00819,comdem_17665,psicologia_slides_ciclo_sono
 
-# Sobrescrever preço manualmente (gateway com tabela própria, ex.: o caso "gpt-5.6-luna"):
+# Sobrescrever preço manualmente (útil se o provedor for um gateway com tabela própria):
 GRUPO2_PRECO_USD_MILHAO_TOKENS_ENTRADA=0.30 GRUPO2_PRECO_USD_MILHAO_TOKENS_SAIDA=2.50 python main.py api
 
 # Testes desta entrega:
