@@ -116,7 +116,39 @@ orquestração.
   > **Maritaca** e **OpenAI** somam `litellm` (o Gemini não precisa dele); a
   > **entrada por PDF** precisa de `liteparse`. As versões usadas nos testes
   > desta atividade estão **fixadas** no `requirements.txt`: `google-adk==1.27.5`,
-  > `google-genai==1.67.0` e `liteparse==2.6.0`.
+  > `google-genai==1.67.0`, `liteparse==2.6.0`, `litellm==1.82.6` e
+  > `pydantic==2.13.4`.
+
+**Por que `litellm` e `pydantic` também estão fixados (Grupo 3).** Até esta
+etapa os dois ficavam soltos (`>=`), o que permite versões diferentes em cada
+instalação — a causa provável do comportamento distinto entre máquinas citado
+em reuniões anteriores. Cada um foi fixado por um motivo verificado, não por
+escolha arbitrária:
+
+- **`litellm==1.82.6`** — é o teto que o próprio `google-adk==1.27.5` declara
+  testar (`litellm>=1.75.5,<=1.82.6`, conferido no `pyproject.toml` do release
+  oficial em [google/adk-python](https://github.com/google/adk-python)) e
+  também a última versão limpa antes de as versões `1.82.7`/`1.82.8` terem sido
+  comprometidas num ataque à cadeia de suprimentos no PyPI (março/2026).
+- **`pydantic==2.13.4`** — o `google-adk` já exige `pydantic>=2.12,<3.0` como
+  dependência própria; a faixa solta (`>=2.0`) deixava o **modo mock** (que não
+  instala o `google-adk`) livre para resolver uma versão bem mais antiga — e é
+  esse `pydantic` que gera o `response_schema` enviado ao provedor no modo API.
+- `httpx` e `openai` não ganharam linha própria: entram só transitivamente via
+  `litellm`/`google-adk`, e fixar os dois acima já os prende numa faixa estreita
+  e consistente.
+
+**Verificação de instalação limpa** — reproduzível por qualquer pessoa do
+grupo, sem reaproveitar nenhum ambiente já existente:
+
+```bash
+python3 -m venv /tmp/venv_limpo
+/tmp/venv_limpo/bin/pip install -r requirements.txt
+/tmp/venv_limpo/bin/python -m pytest src/ -q
+```
+
+Testado num ambiente sem nada herdado: resolve exatamente as versões listadas
+acima e os 242 testes da suíte passam, sem nenhuma chave de API.
 
 ### 2.2 Modo Local / Mock (offline, sem chave) — recomendado para testar o fluxo
 
