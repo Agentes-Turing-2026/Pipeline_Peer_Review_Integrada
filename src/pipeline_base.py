@@ -27,6 +27,7 @@ import dataclasses
 import logging
 import uuid
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Generic, TypeVar
 
@@ -117,6 +118,10 @@ class PipelineResult:
     final: Any = None
     #: Identificador (provisório) desta execução — ver ``PipelineContext.run_id``.
     run_id: str | None = None
+    #: Fases que NÃO rodaram nesta execução por terem sido restauradas de
+    #: checkpoint, na ordem do pipeline. Permite ao domínio (e aos testes)
+    #: saber o que veio do disco sem precisar interpretar log.
+    fases_restauradas: list[str] = field(default_factory=list)
 
 
 class Pipeline:
@@ -161,6 +166,7 @@ class Pipeline:
         config: dict[str, Any] | None = None,
         verbose: bool = True,
         checkpoint_manager: Any | None = None,
+        on_phase_end: Callable[[str, PipelineContext], None] | None = None,
     ) -> PipelineResult:
         """Roda todas as fases em ordem e devolve as saídas acumuladas.
 
@@ -176,6 +182,16 @@ class Pipeline:
             ``CheckpointManager`` opcional (ver ``persistencia.py``). Quando
             presente, cada fase concluída é salva em disco; numa retomada,
             fases que já têm checkpoint são puladas automaticamente.
+        on_phase_end:
+            Callback opcional ``(nome_da_fase, context)`` chamado logo APÓS uma
+            fase rodar com sucesso e seu checkpoint ser gravado. Existe para o
+            domínio persistir o que é lateral à saída da fase (métricas
+            acumuladas, estado guardado em ``context.config``) no MESMO instante
+            em que o checkpoint da fase é criado — sem isso, uma falha na fase
+            seguinte deixaria checkpoint e métricas fora de sincronia. A
+            orquestração continua agnóstica: ela só chama, não sabe o que é
+            salvo. NÃO é chamado para fase restaurada de checkpoint (nada novo
+            aconteceu ali).
         """
         context = PipelineContext(initial_input, config)
         if self._tracer is not None:
@@ -185,6 +201,7 @@ class Pipeline:
             context.run_id = self._tracer.run_id
             context.config["run_id"] = context.run_id
         data: Any = initial_input
+        fases_restauradas: list[str] = []
 
         cabecalho_execucao = f"[{self.name}] run_id={context.run_id}"
         if verbose:
@@ -220,6 +237,7 @@ class Pipeline:
                     else:
                         data = phase.deserialize_output(raw)
                     context.record(phase.name, data)
+                    fases_restauradas.append(phase.name)
                     continue
 
             cabecalho = f"[{self.name}] Fase {indice}/{len(self.phases)}: {phase.name}"
@@ -244,5 +262,12 @@ class Pipeline:
             # Persiste o resultado da fase assim que ela conclui com sucesso.
             if checkpoint_manager is not None:
                 checkpoint_manager.save(phase.name, phase.serialize_output(data))
+            if on_phase_end is not None:
+                on_phase_end(phase.name, context)
 
-        return PipelineResult(outputs=dict(context.artifacts), final=data, run_id=context.run_id)
+        return PipelineResult(
+            outputs=dict(context.artifacts),
+            final=data,
+            run_id=context.run_id,
+            fases_restauradas=fases_restauradas,
+        )

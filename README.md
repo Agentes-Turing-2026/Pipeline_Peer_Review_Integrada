@@ -43,7 +43,8 @@ orquestração.
 ├── requirements.txt             # dependências Python
 ├── .env.example                 # template das variáveis de ambiente (modo API)
 ├── docs/
-│   └── schema_reference.md       # documentação técnica detalhada dos schemas
+│   ├── schema_reference.md       # documentação técnica detalhada dos schemas
+│   └── persistencia_e_retomada.md # Grupo 1 — relatório técnico de checkpoint/retomada
 └── src/
     ├── pipeline_base.py          # Orquestração GENÉRICA (Pipeline, PipelinePhase, PipelineContext)
     ├── pipeline.py               # As 4 fases concretas + modos (API/Mock) + demo
@@ -55,13 +56,17 @@ orquestração.
     ├── validacao_retry.py        # Grupo 1 — camada de validação, retry e confiabilidade (saída dos agentes)
     ├── eventos_validacao.py      # Grupo 1 — eventos estruturados (JSONL) de validação/retry
     ├── validacao_entrada.py      # Grupo 1 — validação e resiliência da ENTRADA por PDF (arquivo + texto extraído)
+    ├── persistencia.py           # Grupo 1 — checkpoints por fase + estado auxiliar da execução (retomada)
     ├── demos/                    # Grupo 1 — demos offline (sem API key), separadas do código principal
     │   ├── demo_validacao.py     #   camada de validação/retry da saída dos agentes
     │   ├── demo_eventos.py       #   eventos estruturados de validação/retry
-    │   └── demo_entrada_pdf.py   #   validação da entrada por PDF (passa / alerta / retry / bloqueio)
+    │   ├── demo_entrada_pdf.py   #   validação da entrada por PDF (passa / alerta / retry / bloqueio)
+    │   └── demo_persistencia.py  #   falha no meio -> retomada -> retomada de execução concluída
     ├── tests/
     │   ├── test_eventos_validacao.py
-    │   └── test_validacao_entrada.py
+    │   ├── test_validacao_entrada.py
+    │   ├── test_persistencia.py           # quais fases são puladas numa retomada
+    │   └── test_retomada_confiavel.py     # o que SOBREVIVE à retomada (métricas, PDF, artefatos)
     ├── archive/                  # Grupo 1 — código legado sem uso ativo, arquivado (ver archive/README.md)
     │   └── legacy_adapter.py     #   adaptador de veredito legado (não importado por ninguém)
     ├── demo_observabilidade.py   # Grupo 3 — demo offline: roda o pipeline e reconstrói o trace
@@ -256,6 +261,8 @@ Os artefatos de cada execução ficam em `src/outputs/<run_id>/` — uma execuç
 | `src/logs/pipeline.log` | Log fase a fase, em texto (orquestração + tools do Grupo 2). |
 | `src/logs/validacao_events.jsonl` | Eventos estruturados de validação/retry (Grupo 1) — ver [§4](#4-validação-retry-e-confiabilidade-grupo-1). |
 | `src/logs/traces/<run_id>.jsonl` | Trace de observabilidade da execução (um evento por linha), mesmo `run_id` do item acima — ver [§8 Observabilidade](#8-observabilidade-e-traces-grupo-3). |
+| `src/logs/checkpoints/<run_id>/` | Checkpoint de cada fase concluída (inclui a extração do PDF), para retomar uma execução interrompida — ver [§4.2 Persistência e Retomada](#42-persistência-e-retomada-de-execuções-grupo-1). |
+| `src/logs/checkpoints/<run_id>.{meta,estado}.json` | Metadados da execução (modo, PDF, se já concluiu) e o estado que a retomada precisa restaurar (métricas, auditoria). |
 
 ### 2.6 Como escolher o modo (precedência)
 
@@ -556,6 +563,114 @@ orquestrador de retry.
 
 **Fora de escopo (dos outros grupos):** não implementamos o extrator de PDF nem
 o OCR (Grupo 3), e não calculamos tokens/métricas (Grupo 2).
+
+### 4.2 Persistência e Retomada de Execuções (Grupo 1)
+
+Uma execução longa que falha na fase 3 não pode obrigar ninguém a refazer as
+fases 1 e 2 — nem a pagar por elas de novo. O pipeline salva um **checkpoint por
+fase** e, numa retomada pelo mesmo `run_id`, pula tudo que já concluiu.
+
+> Registro técnico completo (decisões, correções, limitações):
+> [`docs/persistencia_e_retomada.md`](docs/persistencia_e_retomada.md).
+
+```bash
+python main.py mock                          # anote o run_id impresso ao final
+python main.py --resume run_abc123           # retoma de onde parou
+python main.py --resume run_abc123 --force   # refaz do zero, sob o mesmo run_id
+```
+
+#### O que é gravado, e onde
+
+Tudo em `src/logs/checkpoints/` (ignorado pelo git):
+
+| Arquivo | Conteúdo |
+|---|---|
+| `<run_id>/fase_0_extracao_pdf.json` | O `ExtractedDocument` completo (com o texto). É o que evita re-extrair o PDF. |
+| `<run_id>/fase_N_*.json` | Saída serializada de cada fase concluída (`PipelinePhase.serialize_output`). |
+| `<run_id>.meta.json` | Metadados da execução: `pdf_path` e `mode` originais, `status` (`em_andamento` / `concluida`) e `concluida_em`. |
+| `<run_id>.estado.json` | Estado auxiliar: eventos de métrica já coletados, tempo de parede acumulado e a auditoria do veredito. |
+
+A separação entre as duas categorias é deliberada. `fases_concluidas()` lista os
+`*.json` **de dentro** da pasta `<run_id>/`; qualquer estado guardado ali viraria
+uma "fase fantasma" no resumo de falha e na retomada. Por isso o estado auxiliar
+mora em *sidecars irmãos* da pasta, e não dentro dela. Toda escrita é atômica
+(`.tmp` + `rename`): um processo morto no meio da gravação preserva o arquivo
+anterior em vez de deixar um checkpoint truncado.
+
+#### O que a retomada preserva (e por quê)
+
+- **O PDF já extraído.** A fase 0 é uma fase como as outras: tem checkpoint e é
+  pulada na retomada. O arquivo original **não** é revalidado — ele já passou por
+  `validar_arquivo_pdf` e `validar_documento_extraido` na execução original, e
+  esses eventos estão no `validacao_events.jsonl` do mesmo `run_id`. Consequência
+  prática: a retomada funciona mesmo que o PDF tenha sido movido ou apagado.
+- **As métricas das fases anteriores.** Uma fase restaurada não roda, logo não
+  emite evento nenhum — e o `ExecutionCollector`, que nasce vazio a cada
+  chamada, produzia um resumo final descrevendo só o pedaço re-executado. Agora
+  os eventos salvos são devolvidos ao coletor por
+  `ExecutionCollector.restaurar()`, com **timestamp e duração originais**: a
+  duração que vale para uma fase é a de quando ela de fato rodou. O tempo de
+  parede das tentativas anteriores também é somado, senão o resumo mostraria uma
+  duração total menor que a soma das durações das fases.
+- **A auditoria do veredito.** Ela nasce na fase 3 e é lida pela fase 4 via
+  `context.config`. Com a fase 3 restaurada, o relatório saía com
+  `auditoria_veredito: null`, sem nenhum aviso. Agora ela viaja no sidecar de
+  estado.
+- **Traces e eventos.** Não precisaram de código novo: o `JsonlExporter` (Grupo 3)
+  e o `validacao_events.jsonl` (Grupo 1) já são *append-only*, então a retomada
+  **acrescenta** ao histórico em vez de substituí-lo. O trace de um `run_id`
+  retomado mostra as duas tentativas, incluindo o erro da primeira. Há um teste
+  travando esse comportamento, para que ninguém o quebre sem perceber.
+
+#### Retomar uma execução já concluída é um no-op
+
+Se todas as fases já concluíram e os artefatos foram gravados, não há o que
+retomar — e re-executar significaria regravar `final_report.md`/`.json` e
+`resumo_execucao.json` por cima de artefatos completos. O pipeline imprime que a
+execução já terminou, devolve o relatório existente e **não escreve nada**. Para
+refazer de propósito, `--force` descarta os checkpoints e as métricas e roda tudo
+de novo sob o mesmo `run_id` (as métricas precisam ir junto: mantê-las faria cada
+fase ser contada duas vezes).
+
+#### Decisões de projeto
+
+- **Métricas são persistidas só em fronteiras de sucesso** (fase 0 extraída, cada
+  fase concluída, fim da execução) — nunca no caminho de falha. Salvar os eventos
+  de uma tentativa que falhou faria a retomada bem-sucedida herdar
+  `quantidade_falhas` e `status_final="falha"` de um problema já resolvido. O
+  rastro forense da tentativa que falhou continua no trace e no
+  `validacao_events.jsonl`.
+- **O gancho `on_phase_end` em `pipeline_base.py` é genérico.** A orquestração só
+  chama o callback depois de gravar o checkpoint; ela não sabe o que o domínio
+  persiste ali. Isso mantém checkpoint e métricas descrevendo sempre o mesmo
+  ponto da execução.
+- **O schema do resumo (Grupo 2) não mudou.** A correção entra pelo coletor
+  (`restaurar()`, aditivo, com default que preserva o comportamento atual), não
+  por `metrics/resumo.py`. A proveniência da retomada vai num bloco próprio do
+  relatório, `data["retomada"]` (`execucoes`, `fases_restauradas`,
+  `eventos_metricas_restaurados`).
+- **Rede de segurança contra a regressão.** Antes de gravar, o pipeline confere se
+  toda fase com checkpoint aparece no resumo; se alguma faltar, um alerta
+  explícito entra em `resumo.alertas`. Um resumo incompleto que se denuncia é
+  melhor que um que passa batido — que era exatamente o problema original.
+
+#### Demo e testes
+
+```bash
+# Demo offline: falha na fase 3 -> retomada -> retomada de execução concluída
+python src/demos/demo_persistencia.py
+
+# Testes
+python -m pytest src/tests/test_persistencia.py src/tests/test_retomada_confiavel.py -v
+```
+
+[`test_persistencia.py`](src/tests/test_persistencia.py) cobre *quais fases são
+puladas*; [`test_retomada_confiavel.py`](src/tests/test_retomada_confiavel.py)
+cobre *o que sobrevive* à retomada. O critério do segundo é comparativo: a
+retomada tem que ser **indistinguível de uma execução que nunca falhou** — mesmas
+fases no resumo, mesmo número de validações, mesmas tools, mesmo `status_final`.
+Os cenários usam uma falha injetada no meio do pipeline real, em modo mock, com
+`LOG_DIR`/`OUTPUT_DIR` redirecionados para `tmp_path`.
 
 ---
 
@@ -1030,6 +1145,13 @@ python src/demos/demo_validacao.py
 # Demo offline dos eventos estruturados de validação/retry do Grupo 1 (sem API key):
 python src/demos/demo_eventos.py
 
+# Demo offline de persistência e retomada do Grupo 1 (falha no meio + retomada):
+python src/demos/demo_persistencia.py
+
+# Retomar uma execução interrompida (pula fases concluídas, inclusive a extração do PDF):
+python main.py --resume <run_id>
+python main.py --resume <run_id> --force   # refaz do zero sob o mesmo run_id
+
 # Demo offline da observabilidade/traces do Grupo 3 (sem API key):
 python src/demo_observabilidade.py
 
@@ -1038,6 +1160,9 @@ python src/demo_observabilidade.py
 
 # Testes dos eventos estruturados (Grupo 1):
 .venv/bin/pytest src/tests/ -v
+
+# Testes de persistência e confiabilidade da retomada (Grupo 1):
+.venv/bin/python -m pytest src/tests/test_persistencia.py src/tests/test_retomada_confiavel.py -v
 
 # Testes da observabilidade (Grupo 3):
 .venv/bin/python -m pytest src/observability/tests/ -v
