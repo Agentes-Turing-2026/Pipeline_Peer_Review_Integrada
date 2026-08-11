@@ -147,12 +147,14 @@ try:
     from metrics.resumo import gerar_resumo
     from metrics.exportar import imprimir_resumo, salvar_resumo_json
     from metrics.adk_usage import definir_coletor_adk
+    from metrics.precos_modelos import resolver_precos
 except ImportError:
     ExecutionCollector = None
     gerar_resumo = None
     imprimir_resumo = None
     salvar_resumo_json = None
     definir_coletor_adk = None
+    resolver_precos = None
 
 
 def _fase_medida(coletor: ExecutionCollector | None, nome: str):
@@ -380,9 +382,41 @@ class CrossReviewPhase(PipelinePhase[IndependentReviews, CrossReviews]):
         coletor: ExecutionCollector | None = context.config.get("_metrics_collector")
         with _fase_medida(coletor, self.name):
             mode = resolve_mode(context.config)
+            cross_review_enabled = context.config.get("cross_review_enabled", True)
             cross: dict[str, CrossReviewSchema] = {}
 
-            if mode is RunMode.MOCK:
+            if not cross_review_enabled:
+                # Variante EXPERIMENTAL (Grupo 2 — benchmark de custo/eficiência,
+                # ver src/benchmark/ablacao_cross_review.py): nenhuma chamada LLM
+                # nesta fase. Cada revisor "mantém" o parecer da Fase 1 tal como
+                # está — o contrato de saída (CrossReviewSchema) é o mesmo, só que
+                # preenchido deterministicamente, então a Fase 3 em diante roda
+                # sem nenhuma mudança.
+                for rid, review in data.reviews.items():
+                    payload = {
+                        "revisor": rid,
+                        "parecer_revisado": review.model_dump(),
+                        "mudou_posicao": False,
+                        "mudancas": [],
+                        "resposta_aos_pares": (
+                            "Leitura cruzada desativada nesta execução "
+                            "(config['cross_review_enabled'] = False, variante "
+                            "experimental do benchmark de custo/eficiência) — "
+                            "parecer da Fase 1 mantido sem alteração."
+                        ),
+                    }
+                    resultado = validar_com_tentativas(
+                        payload, validar_cross_review, mode, rid,
+                        run_id=context.run_id, fase=self.name,
+                    )
+                    cross[rid] = resultado.dados
+                    logger.info("Fase 2 '%s': leitura cruzada desativada, parecer mantido.", rid)
+                    _registrar_validacao(coletor, fase=self.name, agente=rid, resultado=resultado)
+                    emit_event(
+                        "cross_review_pulada", author=rid, phase=self.name, kind="agent",
+                        attributes={"motivo": "cross_review_enabled=False"},
+                    )
+            elif mode is RunMode.MOCK:
                 payloads = _load_mock(context).get("phase2_cross_reviews", {})
                 for rid in REVIEWERS:
                     if rid not in payloads:
@@ -425,13 +459,14 @@ class CrossReviewPhase(PipelinePhase[IndependentReviews, CrossReviews]):
 
             mudaram = [rid for rid, cr in cross.items() if cr.mudou_posicao]
             logger.info(
-                "Fase 2 (%s) concluída. Revisores que mudaram de posição: %s.",
+                "Fase 2 (%s) concluída. Leitura cruzada %s. Revisores que mudaram de posição: %s.",
                 mode.value,
+                "ativa" if cross_review_enabled else "DESATIVADA (variante experimental)",
                 mudaram or "nenhum",
             )
             emit_event(
                 "leitura_cruzada_concluida", author="sistema", phase=self.name,
-                attributes={"mudaram_de_posicao": mudaram or []},
+                attributes={"mudaram_de_posicao": mudaram or [], "leitura_cruzada_ativa": cross_review_enabled},
             )
             return CrossReviews(cross_reviews=cross)
 
@@ -668,6 +703,7 @@ class FinalReportPhase(PipelinePhase[EditorVerdictSchema, FinalReport]):
                 "article_ref": article_ref,
                 "document": document_meta,
                 "model": modelo_ref,
+                "cross_review_enabled": context.config.get("cross_review_enabled", True),
                 "decisao": verdict.decisao,
                 "decisao_rotulo": ESCALA_VEREDITO[verdict.decisao],
                 "phase1_reviews": {rid: r.model_dump() for rid, r in phase1.reviews.items()},
@@ -919,6 +955,7 @@ def run_demo(
     pdf_path: str | Path | None = None,
     extractor: PdfExtractor | None = None,
     run_id: str | None = None,
+    cross_review: bool | None = None,
     forcar: bool = False,
 ) -> FinalReport:
     """Roda o pipeline completo (PDF real ou artigo de exemplo) e salva os resultados.
@@ -950,6 +987,17 @@ def run_demo(
         metadados gravado na execução original
         (``src/logs/checkpoints/<run_id>.meta.json``). ``None`` (padrão)
         inicia uma execução nova, com um run_id gerado automaticamente.
+    cross_review:
+        ``True`` (padrão/``None``) roda a Fase 2 normalmente: cada revisor lê
+        os argumentos dos colegas e pode revisar sua posição, com uma chamada
+        LLM por revisor. ``False`` roda a variante EXPERIMENTAL do benchmark
+        de custo/eficiência (Grupo 2): a Fase 2 não faz nenhuma chamada LLM —
+        cada revisor "mantém" o parecer da Fase 1 tal como está — e o
+        pipeline segue inalterado a partir da Fase 3 em diante, porque
+        ``CrossReviewSchema`` continua sendo o contrato de saída da fase,
+        só que preenchido deterministicamente. Existe para medir o benefício
+        (ou não) da leitura cruzada frente ao custo/tempo adicional dela —
+        ver ``src/benchmark/ablacao_cross_review.py``.
     forcar:
         Só faz sentido junto com ``run_id``. Descarta os checkpoints e as
         métricas da execução e roda TUDO de novo sob o mesmo ``run_id``,
@@ -976,14 +1024,16 @@ def run_demo(
                 f"run_id={run_id} em {ckpt_dir}. Seguindo como execução NOVA com esse id."
             )
 
-        # Recupera pdf_path/mode da execução original quando não informados
-        # explicitamente nesta chamada — sem isso, retomar com um PDF ou modo
-        # diferente do original geraria um relatório inconsistente sem nenhum
-        # erro visível.
+        # Recupera pdf_path/mode/cross_review da execução original quando não
+        # informados explicitamente nesta chamada — sem isso, retomar com um
+        # PDF, modo ou variante diferente do original geraria um relatório
+        # inconsistente sem nenhum erro visível.
         if pdf_path is None and meta_salva.get("pdf_path"):
             pdf_path = meta_salva["pdf_path"]
         if mode is None and meta_salva.get("mode"):
             mode = meta_salva["mode"]
+        if cross_review is None and "cross_review" in meta_salva:
+            cross_review = meta_salva["cross_review"]
 
         if meta_salva.get("status") == "concluida" and not forcar:
             # Execução já terminou: não há nada a retomar. Re-executar aqui
@@ -1020,7 +1070,10 @@ def run_demo(
                 f"({', '.join(removidas) or 'nenhum'}). A execução {run_id} será refeita do zero."
             )
 
-    config: dict = {}
+    if cross_review is None:
+        cross_review = True
+
+    config: dict = {"cross_review_enabled": cross_review}
     if mode is not None:
         config["mode"] = mode
     if pdf_path is not None:
@@ -1033,6 +1086,13 @@ def run_demo(
     # já aponta a variável do serviço selecionado (GOOGLE/MARITACA/OPENAI).
     if resolved is RunMode.API:
         _require_api_key()
+
+    # Custo estimado (Grupo 2): resolvido uma vez, a partir do MESMO
+    # provedor/modelo que a execução vai usar (config explícita > variáveis de
+    # ambiente > default do provedor) — nunca de um preço fixo no código. Em
+    # modo mock não há chamada LLM nenhuma, então o preço resolvido aqui nunca
+    # chega a multiplicar nada (gerar_resumo só usa custo com tokens medidos).
+    precos_execucao = resolver_precos(config) if resolver_precos is not None else None
 
     # Observabilidade: cria uma execução identificável (run_id) e um trace local.
     # Se `run_id` foi passado (retomada), o tracer usa o MESMO identificador em
@@ -1055,11 +1115,14 @@ def run_demo(
     # sidecar `<run_id>.meta.json` (irmão da pasta `<run_id>/`, não dentro
     # dela — para não poluir `fases_concluidas()`) preserva pdf_path/mode da
     # PRIMEIRA execução, para uma retomada futura recuperá-los, e carrega o
-    # status que distingue "interrompida" de "concluída".
+    # status que distingue "interrompida" de "concluída". A variante com/sem
+    # leitura cruzada também fica congelada na primeira execução, para a
+    # retomada não trocar de experimento silenciosamente.
     ckpt = CheckpointManager(ckpt_dir, run_id)
     meta = dict(meta_salva)
     meta.setdefault("pdf_path", str(pdf_path) if pdf_path else None)
     meta.setdefault("mode", resolved.value)
+    meta.setdefault("cross_review", cross_review)
     meta["status"] = "em_andamento"
     ckpt.salvar_estado("meta", meta)
 
@@ -1142,7 +1205,9 @@ def run_demo(
     pipeline = build_peer_review_pipeline(tracer=tracer)
     print(
         f"Pipeline '{pipeline.name}' [modo={resolved.value} · "
-        f"modelo={descrever_execucao(config)}] — fases: {pipeline.phase_names}"
+        f"modelo={descrever_execucao(config)} · "
+        f"leitura_cruzada={'ativa' if cross_review else 'DESATIVADA (experimental)'}] — "
+        f"fases: {pipeline.phase_names}"
     )
 
     resumo = None
@@ -1230,7 +1295,12 @@ def run_demo(
         # retomada, o coletor já vem semeado com os eventos das fases
         # restauradas, então este resumo cobre a execução inteira.
         if coletor is not None and gerar_resumo is not None:
-            resumo = gerar_resumo(coletor.eventos, run_id=coletor.run_id, duracao_total_s=coletor.duracao_execucao_s)
+            resumo = gerar_resumo(
+                coletor.eventos,
+                run_id=coletor.run_id,
+                duracao_total_s=coletor.duracao_execucao_s,
+                precos=precos_execucao,
+            )
             _alertar_lacunas_no_resumo(resumo, ckpt)
             report_local.data["resumo_execucao"] = resumo.to_dict()
         # Proveniência da retomada: o relatório passa a dizer o que rodou agora
@@ -1288,6 +1358,7 @@ def run_demo(
                     "modo": resolved.value,
                     "artigo": config["article_ref"],
                     "modelo": descrever_execucao(config),
+                    "cross_review_enabled": cross_review,
                 },
             ):
                 report = _run_and_save()
@@ -1313,6 +1384,7 @@ def run_demo(
         if coletor is not None and gerar_resumo is not None:
             resumo_parcial = gerar_resumo(
                 coletor.eventos, run_id=run_id, duracao_total_s=coletor.duracao_execucao_s,
+                precos=precos_execucao,
             )
             if imprimir_resumo is not None:
                 imprimir_resumo(resumo_parcial)

@@ -20,8 +20,7 @@ os **achados** já coletados com o corpus atual.
 
 `src/benchmark/` só **consome** o que já existe — `pipeline.run_demo()` e
 `report.data["resumo_execucao"]` (produzido por `metrics/resumo.py`) — não
-recalcula nem duplica lógica de métrica. A ferramenta adiciona três coisas
-que o pipeline sozinho não tem:
+recalcula nem duplica lógica de métrica. A ferramenta adiciona:
 
 1. Um **manifesto** (`corpus_manifest.json`) que descreve um corpus de
    documentos reais, com metadados (área, características de layout,
@@ -29,9 +28,15 @@ que o pipeline sozinho não tem:
 2. Um **executor em lote** que roda o pipeline sequencialmente sobre uma
    seleção explícita de documentos, capturando os três desfechos possíveis
    (sucesso, entrada bloqueada, falha de execução) sem deixar um erro em um
-   documento derrubar o lote inteiro.
+   documento derrubar o lote inteiro — e registrando, por execução,
+   provedor/modelo/`structured_output`/`cross_review_enabled` completos
+   (§3.1), não só o `mode` (mock/api).
 3. Um **comparativo** entre execuções já registradas, com um bloco de
    atenção que separa tudo que não é "sucesso limpo".
+4. Um **comparativo pareado** com/sem leitura cruzada
+   (`ablacao_cross_review.py`, §4.1) — a mesma execução, duas vezes, com e
+   sem a Fase 2, para medir se a leitura cruzada compensa o custo/tempo
+   extra que ela introduz.
 
 Toda a orquestração de fases, validação e agentes continua sendo
 responsabilidade de `pipeline.py`/`metrics/`; este pacote não os altera.
@@ -45,12 +50,14 @@ responsabilidade de `pipeline.py`/`metrics/`; este pacote não os altera.
 | `corpus.py` | `DocumentoCorpus` (dataclass), `carregar_corpus()` (lê e valida o manifesto), `resolver_pdf_local()` (resolve/baixa o PDF de um documento). | Sim |
 | `executar.py` | CLI (`python -m src.benchmark.executar`) — roda o lote selecionado, imprime o diagnóstico de cada execução e faz upsert em `resultados/execucoes.json`. | Sim |
 | `comparar.py` | CLI (`python -m src.benchmark.comparar`) — gera o comparativo a partir de `resultados/execucoes.json`, sem rodar o pipeline. | Sim |
+| `ablacao_cross_review.py` | CLI (`python -m src.benchmark.ablacao_cross_review`) — roda cada documento DUAS vezes (com/sem leitura cruzada) e grava o comparativo pareado em `resultados/ablacao_cross_review.{json,md}`. Reaproveita `executar.processar_documento`, não duplica a execução. | Sim |
 | `corpus_manifest.json` | O corpus em si: lista de documentos com seus metadados. | Sim |
-| `resultados/execucoes.json` | Um registro por `doc_id` com o **resultado mais recente** daquele documento (upsert). | Sim |
+| `resultados/execucoes.json` | Um registro por `doc_id` com o **resultado mais recente** daquele documento (upsert). Ver §3 para o schema completo do registro (inclui provedor/modelo/`cross_review_enabled`/qualidade desde a atividade de custo e eficiência). | Sim |
 | `resultados/execucoes/<run_id>_resumo.json` | Um arquivo por **execução** (histórico completo, não só a mais recente) — cópia do `ResumoExecucao` daquela rodada. | Sim |
 | `resultados/comparativo.json` / `comparativo.md` | Saída de `comparar.py` — snapshot mais recente do comparativo. | Sim |
+| `resultados/ablacao_cross_review.json` / `.md` | Saída de `ablacao_cross_review.py` — pares (com/sem leitura cruzada) por `doc_id`, com o delta calculado e uma conclusão agregada. | Sim |
 | `cache_pdfs/` | PDFs baixados de `fonte_url` (cache de download) e PDFs fornecidos manualmente via `caminho_local`. | **Não** (`.gitignore`) |
-| `tests/test_corpus.py`, `tests/test_comparar.py` | Testes 100% offline — nunca chamam `run_demo`/rede. | Sim |
+| `tests/test_corpus.py`, `tests/test_comparar.py`, `tests/test_executar.py`, `tests/test_ablacao_cross_review.py` | Testes 100% offline (modo mock quando exercitam `run_demo`) — nunca gastam API real. | Sim |
 
 `cache_pdfs/` é gitignorado porque parte do seu conteúdo é reconstruível
 (download via `fonte_url`) e parte não é rastreada por design — documentos
@@ -110,6 +117,34 @@ e diferente, ver §2).
 
 ---
 
+### 3.1. Schema do registro de execução (`execucoes.json[doc_id]`)
+
+Cada valor de `execucoes.json["execucoes"]` é o dict que `executar.py` monta
+em `processar_documento()` — upsert por `doc_id` (o registro mais recente
+vence; histórico completo fica em `resultados/execucoes/<run_id>_resumo.json`).
+
+| Campo | De onde vem | Observação |
+|---|---|---|
+| `doc_id`, `titulo`, `area`, `caracteristicas` | manifesto (§3) | — |
+| `mode` | `--mode` | `"mock"` ou `"api"`. |
+| `provider` | `model_provider.resolver_config` | `None` em modo mock (nenhuma chamada real acontece — anunciar um provedor aqui sugeriria configuração que não foi usada); em modo api, `"gemini"`/`"maritaca"`/`"openai"`. |
+| `model` | idem | id do modelo CONFIGURADO (ex.: `"gemini-2.5-flash"`) — não confundir com `modelo_usado` do resumo, que é o `model_version` cru DEVOLVIDO pelo ADK (podem divergir, ver §6). |
+| `structured_output` | idem | se o `response_schema` nativo estava ligado para essa execução. |
+| `cross_review_enabled` | `--cross-review` (`executar.py`) | `True` (default) roda a Fase 2 normalmente; `False` roda a variante sem leitura cruzada (`pipeline.run_demo(cross_review=False)`). Execuções `False` são gravadas sob a chave `"<doc_id>__sem_cross_review"` em vez de `doc_id` puro — a chave `doc_id` continua reservada para a variante default (`True`), para não apagar silenciosamente um registro pela outra variante no upsert. |
+| `timestamp`, `run_id`, `resultado`, `decisao_final`, `requer_revisao_humana`, `duracao_total_s`, `tokens_totais`, `custo_estimado`, `chamadas_llm`, `modelo_usado`, `quantidade_tools_chamadas`, `quantidade_retries`, `quantidade_falhas`, `alertas`, `erro` | `run_demo`/`ResumoExecucao` | Mesma semântica de `docs/metricas_reference.md §3`. |
+| `notas_por_revisor` | `report.data["phase3_verdict"]` | Mapa revisor → nota geral (1-4) considerada na síntese do editor. |
+| `quantidade_criticas` | idem | Total de entradas em `criticas` (fraquezas + críticas bloqueantes), sem distinguir tipo. |
+| `quantidade_criticas_bloqueantes` | idem | Subconjunto de `quantidade_criticas` com `tipo == "critica"`. |
+
+`provider`/`model`/`structured_output`/`notas_por_revisor`/
+`quantidade_criticas`/`quantidade_criticas_bloqueantes` não existiam antes da
+atividade de custo/eficiência (Grupo 2) — registros gravados por uma versão
+anterior de `executar.py` não os têm; `comparar.py` mostra `—` para eles em
+vez de quebrar (ver `resultados/comparativo.md`, linhas anteriores a
+2026-08-06).
+
+---
+
 ## 4. Como rodar
 
 ```bash
@@ -117,6 +152,10 @@ e diferente, ver §2).
 # rate limit em modo api). --mode e --docs são OBRIGATÓRIOS.
 .venv/bin/python -m src.benchmark.executar --mode mock --docs exemplo_mock
 .venv/bin/python -m src.benchmark.executar --mode api --docs icd_hallucinations_2312_15710,acl_emnlp2024_116
+
+# Variante experimental sem leitura cruzada (Fase 2 sem chamada LLM) — grava
+# sob "<doc_id>__sem_cross_review", não sobrescreve o registro default.
+.venv/bin/python -m src.benchmark.executar --mode api --docs icd_hallucinations_2312_15710 --cross-review off
 
 # Gera o comparativo a partir do que já foi executado (não roda o pipeline).
 .venv/bin/python -m src.benchmark.comparar
@@ -130,8 +169,35 @@ sem essas duas exigências, um comando digitado sem cuidado (ex.: esquecer
 disparar chamadas reais sobre documentos que não deveriam ser testados
 naquele momento — o controle de custo é o motivo, não burocracia.
 
-Outras flags: `--manifest` (default `src/benchmark/corpus_manifest.json`) e
-`--cache-dir` (default `src/benchmark/cache_pdfs/`).
+Outras flags: `--manifest` (default `src/benchmark/corpus_manifest.json`),
+`--cache-dir` (default `src/benchmark/cache_pdfs/`) e `--cross-review`
+(`on`/`off`, default `on`).
+
+### 4.1. Ablação: pipeline completo vs. sem leitura cruzada
+
+`ablacao_cross_review.py` roda CADA documento DUAS vezes — uma com
+`cross_review=True` (pipeline completo, 7 chamadas LLM: 3 revisores + 3
+leituras cruzadas + 1 editor) e outra com `cross_review=False` (variante
+experimental, 4 chamadas: 3 revisores + 1 editor) — no MESMO modo/provedor/
+modelo, e grava as duas lado a lado com o delta entre elas:
+
+```bash
+.venv/bin/python -m src.benchmark.ablacao_cross_review --mode mock --docs exemplo_mock
+.venv/bin/python -m src.benchmark.ablacao_cross_review --mode api --docs icd_hallucinations_2312_15710
+```
+
+Mesmas obrigatoriedades de `--mode`/`--docs` de `executar.py`, pelo mesmo
+motivo — e o mesmo aviso reforçado: em modo `api`, cada `doc_id` em `--docs`
+roda o pipeline **duas vezes**, o dobro do custo de uma chamada equivalente a
+`executar.py`.
+
+Saída em `resultados/ablacao_cross_review.json` (os dois registros brutos +
+o bloco `delta` por documento, upsert por `doc_id`) e `.md` (tabela +
+conclusão). O `delta` calcula variação percentual de chamadas LLM/duração/
+tokens/custo (negativo = a variante sem leitura cruzada gastou menos) e sinaliza
+se a decisão final, as notas por revisor ou a quantidade de críticas mudaram
+— tudo objetivo/numérico; a leitura do TEXTO das críticas em cada
+`final_report.md` (a parte qualitativa de verdade) continua manual.
 
 ---
 
@@ -216,6 +282,18 @@ execução já rodada (histórico completo), não deduplicado por documento como
   `resumo_execucao.json["modelo_usado"]` traz só `"gpt-5.6-luna"`). Isso é
   comportamento esperado do dado que o ADK devolve, não um bug do
   benchmark nem de `metrics/adk_usage.py`.
+  **Correção (2026-08-06):** uma versão anterior deste documento especulava
+  que `"gpt-5.6-luna"` era um gateway/proxy que reescrevia o nome do modelo,
+  por não corresponder a nenhum modelo conhecido no momento da primeira
+  redação. Isso estava errado — confirmado por chamada real à API (com uma
+  chave de teste) e por busca na documentação oficial da OpenAI, GPT-5.6
+  Luna é um modelo real e atual (lançado em 2026-07-09, a variante mais
+  rápida/barata da família GPT-5.6), só posterior ao corte de conhecimento
+  do agente que escreveu a versão original deste texto. `metrics/precos_modelos.py`
+  (custo, §7) já tem o preço dele na tabela oficial. O PRINCÍPIO continua
+  válido — precificar pelo modelo CONFIGURADO (`provider`/`model` do
+  registro, §3.1), nunca pelo `modelo_usado` devolvido, ainda é o certo para
+  o caso genérico de um gateway/proxy real — só o exemplo estava errado.
 
 ---
 
@@ -231,8 +309,24 @@ execução já rodada (histórico completo), não deduplicado por documento como
   registra o evento de bloqueio com esse `run_id`), mas o registro do
   benchmark para esse caso não o captura/linka — por design atual de
   `executar.py`, não por perda de dado.
-- **`custo_estimado` no resumo sempre fica `null` hoje.** Não é bug: é um
-  campo "preparado, não ativado" em `metrics/adk_usage.py` — só é
-  preenchido quando `gerar_resumo()` recebe preço configurado via variáveis
-  de ambiente (`GRUPO2_PRECO_USD_MILHAO_TOKENS_ENTRADA`/`_SAIDA`), que o
-  pipeline não passa hoje.
+- **`custo_estimado` agora é calculado por padrão em modo `api`**, via
+  `metrics/precos_modelos.py`: variável de ambiente > `litellm.model_cost`
+  (se o pacote estiver instalado — já é dependência do projeto para
+  Maritaca/OpenAI, reaproveitada aqui só para preço; não cobre Maritaca) >
+  tabela de preços oficiais estática do módulo — ver
+  `docs/metricas_reference.md §5.3` para a precedência completa. Continua
+  `null` quando: (a) o modo é mock (nenhuma chamada LLM, nenhum token
+  medido); (b) o modelo configurado não está reconhecido em NENHUMA das três
+  fontes (ex.: um modelo muito novo — foi exatamente o caso do
+  `"gpt-5.6-luna"` até ele ser adicionado à tabela oficial, ver o achado
+  acima); (c) o provedor é de fato um gateway/proxy com tabela de preço
+  PRÓPRIA, diferente da pública, e ninguém configurou o preço real por
+  ambiente — nesse caso o custo calculado automaticamente pela tabela
+  pública SERIA impreciso, então vale configurar
+  `GRUPO2_PRECO_USD_MILHAO_TOKENS_ENTRADA`/`_SAIDA` manualmente antes de
+  rodar.
+- **Os 8 registros `api` já commitados em `execucoes.json` são anteriores a
+  esta ativação** — não têm `custo_estimado` retroativo (o preço não foi
+  aplicado sobre uma execução passada, só é calculado NA hora da execução).
+  Re-rodar esses documentos com `executar.py` preencheria o custo; isso não
+  foi feito automaticamente aqui para não gastar API sem pedido explícito.

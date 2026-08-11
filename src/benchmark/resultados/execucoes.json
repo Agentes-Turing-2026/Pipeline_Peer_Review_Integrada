@@ -9,14 +9,20 @@
         "sem_pdf_real"
       ],
       "mode": "mock",
-      "timestamp": "2026-08-01T17:22:53.424716+00:00",
-      "run_id": "run_27f1b5130fd64f77",
+      "provider": null,
+      "model": null,
+      "structured_output": null,
+      "cross_review_enabled": true,
+      "timestamp": "2026-08-06T16:18:34.904872+00:00",
+      "run_id": "run_3a07a8eb52904aba",
       "resultado": "sucesso",
       "decisao_final": 3,
       "requer_revisao_humana": false,
-      "duracao_total_s": 0.03751346499484498,
+      "duracao_total_s": 0.011785400012740865,
       "tokens_totais": null,
       "custo_estimado": null,
+      "chamadas_llm": null,
+      "modelo_usado": null,
       "quantidade_tools_chamadas": {
         "validar_completude": 3,
         "auditar_decisao_final": 1,
@@ -25,6 +31,13 @@
       "quantidade_retries": 0,
       "quantidade_falhas": 0,
       "alertas": [],
+      "notas_por_revisor": {
+        "statistician": 3,
+        "domain_expert": 3,
+        "copyeditor": 2
+      },
+      "quantidade_criticas": 5,
+      "quantidade_criticas_bloqueantes": 1,
       "erro": null
     },
     "icd_hallucinations_2312_15710": {
@@ -275,6 +288,46 @@
       "quantidade_retries": 0,
       "quantidade_falhas": 0,
       "alertas": [],
+      "erro": null
+    },
+    "exemplo_mock__sem_cross_review": {
+      "doc_id": "exemplo_mock",
+      "titulo": "Artigo de exemplo (smoke test sem PDF real)",
+      "area": "smoke_test",
+      "caracteristicas": [
+        "smoke_test",
+        "sem_pdf_real"
+      ],
+      "mode": "mock",
+      "provider": null,
+      "model": null,
+      "structured_output": null,
+      "cross_review_enabled": false,
+      "timestamp": "2026-08-06T16:18:20.409228+00:00",
+      "run_id": "run_b801dd23251f4ea0",
+      "resultado": "sucesso",
+      "decisao_final": 3,
+      "requer_revisao_humana": false,
+      "duracao_total_s": 0.01866380000137724,
+      "tokens_totais": null,
+      "custo_estimado": null,
+      "chamadas_llm": null,
+      "modelo_usado": null,
+      "quantidade_tools_chamadas": {
+        "validar_completude": 3,
+        "auditar_decisao_final": 1,
+        "checar_coerencia": 1
+      },
+      "quantidade_retries": 0,
+      "quantidade_falhas": 0,
+      "alertas": [],
+      "notas_por_revisor": {
+        "statistician": 3,
+        "domain_expert": 3,
+        "copyeditor": 2
+      },
+      "quantidade_criticas": 5,
+      "quantidade_criticas_bloqueantes": 1,
       "erro": null
     }
   }

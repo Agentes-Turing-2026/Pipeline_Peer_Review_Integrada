@@ -64,6 +64,17 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "concluída não re-executa nada e não regrava os artefatos.",
     )
     parser.add_argument(
+        "--no-cross-review",
+        dest="cross_review",
+        action="store_false",
+        default=None,
+        help="Desativa a Fase 2 (leitura cruzada): nenhuma chamada LLM nela, "
+        "cada revisor mantém o parecer da Fase 1. Variante experimental do "
+        "benchmark de custo/eficiência do Grupo 2 (ver "
+        "src/benchmark/ablacao_cross_review.py) — por padrão a leitura "
+        "cruzada roda normalmente.",
+    )
+    parser.add_argument(
         "--force",
         dest="force",
         action="store_true",
@@ -81,7 +92,13 @@ def main() -> None:
     """Roda o pipeline completo, com modo, PDF e retomada opcionais vindos da linha de comando."""
     args = _parse_args()
     try:
-        run_demo(mode=args.mode, pdf_path=args.pdf, run_id=args.resume, forcar=args.force)
+        run_demo(
+            mode=args.mode,
+            pdf_path=args.pdf,
+            run_id=args.resume,
+            cross_review=args.cross_review,
+            forcar=args.force,
+        )
     except EntradaInvalidaError as exc:
         # Entrada bloqueada pela validação do Grupo 1: mensagem clara (não um
         # traceback), e código de saída != 0 — a falha não passa despercebida.

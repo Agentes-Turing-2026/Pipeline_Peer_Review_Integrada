@@ -47,11 +47,12 @@ if str(SRC) not in sys.path:
 try:
     from pipeline import run_demo
     from validacao_entrada import EntradaInvalidaError
+    from model_provider import resolver_config
 except Exception as exc:  # noqa: BLE001
     raise RuntimeError(
-        "Não foi possível importar 'pipeline'/'validacao_entrada' de src/. "
-        "Rode a partir da raiz do repositório com as dependências do projeto "
-        f"instaladas (.venv). Erro original: {type(exc).__name__}: {exc}"
+        "Não foi possível importar 'pipeline'/'validacao_entrada'/'model_provider' "
+        "de src/. Rode a partir da raiz do repositório com as dependências do "
+        f"projeto instaladas (.venv). Erro original: {type(exc).__name__}: {exc}"
     ) from exc
 
 RESULTADOS_DIR = HERE / "resultados"
@@ -88,13 +89,35 @@ def _ler_resumo_parcial(run_id: str) -> dict | None:
     return json.loads(caminho.read_text(encoding="utf-8"))
 
 
-def _registro_base(doc: DocumentoCorpus, *, mode: str) -> dict:
+def _config_llm(mode: str) -> dict:
+    """Provedor/modelo/structured_output CONFIGURADOS para esta execução.
+
+    Registrar isso por execução é o que falta hoje para comparar resultados
+    do benchmark entre si de forma confiável (ver docs/benchmark_reference.md
+    §6 — 'modelo_usado' sozinho, no resumo, não basta: não diz o provedor nem
+    se structured output nativo estava ligado). Em modo mock não há provedor
+    real envolvido (nenhuma chamada LLM acontece) — os três campos vêm
+    ``None`` em vez de anunciar uma configuração que não foi de fato usada.
+    """
+    if mode != "api":
+        return {"provider": None, "model": None, "structured_output": None}
+    escolha = resolver_config({})
+    return {
+        "provider": escolha.provider.value,
+        "model": escolha.model,
+        "structured_output": escolha.structured_output,
+    }
+
+
+def _registro_base(doc: DocumentoCorpus, *, mode: str, cross_review: bool) -> dict:
     return {
         "doc_id": doc.id,
         "titulo": doc.titulo,
         "area": doc.area,
         "caracteristicas": doc.caracteristicas,
         "mode": mode,
+        **_config_llm(mode),
+        "cross_review_enabled": cross_review,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -107,6 +130,8 @@ def _campos_do_resumo(resumo: dict | None) -> dict:
             "duracao_total_s": None,
             "tokens_totais": None,
             "custo_estimado": None,
+            "chamadas_llm": None,
+            "modelo_usado": None,
             "quantidade_tools_chamadas": None,
             "quantidade_retries": None,
             "quantidade_falhas": None,
@@ -117,6 +142,8 @@ def _campos_do_resumo(resumo: dict | None) -> dict:
         "duracao_total_s": resumo.get("duracao_total_s"),
         "tokens_totais": resumo.get("tokens_totais"),
         "custo_estimado": resumo.get("custo_estimado"),
+        "chamadas_llm": resumo.get("chamadas_llm"),
+        "modelo_usado": resumo.get("modelo_usado"),
         "quantidade_tools_chamadas": resumo.get("quantidade_tools_chamadas"),
         "quantidade_retries": resumo.get("quantidade_retries"),
         "quantidade_falhas": resumo.get("quantidade_falhas"),
@@ -124,20 +151,49 @@ def _campos_do_resumo(resumo: dict | None) -> dict:
     }
 
 
-def processar_documento(doc: DocumentoCorpus, *, mode: str, cache_dir: Path) -> tuple[dict, dict | None]:
+def _campos_de_qualidade(verdict: dict | None) -> dict:
+    """Extrai do veredito do editor (``report.data["phase3_verdict"]``) os
+    sinais de QUALIDADE que o resumo de métricas não carrega (ele só sabe a
+    decisão final, não quantas críticas a sustentam) — usado para comparar a
+    variante com/sem leitura cruzada (ver ``ablacao_cross_review.py``), mas
+    fica disponível em todo registro do benchmark, não só na ablação.
+    """
+    if verdict is None:
+        return {
+            "notas_por_revisor": None,
+            "quantidade_criticas": None,
+            "quantidade_criticas_bloqueantes": None,
+        }
+    criticas = verdict.get("criticas") or []
+    return {
+        "notas_por_revisor": verdict.get("notas_por_revisor"),
+        "quantidade_criticas": len(criticas),
+        "quantidade_criticas_bloqueantes": sum(1 for c in criticas if c.get("tipo") == "critica"),
+    }
+
+
+def processar_documento(
+    doc: DocumentoCorpus, *, mode: str, cache_dir: Path, cross_review: bool = True,
+) -> tuple[dict, dict | None]:
     """Roda run_demo para um documento e monta (registro, resumo_para_persistir).
+
+    ``cross_review`` (default ``True``) passa direto para
+    ``pipeline.run_demo`` — ``False`` roda a variante experimental sem Fase 2
+    (ver ``ablacao_cross_review.py`` para o comparativo dedicado a essa
+    variante; aqui ela só precisa ficar registrada no ``registro`` para não
+    misturar resultados de configurações diferentes sob o mesmo ``doc_id``).
 
     ``resumo_para_persistir`` é o dict de ResumoExecucao (completo ou parcial)
     quando existir, ou ``None`` quando não há resumo (entrada bloqueada, ou
     falha sem resumo parcial localizável).
     """
-    base = _registro_base(doc, mode=mode)
+    base = _registro_base(doc, mode=mode, cross_review=cross_review)
     caminho_pdf = resolver_pdf_local(doc, cache_dir)
 
     buffer = io.StringIO()
     try:
         with contextlib.redirect_stdout(buffer):
-            report = run_demo(mode=mode, pdf_path=caminho_pdf)
+            report = run_demo(mode=mode, pdf_path=caminho_pdf, cross_review=cross_review)
     except EntradaInvalidaError as exc:
         print(buffer.getvalue(), end="")
         registro = {
@@ -146,6 +202,7 @@ def processar_documento(doc: DocumentoCorpus, *, mode: str, cache_dir: Path) -> 
             "resultado": "entrada_bloqueada",
             "decisao_final": None,
             **_campos_do_resumo(None),
+            **_campos_de_qualidade(None),
             "erro": {"tipo": type(exc).__name__, "mensagem": str(exc)},
         }
         return registro, None
@@ -160,6 +217,10 @@ def processar_documento(doc: DocumentoCorpus, *, mode: str, cache_dir: Path) -> 
             "resultado": "falha_execucao",
             "decisao_final": resumo_parcial.get("decisao_final") if resumo_parcial else None,
             **_campos_do_resumo(resumo_parcial),
+            # Uma falha no meio do pipeline não deixa veredito do editor
+            # persistido no resumo parcial (só ResumoExecucao, sem
+            # phase3_verdict) — sem sinal de qualidade para este caso.
+            **_campos_de_qualidade(None),
             "erro": {"tipo": type(exc).__name__, "mensagem": str(exc)},
         }
         return registro, resumo_parcial
@@ -172,6 +233,7 @@ def processar_documento(doc: DocumentoCorpus, *, mode: str, cache_dir: Path) -> 
             "resultado": (resumo or {}).get("status_final", "sucesso"),
             "decisao_final": report.data.get("decisao"),
             **_campos_do_resumo(resumo),
+            **_campos_de_qualidade(report.data.get("phase3_verdict")),
             "erro": None,
         }
         return registro, resumo
@@ -246,6 +308,13 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--cache-dir", dest="cache_dir", default=str(HERE / "cache_pdfs"), metavar="DIR",
         help="Diretório de cache dos PDFs baixados (default: %(default)s).",
     )
+    parser.add_argument(
+        "--cross-review", dest="cross_review", choices=("on", "off"), default="on",
+        help="'on' (default) roda a Fase 2 normalmente; 'off' roda a variante "
+        "experimental sem leitura cruzada (ver ablacao_cross_review.py para "
+        "comparar as duas de forma pareada em vez de sobrescrever o registro "
+        "'on' já existente do mesmo doc_id em execucoes.json).",
+    )
     return parser.parse_args(argv)
 
 
@@ -266,14 +335,24 @@ def main(argv: list[str] | None = None) -> None:
             f"{', '.join(ids_invalidos)}. Disponíveis: {disponiveis}"
         )
 
+    cross_review = args.cross_review == "on"
     execucoes = _carregar_execucoes_existentes(EXECUCOES_PATH)
 
     for doc_id in ids_solicitados:
         doc = mapa[doc_id]
-        registro, resumo = processar_documento(doc, mode=args.mode, cache_dir=cache_dir)
+        registro, resumo = processar_documento(
+            doc, mode=args.mode, cache_dir=cache_dir, cross_review=cross_review,
+        )
         imprimir_diagnostico(registro)
         _persistir_resumo(resumo, registro, EXECUCOES_DIR)
-        execucoes[doc_id] = registro
+        # execucoes.json guarda o resultado MAIS RECENTE por doc_id (upsert) —
+        # rodar a variante 'off' sob a mesma chave apagaria silenciosamente o
+        # registro 'on' do mesmo documento (e vice-versa). A chave só ganha o
+        # sufixo quando a variante não é a default, para não mudar o formato
+        # dos registros 'on' já commitados (comparar.py e o histórico atual
+        # continuam lendo doc_id puro para eles).
+        chave = doc_id if cross_review else f"{doc_id}__sem_cross_review"
+        execucoes[chave] = registro
 
     _salvar_execucoes(EXECUCOES_PATH, execucoes)
     print(f"\n{len(ids_solicitados)} documento(s) processado(s). Registro atualizado em: {EXECUCOES_PATH}")

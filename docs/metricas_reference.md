@@ -239,15 +239,65 @@ resposta é gravado nas métricas.
   totais somam só o que foi medido e o agente/fase sem medição aparece com
   `None` — a limitação fica visível, não escondida num número menor.
 
-### 5.3. Custo (preparado, não ativado)
+### 5.3. Custo (ativado)
 
-`custo_estimado` só é preenchido quando `gerar_resumo()` recebe `precos=`
-(ex.: `precos_de_ambiente()`, que lê as variáveis de ambiente
-`GRUPO2_PRECO_USD_MILHAO_TOKENS_ENTRADA` e
-`GRUPO2_PRECO_USD_MILHAO_TOKENS_SAIDA` — as duas obrigatórias, nenhum preço
-fixo no código). O pipeline **não** passa preço hoje: consumo real (tokens) e
-preço configurado ficam separados por construção. Sem preço ou sem consumo
-medido, o custo é `None` — custo desconhecido, não custo zero.
+`custo_estimado` é preenchido quando `gerar_resumo()` recebe `precos=` — em
+`pipeline.py`, `run_demo()` sempre passa `precos=resolver_precos(config)`
+(`metrics/precos_modelos.py`), resolvido UMA vez por execução, antes de rodar
+o pipeline. Consumo real (tokens, do ADK) e preço (configurado) continuam
+vindo de fontes diferentes por construção — só se combinam na multiplicação
+final (`estimar_custo_usd`).
+
+`resolver_precos(config, papel=None)` decide o preço nesta ordem:
+
+1. **Variável de ambiente** (`precos_de_ambiente()`): `GRUPO2_PRECO_USD_MILHAO_TOKENS_ENTRADA`
+   e `GRUPO2_PRECO_USD_MILHAO_TOKENS_SAIDA` — as DUAS precisam estar
+   presentes; configuração parcial conta como ausente. Sempre vence quando
+   presente — é o único jeito de corrigir um preço que as fontes abaixo não
+   têm ou têm desatualizado, sem editar código.
+2. **`litellm.model_cost`** (`precos_modelos._preco_via_litellm`), SE o
+   pacote `litellm` estiver instalado. `litellm` já é dependência do projeto
+   para os provedores Maritaca/OpenAI (`model_provider.py`); em vez de manter
+   só uma tabela estática própria, reaproveitamos a tabela de preços que o
+   `litellm` já mantém (milhares de modelos, atualizada a cada release do
+   pacote) — sem adicionar dependência nova. Sem `litellm` instalado (setup
+   só-Gemini/mock), este passo é um no-op e cai direto no próximo. A Maritaca
+   NÃO tem nenhuma entrada nessa tabela (nem por `"sabia*"`, nem por
+   `"openai/sabia*"` — verificado em 2026-08-06); para ela, este passo sempre
+   devolve `None`.
+3. **Tabela de preços oficiais** (`precos_modelos.TABELA_PRECOS_OFICIAIS`):
+   sem variável de ambiente e sem entrada no litellm, resolve o
+   provedor/modelo já decidido para a execução (`model_provider.resolver_config`)
+   e procura na tabela estática deste módulo — cobre os defaults e os
+   exemplos documentados dos três provedores (Gemini 2.5/2.0 Flash, OpenAI
+   gpt-4o-mini/gpt-4o, Maritaca Sabiá 4/Sabiazinho 4/Sabiá-3; os valores de
+   Gemini/OpenAI foram conferidos contra `litellm.model_cost` e batem
+   exatamente). Ver o módulo para as fontes e a data em que cada preço foi
+   consultado — preços e câmbio mudam com o tempo, então trate os valores
+   como referência documentada, não como fonte viva.
+4. **`None`**: nem variável de ambiente, nem litellm, nem entrada na tabela
+   oficial — `custo_estimado` permanece `None` (custo desconhecido, nunca 0).
+
+**A tabela precifica pelo modelo CONFIGURADO, não pelo `model_version` cru
+que o ADK devolve.** Os dois PODEM divergir — em geral, se o provedor da
+execução for um gateway/proxy que reescreve o nome do modelo na resposta.
+Precificar pelo nome CONFIGURADO (o que a chave de API de fato contratou) é
+robusto a essa divergência; precificar pelo nome devolvido não seria — por
+isso `resolver_precos` nunca olha para `detalhes["modelo"]` dos eventos
+`chamada_llm`. Se o provedor da sua execução for um gateway com tabela de
+preço própria (diferente da pública), configure o preço real via ambiente
+(prioridade 1) em vez de confiar no fallback da tabela.
+
+> **Nota de correção (2026-08-06):** uma versão anterior deste parágrafo
+> citava `model_version="gpt-5.6-luna"` (visto num registro real do
+> benchmark) como exemplo de identificador de gateway/proxy que não
+> corresponderia a nenhum modelo público — essa suposição estava errada
+> (baseada no corte de conhecimento do agente que escreveu o texto
+> original, anterior ao lançamento do modelo). GPT-5.6 Luna é um modelo real
+> e atual da OpenAI (lançado em 2026-07-09); a tabela oficial já tem o preço
+> dele. Ver [`docs/benchmark_reference.md §6`](benchmark_reference.md) para
+> o achado corrigido. O princípio do parágrafo acima continua válido — só o
+> exemplo específico estava errado.
 
 ### 5.4. Como gerar e onde aparece
 
