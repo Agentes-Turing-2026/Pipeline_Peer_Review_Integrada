@@ -13,7 +13,9 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Literal
 
-TipoEvento = Literal["fase", "tool", "validacao", "retry", "falha", "decisao_final", "chamada_llm"]
+TipoEvento = Literal[
+    "fase", "tool", "validacao", "retry", "falha", "decisao_final", "chamada_llm", "fallback_llm",
+]
 StatusEvento = Literal["sucesso", "falha", "aviso"]
 
 

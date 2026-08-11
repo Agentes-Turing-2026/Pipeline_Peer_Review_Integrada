@@ -6,8 +6,19 @@
 # comunicam novas dependências em vez de editar em paralelo.
 #
 # Modo Mock (offline) precisa apenas de:
-pydantic>=2.0
-python-dotenv>=1.0
+# pydantic fixado (não mais solto em >=2.0): o google-adk==1.27.5 já exige
+# pydantic>=2.12,<3.0 como dependência própria, e é essa versão que gera o
+# response_schema enviado ao provedor. Uma instalação só do modo mock (sem o
+# adk) não tinha nada garantindo essa mesma versão — podia cair em algo bem
+# mais antigo que o modo API, com geração de JSON schema diferente.
+pydantic==2.13.4
+# python-dotenv fixado (não mais solto em >=1.0): o google-adk==1.27.5 já
+# declara python-dotenv>=1.0.0,<2.0.0 como dependência própria (o litellm
+# também depende dele, mais solto ainda). Hoje o 2.0 nem existe no PyPI, então
+# a faixa solta e a fixada resolvem pro mesmo lugar por coincidência de
+# calendário — fixar remove essa dependência de "ainda não saiu uma versão
+# nova" continuar sendo verdade no futuro.
+python-dotenv==1.2.2
 #
 # Modo API (chamadas reais ao provedor de LLM) também precisa de:
 google-adk==1.27.5
@@ -18,8 +29,17 @@ liteparse==2.6.0
 #
 # Provedores Maritaca AI e OpenAI (LLM_PROVIDER=maritaca|openai): o ADK fala com
 # eles pelo adaptador LiteLlm, que depende de:
-litellm>=1.40
+# Fixado em 1.82.6 (não mais solto em >=1.40): é o teto que o próprio
+# google-adk==1.27.5 testa (>=1.75.5,<=1.82.6, conferido no pyproject.toml do
+# release oficial) e também a última versão limpa antes do ataque à cadeia de
+# suprimentos que comprometeu as versões 1.82.7 e 1.82.8 do PyPI em março/2026.
+litellm==1.82.6
 # (não é necessário para LLM_PROVIDER=gemini nem para o modo Mock)
+# httpx e openai entram só transitivamente por litellm/google-adk — fixando os
+# dois acima já os prende numa faixa estreita, sem precisar de pin próprio.
 #
 # Testes automatizados:
-pytest>=8.0
+# Fixado em 9.1.1 (não mais solto em >=8.0): a extra "test" do próprio
+# google-adk==1.27.5 exige pytest>=9.0.0,<10.0.0 — nosso piso antigo (>=8.0)
+# estava desatualizado em relação a isso, mesmo resolvendo certo hoje.
+pytest==9.1.1
