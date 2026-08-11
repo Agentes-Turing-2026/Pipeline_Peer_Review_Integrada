@@ -15,7 +15,7 @@ precisa respeitar para que `gerar_resumo()` produza números corretos.
 
 ## 1. Tipos de evento e o que cada um exige em `detalhes`
 
-`ExecutionEvent.tipo` é um `Literal` com sete valores. `gerar_resumo()`
+`ExecutionEvent.tipo` é um `Literal` com oito valores. `gerar_resumo()`
 interpreta cada um de um jeito específico:
 
 | `tipo` | Quando ocorre | O que `gerar_resumo()` faz com ele |
@@ -27,6 +27,7 @@ interpreta cada um de um jeito específico:
 | `"falha"` | Todas as tentativas se esgotaram e a saída foi bloqueada (falha definitiva, não recuperável). | Incrementa `quantidade_falhas`; também marca `status_final = "falha"` se `evento.status == "falha"`. |
 | `"decisao_final"` | A decisão editorial foi consolidada (Fase 4). | Lê `detalhes["decisao"]` e preenche `resumo.decisao_final`. |
 | `"chamada_llm"` | Uma chamada LLM real, registrada por `metrics/adk_usage.py` a partir do `usage_metadata` dos `Event` do ADK (Fases 1-3). | Conta em `chamadas_llm` e agrega os tokens de `detalhes` em `tokens_execucao`, `tokens_totais`, `tokens_por_agente[agente]` e `tokens_por_fase[fase]`; `detalhes["modelo"]` alimenta `modelo_usado`. Ver §5. |
+| `"fallback_llm"` | O modelo principal falhou por motivo TEMPORÁRIO e o pipeline trocou para a opção reserva (`llm_fallback.py`, `LLM_FALLBACK_*`). | `detalhes["evento"]` (`"acionado"`\|`"respondeu"`\|`"esgotado"`) incrementa o contador `quantidade_fallbacks_*` correspondente e vira uma linha em `fallbacks_llm`. Ver §6. |
 
 Duas convenções cruzam **qualquer** tipo de evento, não só um:
 
@@ -104,8 +105,12 @@ Snapshot agregado de uma lista de `ExecutionEvent`, produzido por
 | `tokens_execucao` | `dict[str, int \| None] \| None` | Totais da execução por categoria: `tokens_entrada`, `tokens_resposta`, `tokens_pensamento`, `tokens_cache`, `tokens_total`. Valor `None` numa categoria = nenhuma chamada informou aquela categoria. `None` no campo inteiro = nenhuma chamada LLM. |
 | `tokens_por_agente` | `dict[str, int \| None]` | `tokens_total` somado por agente (`author` do ADK). Valor `None` = o agente fez chamadas, mas o consumo está indisponível. |
 | `tokens_por_fase` | `dict[str, int \| None]` | `tokens_total` somado por fase. Mesma semântica de `None`. |
+| `quantidade_fallbacks_acionados` | `int` | Total de eventos `fallback_llm` com `detalhes["evento"] == "acionado"` (o principal falhou por motivo temporário e a reserva entrou). `0` quando nenhuma reserva foi configurada ou nenhuma falha temporária ocorreu. |
+| `quantidade_fallbacks_respondidos` | `int` | Total de trocas em que a reserva respondeu com sucesso (`"respondeu"`). |
+| `quantidade_fallbacks_esgotados` | `int` | Total de trocas em que principal E reserva falharam (`"esgotado"`) — cada uma também marca `status_final = "falha"` (o evento tem `status="falha"`, mesma regra genérica de qualquer tipo). |
+| `fallbacks_llm` | `list[dict]` | Uma entrada por evento `fallback_llm`, na ordem em que ocorreram: `fase`, `papel`, `evento`, `status`, `timestamp`, `provedor_inicial`, `motivo_falha` (só em `"acionado"`), `opcao_fallback` e `modelo_que_respondeu` (só em `"respondeu"`). Ver §6. |
 
-Método `to_dict()` serializa as 19 chaves acima num dict JSON-pronto (é o que
+Método `to_dict()` serializa as 23 chaves acima num dict JSON-pronto (é o que
 vira `final_report.json["resumo_execucao"]` e `resumo_execucao.json`).
 
 `gerar_resumo([])` **levanta `ValueError`** se `run_id` não for informado
@@ -305,7 +310,107 @@ execução.
 
 ---
 
-## 6. Caminho de evolução para ADK/OpenTelemetry
+## 6. Fallback de LLM — trocas de modelo (`src/llm_fallback.py`)
+
+Quando a reserva está configurada (`LLM_FALLBACK_PROVIDER`/`LLM_FALLBACK_MODEL`,
+ver README), uma falha TEMPORÁRIA do modelo principal (timeout, limite de
+requisições, erro de rede, indisponibilidade da API) troca para a opção
+reserva em vez de interromper o pipeline. Cada tentativa e cada troca
+alimentam as métricas pela MESMA fonte de fatos usada nos traces (Grupo 3):
+provedor inicial, motivo da falha, opção fallback usada e qual modelo
+respondeu.
+
+### 6.1. Os três desfechos
+
+Uma troca gera até dois eventos `tipo="fallback_llm"` (um terceiro evento de
+tentativa bem-sucedida do principal, sem troca, não passa por aqui —
+só a chamada real via `chamada_llm`/§5 registra isso):
+
+| `detalhes["evento"]` | Quando | `status` do `ExecutionEvent` | Efeito no resumo |
+|---|---|---|---|
+| `"acionado"` | O principal falhou por motivo temporário; a reserva vai ser tentada. | `"aviso"` | `quantidade_fallbacks_acionados += 1`; entra em `alertas` (mensagem "fallback acionado: ..."). |
+| `"respondeu"` | A reserva respondeu com sucesso. | `"sucesso"` | `quantidade_fallbacks_respondidos += 1`. |
+| `"esgotado"` | Principal E reserva falharam; a exceção da reserva sobe e interrompe a execução. | `"falha"` | `quantidade_fallbacks_esgotados += 1`; marca `status_final = "falha"` (regra genérica de `status="falha"`, a mesma de qualquer outro tipo de evento). |
+
+Cada evento traz em `detalhes`: `provedor_inicial` (rótulo `provedor:modelo`
+do principal), `opcao_fallback` (idem, da reserva), `motivo_falha` (só em
+`"acionado"` — um de `timeout`, `limite_de_requisicoes`, `erro_de_rede`,
+`indisponibilidade_da_api`), `modelo_que_respondeu` (só em `"respondeu"`) e
+`erro`/`erro_final` (resumo da exceção, só para depuração — nunca a chave de
+API). `nome` do evento é o `papel` configurado (ex.: `"editor"`) ou `"llm"`
+quando o papel não é distinguido (hoje só o Editor-Chefe passa `papel`
+explícito a `build_model()`; os revisores e a leitura cruzada usam a reserva
+GLOBAL, sem `papel`).
+
+### 6.2. Ponto de conexão
+
+`llm_fallback.py` não conhece `pipeline.py` nem `metrics/` diretamente — a
+troca em si (`ModeloComFallback` e `model_provider.completar_texto`)
+funciona igual com ou sem instrumentação. A ponte é feita por dois pontos de
+contexto global, no mesmo padrão de `metrics/adk_usage.py`:
+
+- **Coletor**: `metrics.adk_usage.obter_coletor_adk()` — o MESMO coletor que
+  `registrar_usage_adk()` usa para os tokens (§5); o pipeline o registra uma
+  vez, via `definir_coletor_adk(coletor)`.
+- **Fase**: `metrics.coletor.obter_fase_atual()` — preenchida
+  automaticamente por `ExecutionCollector.fase(nome)` durante o
+  `with coletor.fase(self.name): ...` que já envolve cada fase em
+  `pipeline.py`. Cobre tanto o `ModeloComFallback` (chamado pelos agentes
+  dentro da fase) quanto `model_provider.completar_texto` (usado pelo
+  corretor de retry, também dentro da fase que o disparou).
+
+Sem coletor registrado (`metrics/` ausente ou execução avulsa fora do
+pipeline), `_registrar_metrica()` é no-op — a troca de modelo nunca depende
+da instrumentação. Sem fase ativa (uso fora de um `with coletor.fase(...)`),
+o evento ainda é registrado, com `fase="desconhecida"`.
+
+### 6.3. Traces (Grupo 3)
+
+Nos traces, além dos três eventos acima (`llm_fallback_acionado`,
+`llm_fallback_respondeu`, `llm_fallback_esgotado`, com os mesmos campos em
+`attributes`), CADA tentativa — inclusive a do principal quando ele
+responde de primeira, sem troca — vira um sub-span próprio
+(`llm_tentativa_principal` / `llm_tentativa_reserva`), com início, fim,
+duração e status. `author` é o `papel` (ou `"llm_fallback"` quando não há
+papel) e `phase` é a mesma fase de `obter_fase_atual()` — os eventos de
+fallback aparecem corretamente aninhados sob o span da fase em
+`render_timeline()` (ver [`§8 do README`](../README.md#8-observabilidade-e-traces-grupo-3)).
+
+### 6.4. Exemplo de `fallbacks_llm` no resumo
+
+```json
+"quantidade_fallbacks_acionados": 1,
+"quantidade_fallbacks_respondidos": 1,
+"quantidade_fallbacks_esgotados": 0,
+"fallbacks_llm": [
+  {
+    "fase": "fase_3_editor_chefe",
+    "papel": "editor",
+    "evento": "acionado",
+    "status": "aviso",
+    "timestamp": 1731000000.123,
+    "provedor_inicial": "gemini:gemini-2.5-flash",
+    "motivo_falha": "limite_de_requisicoes",
+    "opcao_fallback": "maritaca:sabia-3",
+    "modelo_que_respondeu": null
+  },
+  {
+    "fase": "fase_3_editor_chefe",
+    "papel": "editor",
+    "evento": "respondeu",
+    "status": "sucesso",
+    "timestamp": 1731000000.456,
+    "provedor_inicial": "gemini:gemini-2.5-flash",
+    "motivo_falha": null,
+    "opcao_fallback": "maritaca:sabia-3",
+    "modelo_que_respondeu": "maritaca:sabia-3"
+  }
+]
+```
+
+---
+
+## 7. Caminho de evolução para ADK/OpenTelemetry
 
 Os nomes de campo de `ExecutionEvent`/`ResumoExecucao` foram escolhidos para
 mapear diretamente em conceitos de **span**/**trace** OpenTelemetry, mesmo sem
@@ -320,6 +425,7 @@ implementar isso agora:
 | Evento `tipo="decisao_final"` | Um **atributo do span raiz** (`decisao_final`, `requer_revisao_humana`) ou um evento terminal do trace. |
 | `ExecutionEvent.status` | `span.status` (`OK`/`ERROR`) — `"aviso"` mapearia para `OK` com um atributo/evento adicional, já que OTel não tem um terceiro estado nativo. |
 | Evento `tipo="chamada_llm"` (`detalhes` com `tokens_*`, `modelo`) | Atributos de span padronizados pela semântica **gen-ai** do OpenTelemetry: `gen_ai.usage.input_tokens`/`output_tokens` ↔ `tokens_entrada`/`tokens_resposta`, `gen_ai.request.model` ↔ `modelo`. A captura já existe (§5); trocar o destino por um exporter OTel não mudaria o contrato do evento. |
+| Evento `tipo="fallback_llm"` (§6) | Já é um evento por TENTATIVA no trace (`llm_tentativa_principal`/`llm_tentativa_reserva`, spans reais); em métricas, os três desfechos mapeiam para `span.add_event("gen_ai.fallback", {...})` no span da chamada, com `provedor_inicial`/`opcao_fallback`/`motivo_falha` como atributos do evento. |
 
 A camada atual (`ExecutionCollector` em memória + JSON no fim da execução) é
 deliberadamente a implementação mais simples que respeita esse contrato de

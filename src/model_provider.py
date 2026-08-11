@@ -30,6 +30,13 @@ Configuração por ambiente (.env), em ordem de precedência:
     LLM_MODEL_<PAPEL>     — sobrescreve o modelo de um papel específico
     LLM_JSON_SCHEMA       — on | off: força/desliga o structured output nativo
 
+    LLM_FALLBACK_PROVIDER / LLM_FALLBACK_MODEL — opção RESERVA usada quando o
+    modelo principal falha por motivo temporário (timeout, limite de
+    requisições, erro de rede ou indisponibilidade). Também admitem a variante
+    por papel (LLM_FALLBACK_PROVIDER_<PAPEL> / LLM_FALLBACK_MODEL_<PAPEL>).
+    Sem elas, o comportamento é o de sempre: a falha interrompe o pipeline.
+    A troca em si vive em ``llm_fallback.py``.
+
     GOOGLE_API_KEY / MARITACA_API_KEY / OPENAI_API_KEY — chave do provedor.
 
 Retrocompatibilidade: um ``.env`` antigo, com apenas ``GOOGLE_API_KEY`` e
@@ -258,6 +265,39 @@ def resolver_config(
     )
 
 
+def resolver_config_fallback(
+    config: dict[str, Any] | None = None, papel: str | None = None
+) -> ModelConfig | None:
+    """Resolve a opção RESERVA de modelo, ou ``None`` se ela não foi configurada.
+
+    A reserva só existe quando a configuração nomeia ao menos um de
+    ``fallback_provider`` / ``fallback_model`` (via ``config`` ou pelas
+    variáveis ``LLM_FALLBACK_*``). Regras de preenchimento:
+
+    - só o modelo → assume o MESMO provedor do principal (ex.: outro Gemini);
+    - só o provedor → usa o modelo padrão daquele provedor.
+
+    A precedência (config explícita > papel > global) é a mesma de
+    ``resolver_config``, reutilizando ``_ler``.
+    """
+    provider_bruto = _ler("fallback_provider", config, papel)
+    model_bruto = _ler("fallback_model", config, papel)
+    if provider_bruto is None and model_bruto is None:
+        return None
+
+    if provider_bruto is not None:
+        provider = normalizar_provider(provider_bruto)
+    else:
+        provider = resolver_config(config, papel).provider
+
+    spec = PROVEDORES[provider]
+    return ModelConfig(
+        provider=provider,
+        model=model_bruto or spec.modelo_padrao,
+        structured_output=_resolver_structured_output(spec),
+    )
+
+
 def descricao_modelo(config: dict[str, Any] | None = None, papel: str | None = None) -> str:
     """Rótulo ``provedor:modelo`` da execução, para relatórios e traces."""
     return resolver_config(config, papel).rotulo
@@ -278,6 +318,16 @@ def exigir_api_key(
             f"'{cfg.provider.value}'. Copie '.env.example' para '.env' na raiz do "
             f"projeto e preencha a chave, ou rode em modo mock "
             f"(`python main.py mock`), que funciona offline e sem chave."
+        )
+
+    # A reserva também precisa de chave: descobrir isso ANTES de rodar é melhor
+    # do que só na hora em que o principal falhar e a troca for necessária.
+    cfg_reserva = resolver_config_fallback(config, papel)
+    if cfg_reserva is not None and not os.getenv(cfg_reserva.spec.env_api_key):
+        raise RuntimeError(
+            f"{cfg_reserva.spec.env_api_key} não configurada, mas o provedor RESERVA "
+            f"selecionado é '{cfg_reserva.provider.value}' (via LLM_FALLBACK_*). "
+            f"Preencha a chave no '.env' ou remova a configuração de fallback."
         )
     return cfg
 
@@ -384,18 +434,17 @@ def _limpar_json_da_resposta(resposta):
     return resposta
 
 
-def build_model(config: dict[str, Any] | None = None, papel: str | None = None) -> Any:
-    """Devolve o que deve ir em ``LlmAgent(model=...)`` para o papel indicado.
+def _instanciar_modelo(cfg: ModelConfig) -> Any:
+    """Instancia o ``BaseLlm`` do ADK correspondente à configuração.
 
-    - **Gemini:** a string do modelo (rota nativa do ADK, sem intermediários).
-    - **Maritaca / OpenAI:** um ``LiteLlm`` configurado com endpoint e chave.
-
-    Em ambos os casos o agente continua sendo um ``LlmAgent`` comum, com o mesmo
-    prompt e o mesmo ``output_schema``.
+    - **Gemini:** a classe ``Gemini`` nativa do ADK — o mesmo objeto que o
+      próprio ADK criaria ao receber a string do modelo.
+    - **Maritaca / OpenAI:** o ``LiteLlm`` do pipeline, com endpoint e chave.
     """
-    cfg = resolver_config(config, papel)
     if cfg.spec.prefixo_litellm is None:
-        return cfg.model
+        from google.adk.models.google_llm import Gemini
+
+        return Gemini(model=cfg.model)
 
     Classe = _classe_litellm(cfg.structured_output)
     kwargs: dict[str, Any] = {"model": cfg.litellm_model}
@@ -405,6 +454,38 @@ def build_model(config: dict[str, Any] | None = None, papel: str | None = None) 
     if cfg.spec.api_base:
         kwargs["api_base"] = cfg.spec.api_base
     return Classe(**kwargs)
+
+
+def build_model(config: dict[str, Any] | None = None, papel: str | None = None) -> Any:
+    """Devolve o que deve ir em ``LlmAgent(model=...)`` para o papel indicado.
+
+    - **Gemini:** a string do modelo (rota nativa do ADK, sem intermediários).
+    - **Maritaca / OpenAI:** um ``LiteLlm`` configurado com endpoint e chave.
+    - **Com reserva configurada (LLM_FALLBACK_*):** um ``ModeloComFallback``
+      que embrulha principal + reserva e troca de modelo em falha temporária
+      (ver ``llm_fallback.py``).
+
+    Em todos os casos o agente continua sendo um ``LlmAgent`` comum, com o
+    mesmo prompt e o mesmo ``output_schema``.
+    """
+    cfg = resolver_config(config, papel)
+    cfg_reserva = resolver_config_fallback(config, papel)
+
+    if cfg_reserva is None:
+        # Sem fallback, o comportamento é EXATAMENTE o anterior.
+        if cfg.spec.prefixo_litellm is None:
+            return cfg.model
+        return _instanciar_modelo(cfg)
+
+    from llm_fallback import criar_modelo_com_fallback
+
+    return criar_modelo_com_fallback(
+        modelo_primario=_instanciar_modelo(cfg),
+        modelo_reserva=_instanciar_modelo(cfg_reserva),
+        rotulo_primario=cfg.rotulo,
+        rotulo_reserva=cfg_reserva.rotulo,
+        papel=papel,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -420,8 +501,59 @@ def completar_texto(
     ``validacao_retry.corrigir_saida_api`` precisa de uma completação avulsa. Sem
     este ponto compartilhado, escolher OpenAI ou Maritaca ainda cairia no Gemini
     na hora de corrigir uma saída inválida.
+
+    Com a reserva configurada (``LLM_FALLBACK_*``), uma falha TEMPORÁRIA do
+    principal (timeout, limite de requisições, rede, indisponibilidade) troca
+    para ela — mesma política dos agentes, ver ``llm_fallback.py``.
     """
     cfg = exigir_api_key(config, papel)
+    cfg_reserva = resolver_config_fallback(config, papel)
+
+    from llm_fallback import _span  # mesmo span de tentativa do ModeloComFallback
+
+    try:
+        with _span(
+            "llm_tentativa_principal", papel=papel,
+            attributes={"modelo": cfg.rotulo, "papel": papel},
+        ):
+            return _completar_texto_unico(cfg, prompt)
+    except Exception as exc:  # noqa: BLE001 — classificado logo abaixo
+        if cfg_reserva is None:
+            raise
+        from llm_fallback import (
+            classificar_falha_temporaria,
+            emitir_fallback_acionado,
+            emitir_fallback_esgotado,
+            emitir_fallback_respondeu,
+        )
+
+        motivo = classificar_falha_temporaria(exc)
+        if motivo is None:
+            raise
+        emitir_fallback_acionado(
+            rotulo_primario=cfg.rotulo, rotulo_reserva=cfg_reserva.rotulo,
+            motivo=motivo, erro=exc, papel=papel,
+        )
+        try:
+            with _span(
+                "llm_tentativa_reserva", papel=papel,
+                attributes={"modelo": cfg_reserva.rotulo, "papel": papel},
+            ):
+                texto = _completar_texto_unico(cfg_reserva, prompt)
+        except Exception as exc_reserva:  # noqa: BLE001 — registra e re-levanta
+            emitir_fallback_esgotado(
+                rotulo_primario=cfg.rotulo, rotulo_reserva=cfg_reserva.rotulo,
+                erro=exc_reserva, papel=papel,
+            )
+            raise
+        emitir_fallback_respondeu(
+            rotulo_primario=cfg.rotulo, rotulo_reserva=cfg_reserva.rotulo, papel=papel,
+        )
+        return texto
+
+
+def _completar_texto_unico(cfg: ModelConfig, prompt: str) -> str:
+    """Uma única completação de texto no provedor de ``cfg`` (sem fallback)."""
     api_key = os.getenv(cfg.spec.env_api_key)
 
     if cfg.provider is Provider.GEMINI:
