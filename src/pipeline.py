@@ -1170,15 +1170,27 @@ def run_demo(
     if auditoria_veredito is not None:
         config["_auditoria_veredito"] = auditoria_veredito
 
-    def _salvar_estado(contexto: PipelineContext | None = None) -> None:
+    def _salvar_estado(
+        contexto: PipelineContext | None = None, *, eventos: list[dict] | None = None,
+    ) -> None:
         """Persiste o estado auxiliar no ponto em que a execução está agora.
 
         Chamado nas FRONTEIRAS de sucesso (fase 0 extraída, cada fase concluída,
-        fim da execução) — nunca no caminho de falha. É deliberado: persistir os
-        eventos de uma tentativa que falhou faria a retomada bem-sucedida herdar
-        `quantidade_falhas` e `status_final="falha"` de um problema já resolvido.
-        O rastro da tentativa que falhou continua no trace e em
-        validacao_events.jsonl, que são append-only.
+        fim da execução) e também no caminho de FALHA (bloco ``except`` de
+        ``run_demo``), neste último caso com ``eventos`` já filtrado para
+        excluir os que sinalizam a própria falha — ver o chamador. Sem isso, o
+        tempo de parede e os eventos de sucesso (chamadas LLM, tools) que a
+        tentativa que falhou já havia produzido seriam perdidos: eles só
+        existem na memória do processo que caiu, e a retomada partiria do
+        último sucesso registrado, sem nenhum rastro do que aconteceu depois
+        dele. Excluir os eventos tipo="falha" evita que a retomada
+        bem-sucedida herde `quantidade_falhas`/`status_final="falha"` de um
+        problema já resolvido — o rastro completo da falha continua no trace e
+        em validacao_events.jsonl, que são append-only.
+
+        ``duracao_acumulada_s`` nunca é filtrada: é só um número (o relógio de
+        parede do processo inteiro via ``coletor.duracao_execucao_s``), não um
+        evento — por isso é sempre persistida, inclusive na falha.
 
         ``contexto`` é o PipelineContext da fase que acabou de concluir. Ele
         precisa vir por parâmetro porque ``PipelineContext`` COPIA o config
@@ -1188,6 +1200,10 @@ def run_demo(
         nonlocal auditoria_veredito
         if contexto is not None and contexto.config.get("_auditoria_veredito") is not None:
             auditoria_veredito = contexto.config["_auditoria_veredito"]
+        eventos_para_salvar = (
+            eventos if eventos is not None
+            else (coletor.eventos_como_dict() if coletor is not None else [])
+        )
         ckpt.salvar_estado(
             "estado",
             {
@@ -1197,9 +1213,7 @@ def run_demo(
                     coletor.duracao_execucao_s if coletor is not None else 0.0
                 ),
                 "auditoria_veredito": auditoria_veredito,
-                "eventos_metricas": (
-                    coletor.eventos_como_dict() if coletor is not None else []
-                ),
+                "eventos_metricas": eventos_para_salvar,
             },
         )
 
@@ -1381,6 +1395,16 @@ def run_demo(
         print(f"Fases concluídas antes da falha: {fases_ok or 'nenhuma'}")
         for fase in fases_ok:
             print(f"  checkpoint: {ckpt.caminho(fase)}")
+        if coletor is not None:
+            # Persiste o que a tentativa que falhou já tinha de fato produzido
+            # (tempo de parede + eventos de sucesso), para a retomada não
+            # partir como se nada tivesse acontecido depois do último
+            # checkpoint. Os eventos que sinalizam a própria falha ficam de
+            # fora — ver docstring de _salvar_estado.
+            eventos_sem_falha = [
+                e for e in coletor.eventos_como_dict() if e.get("status") != "falha"
+            ]
+            _salvar_estado(eventos=eventos_sem_falha)
         if coletor is not None and gerar_resumo is not None:
             resumo_parcial = gerar_resumo(
                 coletor.eventos, run_id=run_id, duracao_total_s=coletor.duracao_execucao_s,
