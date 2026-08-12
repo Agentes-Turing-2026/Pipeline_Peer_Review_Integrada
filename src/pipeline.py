@@ -147,14 +147,12 @@ try:
     from metrics.resumo import gerar_resumo
     from metrics.exportar import imprimir_resumo, salvar_resumo_json
     from metrics.adk_usage import definir_coletor_adk
-    from metrics.precos_modelos import resolver_precos
 except ImportError:
     ExecutionCollector = None
     gerar_resumo = None
     imprimir_resumo = None
     salvar_resumo_json = None
     definir_coletor_adk = None
-    resolver_precos = None
 
 
 def _fase_medida(coletor: ExecutionCollector | None, nome: str):
@@ -1087,12 +1085,15 @@ def run_demo(
     if resolved is RunMode.API:
         _require_api_key()
 
-    # Custo estimado (Grupo 2): resolvido uma vez, a partir do MESMO
-    # provedor/modelo que a execução vai usar (config explícita > variáveis de
-    # ambiente > default do provedor) — nunca de um preço fixo no código. Em
-    # modo mock não há chamada LLM nenhuma, então o preço resolvido aqui nunca
-    # chega a multiplicar nada (gerar_resumo só usa custo com tokens medidos).
-    precos_execucao = resolver_precos(config) if resolver_precos is not None else None
+    # Custo estimado (Grupo 2): NÃO é resolvido uma vez aqui para a execução
+    # inteira — gerar_resumo() precifica cada chamada LLM individualmente
+    # pelo modelo que de fato respondeu (metrics/precos_modelos.py,
+    # resolver_precos_por_modelo), porque papéis diferentes podem usar
+    # modelos diferentes (ex.: o editor configurado à parte) e um fallback
+    # pode trocar o modelo que responde no meio da execução — um preço único
+    # aplicado ao total agregado erraria os dois casos. Preço via variáveis
+    # de ambiente (GRUPO2_PRECO_USD_MILHAO_TOKENS_*) continua valendo para
+    # TODAS as chamadas, resolvido automaticamente dentro de gerar_resumo.
 
     # Observabilidade: cria uma execução identificável (run_id) e um trace local.
     # Se `run_id` foi passado (retomada), o tracer usa o MESMO identificador em
@@ -1299,7 +1300,6 @@ def run_demo(
                 coletor.eventos,
                 run_id=coletor.run_id,
                 duracao_total_s=coletor.duracao_execucao_s,
-                precos=precos_execucao,
             )
             _alertar_lacunas_no_resumo(resumo, ckpt)
             report_local.data["resumo_execucao"] = resumo.to_dict()
@@ -1384,7 +1384,6 @@ def run_demo(
         if coletor is not None and gerar_resumo is not None:
             resumo_parcial = gerar_resumo(
                 coletor.eventos, run_id=run_id, duracao_total_s=coletor.duracao_execucao_s,
-                precos=precos_execucao,
             )
             if imprimir_resumo is not None:
                 imprimir_resumo(resumo_parcial)

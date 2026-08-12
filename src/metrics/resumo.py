@@ -58,6 +58,7 @@ from typing import Any
 
 from .adk_usage import PrecosModelo, estimar_custo_usd
 from .eventos import ExecutionEvent
+from .precos_modelos import resolver_precos_por_modelo
 
 # Categorias de token agregadas por execução — nomes do UsageChamada
 # (adk_usage.py), na ordem de exibição.
@@ -91,7 +92,10 @@ class ResumoExecucao:
     # — nunca 0 no lugar de "não medido".
     tokens_totais: int | None = None
     custo_estimado: float | None = None
-    """Preenchido apenas quando gerar_resumo() recebe preço configurado (precos=...)."""
+    """Soma do custo de cada chamada tipo="chamada_llm", precificada pelo MODELO
+    que respondeu naquela chamada específica (não um preço único aplicado ao
+    total agregado da execução — ver gerar_resumo). None sem chamadas LLM ou
+    quando nenhuma chamada teve preço resolvido."""
     modelo_usado: str | None = None
     """Um modelo -> o nome dele; vários -> nomes únicos ordenados, separados por ', '."""
     chamadas_llm: int | None = None
@@ -171,6 +175,45 @@ def _somar_categoria(chamadas: list[ExecutionEvent], categoria: str) -> int | No
     return sum(valores) if valores else None
 
 
+def _custo_estimado_por_chamada(
+    chamadas: list[ExecutionEvent], precos_override: PrecosModelo | None
+) -> tuple[float | None, bool]:
+    """Soma o custo de CADA chamada, precificada pelo modelo que respondeu nela.
+
+    ``precos_override``, quando informado, é um preço FIXO aplicado a TODAS
+    as chamadas (uso explícito do chamador — ex.: testes, ou um contrato de
+    preço que nenhuma fonte automática conhece). Sem ele, cada chamada é
+    precificada individualmente por ``resolver_precos_por_modelo()``, a
+    partir do ``modelo`` real do próprio evento — nunca um único preço
+    "representativo" aplicado ao total agregado de tokens da execução, que
+    erraria sempre que mais de um modelo respondeu (o editor configurado com
+    um modelo diferente do resto, ou um fallback assumindo a resposta no
+    meio da execução).
+
+    Devolve ``(custo_total_ou_None, parcial)``: ``parcial=True`` quando ao
+    menos uma chamada com tokens medidos não teve preço resolvido para o seu
+    modelo — mesma regra de "ausência ≠ zero" dos tokens: a soma cobre só o
+    que foi possível precificar, e a lacuna fica auditável (via alerta em
+    ``gerar_resumo``), nunca escondida como custo 0.
+    """
+    total: float | None = None
+    parcial = False
+    for chamada in chamadas:
+        tokens_entrada = chamada.detalhes.get("tokens_entrada")
+        tokens_resposta = chamada.detalhes.get("tokens_resposta")
+        precos_chamada = precos_override
+        if precos_chamada is None:
+            precos_chamada = resolver_precos_por_modelo(chamada.detalhes.get("modelo"))
+        if precos_chamada is None:
+            if tokens_entrada is not None or tokens_resposta is not None:
+                parcial = True
+            continue
+        custo_chamada = estimar_custo_usd(tokens_entrada, tokens_resposta, precos_chamada)
+        if custo_chamada is not None:
+            total = custo_chamada if total is None else total + custo_chamada
+    return total, parcial
+
+
 def gerar_resumo(
     eventos: list[ExecutionEvent],
     *,
@@ -189,10 +232,19 @@ def gerar_resumo(
     `alertas`. duracao_soma_fases_s é SEMPRE calculado a partir dos eventos,
     independente deste parâmetro.
 
-    precos (opcional) ativa a estimativa de custo PREPARADA em adk_usage.py:
-    quando informado (ex.: via precos_de_ambiente()), custo_estimado é calculado
-    sobre os tokens reais de entrada/resposta. Sem preço configurado — o padrão
-    — custo_estimado permanece None; consumo real e preço nunca se misturam.
+    precos (opcional) é um preço FIXO aplicado a TODAS as chamadas da execução
+    — útil para forçar um valor manual (testes, ou um contrato de preço que
+    nenhuma fonte automática conhece). Sem ele — o padrão — cada chamada
+    tipo="chamada_llm" é precificada INDIVIDUALMENTE pelo modelo que de fato
+    respondeu (resolver_precos_por_modelo(), em precos_modelos.py — cobre
+    ambiente > litellm > tabela oficial), e os custos por chamada são somados
+    em custo_estimado. Isso importa porque nem toda chamada da mesma execução
+    usa o mesmo modelo: o editor pode estar configurado para um modelo
+    diferente do resto do pipeline, ou um fallback (llm_fallback.py) pode ter
+    assumido a resposta no meio da execução — aplicar um preço único ao total
+    agregado de tokens erraria esses dois casos. Sem preço resolvível para
+    NENHUMA chamada, custo_estimado permanece None; consumo real e preço
+    nunca se misturam.
     """
     if not eventos and run_id is None:
         raise ValueError(
@@ -290,9 +342,13 @@ def gerar_resumo(
             if chamada.detalhes.get("modelo")
         })
         modelo_usado = ", ".join(modelos) if modelos else None
-        custo_estimado = estimar_custo_usd(
-            tokens_execucao["tokens_entrada"], tokens_execucao["tokens_resposta"], precos
-        )
+        custo_estimado, custo_parcial = _custo_estimado_por_chamada(chamadas, precos)
+        if custo_parcial and custo_estimado is not None:
+            alertas.append(
+                "Custo estimado é parcial: não foi possível resolver o preço de "
+                "ao menos um modelo que respondeu durante a execução — os "
+                "tokens dessa(s) chamada(s) ficaram fora da soma."
+            )
 
     if duracao_total_s is None:
         duracao_total_s = duracao_soma_fases_s

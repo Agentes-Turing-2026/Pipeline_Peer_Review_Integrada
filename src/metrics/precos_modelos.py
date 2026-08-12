@@ -253,6 +253,95 @@ def _preco_via_litellm(provider: str, modelo: str | None) -> PrecosModelo | None
     return None
 
 
+def _preco_via_litellm_modelo(modelo: str | None) -> PrecosModelo | None:
+    """Preço em ``litellm.model_cost`` pelo NOME PURO do modelo, sem provedor.
+
+    Usado por ``resolver_precos_por_modelo`` para precificar POR CHAMADA: o
+    evento ``tipo="chamada_llm"`` só carrega o modelo que respondeu
+    (``model_version`` do ADK), não o provedor configurado para o papel — os
+    dois podem divergir (ver ``preco_por_modelo``). ``litellm.model_cost`` já
+    guarda a maioria dos modelos pelo nome puro (mesma constatação de
+    ``_preco_via_litellm``); o prefixo por provedor só existe ali para
+    desambiguar quando necessário, o que não é o caso das famílias suportadas
+    aqui (gemini-/gpt-/sabia- não colidem entre provedores).
+    """
+    if not modelo:
+        return None
+    try:
+        import litellm
+    except ImportError:
+        return None
+
+    tabela = getattr(litellm, "model_cost", None)
+    if not tabela:
+        return None
+
+    entrada = tabela.get(modelo.strip())
+    if not entrada:
+        return None
+    preco_entrada = entrada.get("input_cost_per_token")
+    preco_saida = entrada.get("output_cost_per_token")
+    if preco_entrada is None or preco_saida is None:
+        return None
+    return PrecosModelo(
+        usd_por_milhao_tokens_entrada=preco_entrada * 1_000_000,
+        usd_por_milhao_tokens_saida=preco_saida * 1_000_000,
+    )
+
+
+def preco_por_modelo(modelo: str | None) -> PrecosModelo | None:
+    """Preço oficial pelo MODELO sozinho, sem exigir o provedor.
+
+    Casa por prefixo em TODAS as entradas de ``TABELA_PRECOS_OFICIAIS``,
+    indiferente ao provedor — necessário para precificar POR CHAMADA, já que
+    o evento ``tipo="chamada_llm"`` só carrega o modelo que respondeu, não o
+    provedor configurado para o papel. Os prefixos das três famílias
+    suportadas (``gemini-``, ``gpt-``, ``sabia``) não se sobrepõem entre
+    provedores, então casar só pelo modelo é seguro; entre prefixos
+    compatíveis, vence o mais específico (o mais longo), igual a
+    ``preco_oficial``.
+    """
+    if not modelo:
+        return None
+    modelo_norm = modelo.strip().lower()
+
+    melhor: tuple[int, PrecosModelo] | None = None
+    for _prov, prefixo, precos, _fonte in TABELA_PRECOS_OFICIAIS:
+        if modelo_norm.startswith(prefixo) and (melhor is None or len(prefixo) > melhor[0]):
+            melhor = (len(prefixo), precos)
+    return melhor[1] if melhor else None
+
+
+def resolver_precos_por_modelo(modelo: str | None) -> PrecosModelo | None:
+    """Preço para UMA chamada específica, a partir do modelo que de fato respondeu.
+
+    Diferente de ``resolver_precos`` (que resolve o preço da execução INTEIRA
+    a partir do provedor/modelo CONFIGURADO para um papel, antes de qualquer
+    chamada acontecer), esta função precifica pelo campo ``modelo`` do evento
+    ``tipo="chamada_llm"`` — o ``model_version`` que o ADK devolveu na
+    resposta real. É o que evita aplicar um preço único e possivelmente
+    errado quando mais de um modelo responde na mesma execução: o editor
+    configurado com um modelo diferente do resto do pipeline, ou o principal
+    falhando e o fallback (``llm_fallback.py``) assumindo a resposta —
+    nesses casos o modelo CONFIGURADO para o papel e o modelo que de fato
+    respondeu divergem, e só o segundo está correto para o custo.
+
+    Precedência: ambiente (``GRUPO2_PRECO_USD_MILHAO_TOKENS_*``) sempre
+    vence — é um override manual do operador e se aplica a TODAS as chamadas
+    propositalmente, igual a ``resolver_precos``; senão ``litellm.model_cost``
+    pelo nome puro do modelo; senão a tabela oficial estática deste módulo
+    (``preco_por_modelo``); senão ``None`` — modelo não reconhecido em
+    nenhuma fonte, custo dessa chamada específica fica indisponível, nunca 0.
+    """
+    de_ambiente = precos_de_ambiente()
+    if de_ambiente is not None:
+        return de_ambiente
+    via_litellm = _preco_via_litellm_modelo(modelo)
+    if via_litellm is not None:
+        return via_litellm
+    return preco_por_modelo(modelo)
+
+
 def resolver_precos(config: dict[str, Any] | None = None, papel: str | None = None) -> PrecosModelo | None:
     """Preço a usar em ``gerar_resumo(precos=...)`` para a execução atual.
 
