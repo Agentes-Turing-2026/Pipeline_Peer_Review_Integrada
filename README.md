@@ -210,7 +210,7 @@ serviço**, e prompts, schemas, validações, traces e o modo mock não mudam.
 | `LLM_PROVIDER` | Chave de API | `LLM_MODEL` padrão | Como o ADK conversa |
 |---|---|---|---|
 | `gemini` (default) | `GOOGLE_API_KEY` | `gemini-2.5-flash` | Rota nativa do ADK (string do modelo). |
-| `maritaca` | `MARITACA_API_KEY` | `sabia-3` | `LiteLlm` do ADK apontando para `https://chat.maritaca.ai/api`. |
+| `maritaca` | `MARITACA_API_KEY` | `sabiazinho-4` | `LiteLlm` do ADK apontando para `https://chat.maritaca.ai/api`. |
 | `openai` | `OPENAI_API_KEY` | `gpt-4o-mini` | `LiteLlm` do ADK (`openai/<modelo>`). |
 
 ```bash

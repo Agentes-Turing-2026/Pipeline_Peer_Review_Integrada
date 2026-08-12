@@ -215,7 +215,7 @@ def resolve_mode(config: dict) -> RunMode:
 def descrever_execucao(config: dict) -> str:
     """Descreve QUEM produziu os pareceres, para relatório e traces.
 
-    No modo API devolve ``provedor:modelo`` (ex.: ``maritaca:sabia-3``); no modo
+    No modo API devolve ``provedor:modelo`` (ex.: ``maritaca:sabiazinho-4``); no modo
     MOCK devolve ``mock (offline)``, em vez de anunciar um provedor que não foi
     chamado — o relatório não deve sugerir uma execução que não aconteceu.
     """
