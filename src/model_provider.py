@@ -124,7 +124,7 @@ PROVEDORES: dict[Provider, ProviderSpec] = {
     ),
     Provider.MARITACA: ProviderSpec(
         env_api_key="MARITACA_API_KEY",
-        modelo_padrao="sabia-3",
+        modelo_padrao="sabiazinho-4",
         # A Maritaca é compatível com a API da OpenAI: mesmo protocolo, outra
         # base_url. Por isso reaproveita o roteamento "openai/" do LiteLLM.
         prefixo_litellm="openai/",
@@ -169,13 +169,13 @@ class ModelConfig:
 
     @property
     def litellm_model(self) -> str:
-        """Id do modelo no formato de roteamento do LiteLLM (ex.: ``openai/sabia-3``)."""
+        """Id do modelo no formato de roteamento do LiteLLM (ex.: ``openai/sabiazinho-4``)."""
         prefixo = self.spec.prefixo_litellm or ""
         return f"{prefixo}{self.model}"
 
     @property
     def rotulo(self) -> str:
-        """Rótulo legível para relatórios e traces (ex.: ``maritaca:sabia-3``)."""
+        """Rótulo legível para relatórios e traces (ex.: ``maritaca:sabiazinho-4``)."""
         return f"{self.provider.value}:{self.model}"
 
 

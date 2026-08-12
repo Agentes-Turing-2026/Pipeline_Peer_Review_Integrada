@@ -78,8 +78,8 @@ def test_llm_model_tem_precedencia_sobre_gemini_model_legado(monkeypatch):
 def test_provedor_sem_modelo_usa_o_padrao_do_provedor(monkeypatch):
     monkeypatch.setenv("LLM_PROVIDER", "maritaca")
     cfg = resolver_config()
-    assert cfg.model == "sabia-3"
-    assert cfg.litellm_model == "openai/sabia-3"
+    assert cfg.model == "sabiazinho-4"
+    assert cfg.litellm_model == "openai/sabiazinho-4"
     assert cfg.spec.api_base == "https://chat.maritaca.ai/api"
 
 
@@ -103,7 +103,7 @@ def test_override_de_papel_nao_afeta_os_demais(monkeypatch):
     editor = resolver_config(papel="editor")
 
     assert revisores.provider is Provider.MARITACA
-    assert revisores.model == "sabia-3"
+    assert revisores.model == "sabiazinho-4"
     assert editor.provider is Provider.OPENAI
     assert editor.model == "gpt-4o"
 
@@ -196,7 +196,7 @@ def test_maritaca_monta_litellm_com_endpoint_proprio(monkeypatch):
 
     modelo = build_model()
     assert isinstance(modelo, LiteLlm)
-    assert modelo.model == "openai/sabia-3"
+    assert modelo.model == "openai/sabiazinho-4"
     # A Maritaca fala o protocolo da OpenAI em outro endpoint.
     assert modelo._additional_args["api_base"] == "https://chat.maritaca.ai/api"
     assert modelo._additional_args["api_key"] == "chave-teste"
@@ -298,7 +298,7 @@ def test_shim_remove_response_schema_do_pedido(monkeypatch):
 
 def test_rotulo_identifica_provedor_e_modelo(monkeypatch):
     monkeypatch.setenv("LLM_PROVIDER", "maritaca")
-    assert descricao_modelo() == "maritaca:sabia-3"
+    assert descricao_modelo() == "maritaca:sabiazinho-4"
 
 
 def test_modo_mock_nao_anuncia_provedor_nem_exige_chave(monkeypatch):

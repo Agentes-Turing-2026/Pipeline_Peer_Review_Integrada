@@ -33,7 +33,7 @@ from review_schema import validar_review  # noqa: E402
 #: Contadores que o provedor "reporta" na resposta falsa.
 TOKENS_ENTRADA = 1200
 TOKENS_SAIDA = 300
-MODELO_RESPONDEU = "sabia-3"
+MODELO_RESPONDEU = "sabiazinho-4"
 
 
 def _parecer_valido() -> dict:
