@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import json
 import sys
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -85,9 +85,20 @@ def _falha_em(fase_cls, mensagem: str):
     Simula uma falha real no meio do pipeline (timeout do modelo, queda de rede,
     resposta irrecuperável). Sair do bloco representa "o problema foi resolvido"
     — é a condição para a retomada fazer sentido.
+
+    A falha passa pelo ``coletor.fase(nome)`` real (mesma API que o `.run()`
+    original usa por dentro do `with _fase_medida(...)`, ver pipeline.py) —
+    sem isso, a exceção nunca vira evento de métrica, e um teste que olhasse
+    o resumo no momento da falha veria "sucesso" mesmo com o RuntimeError
+    subindo (foi exatamente esse ponto cego que deixou passar o bug do
+    resumo parcial: nenhum teste aqui verificava o CONTEÚDO do resumo
+    parcial, só que a exceção subia).
     """
     def _run(self, data, context):
-        raise RuntimeError(mensagem)
+        coletor = context.config.get("_metrics_collector")
+        medicao = coletor.fase(self.name) if coletor is not None else nullcontext()
+        with medicao:
+            raise RuntimeError(mensagem)
 
     with pytest.MonkeyPatch.context() as mp:
         mp.setattr(fase_cls, "run", _run)
@@ -405,6 +416,85 @@ def test_estado_ilegivel_nao_impede_a_retomada(ambiente):
     alertas = retomado.data["resumo_execucao"]["alertas"]
     assert any("não aparecem neste resumo" in alerta for alerta in alertas), (
         "a perda das métricas restauradas tem que ser denunciada, não silenciada"
+    )
+
+
+# ---------------------------------------------------------------------------
+# 8 — O caminho de falha registra e persiste o que já tinha acontecido
+# ---------------------------------------------------------------------------
+
+def test_resumo_parcial_no_momento_da_falha_mostra_a_falha(ambiente):
+    """O resumo salvo NO INSTANTE da falha tem que dizer que algo falhou.
+
+    Reportado pelo coordenador: o resumo impresso na hora da falha mostrava
+    "sucesso" e zero falhas. Causa raiz era a simulação de falha (agora
+    corrigida em ``_falha_em``) pular a instrumentação real do pipeline — o
+    pipeline em si já registrava a falha corretamente, só não era exercitado
+    de um jeito realista. Este teste verifica o CONTEÚDO do resumo parcial,
+    algo que nenhum teste fazia antes (só verificavam que a exceção subia).
+    """
+    run_id = "run_falha_visivel_no_parcial"
+    with _falha_em(EditorVerdictPhase, "timeout simulado do modelo"):
+        with pytest.raises(RuntimeError):
+            run_demo(mode="mock", run_id=run_id)
+
+    resumo_parcial_path = ambiente.outputs / run_id / "resumo_execucao_parcial.json"
+    resumo_parcial = json.loads(resumo_parcial_path.read_text(encoding="utf-8"))
+
+    assert resumo_parcial["status_final"] == "falha", (
+        "uma falha real tem que aparecer como falha no resumo parcial"
+    )
+    assert FASE_1 in resumo_parcial["duracao_por_fase_s"]
+    assert FASE_2 in resumo_parcial["duracao_por_fase_s"]
+
+
+def test_tempo_da_tentativa_que_falhou_e_persistido_no_caminho_de_falha(ambiente):
+    """O ``except`` de ``run_demo()`` agora persiste estado — não só os sucessos.
+
+    Reportado pelo coordenador: depois da retomada, o tempo/consumo da
+    tentativa que falhou não aparecia em lugar nenhum. Antes da correção,
+    ``_salvar_estado()`` só era chamada nas fronteiras de sucesso (a cada fase
+    concluída); uma falha no meio descartava o que a tentativa quebrada já
+    tinha produzido. Aqui espiamos toda chamada a ``CheckpointManager.
+    salvar_estado("estado", ...)`` durante a execução que falha: a ÚLTIMA
+    (feita pelo bloco ``except``) precisa existir e não pode retroceder no
+    tempo em relação à anterior (a de quando a fase 2 concluiu).
+    """
+    valores_duracao: list[float] = []
+    original_salvar_estado = CheckpointManager.salvar_estado
+
+    def _salvar_estado_espiao(self, nome, dados):
+        if nome == "estado":
+            valores_duracao.append(dados["duracao_acumulada_s"])
+        return original_salvar_estado(self, nome, dados)
+
+    run_id = "run_tempo_falha_nao_descartado"
+    with _falha_em(EditorVerdictPhase, "timeout simulado do modelo"):
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr(CheckpointManager, "salvar_estado", _salvar_estado_espiao)
+            with pytest.raises(RuntimeError):
+                run_demo(mode="mock", run_id=run_id)
+
+    # Uma chamada por fase concluída antes da falha (1 e 2) + uma do bloco
+    # except no instante da falha.
+    assert len(valores_duracao) == 3, valores_duracao
+    duracao_apos_fase_2, duracao_no_momento_da_falha = valores_duracao[1], valores_duracao[2]
+    assert duracao_no_momento_da_falha >= duracao_apos_fase_2, (
+        "o tempo consumido pela tentativa que falhou não pode ser descartado"
+    )
+
+    estado_apos_falha = json.loads(
+        (ambiente.checkpoints / f"{run_id}.estado.json").read_text(encoding="utf-8")
+    )
+    assert estado_apos_falha["duracao_acumulada_s"] == pytest.approx(duracao_no_momento_da_falha)
+    assert all(
+        evento["status"] != "falha" for evento in estado_apos_falha["eventos_metricas"]
+    ), "eventos que sinalizam a própria falha não podem contaminar a retomada"
+
+    retomado = run_demo(mode="mock", run_id=run_id)
+    assert retomado.data["resumo_execucao"]["duracao_total_s"] >= duracao_no_momento_da_falha, (
+        "a duração final não pode ser menor que o que já tinha sido "
+        "persistido antes da retomada sequer começar"
     )
 
 

@@ -22,6 +22,7 @@ from __future__ import annotations
 import hashlib
 import shutil
 import sys
+from contextlib import nullcontext
 from pathlib import Path
 
 SRC = Path(__file__).resolve().parents[1]  # .../src (as demos vivem em src/demos/)
@@ -84,7 +85,16 @@ def main() -> None:
     original_run = EditorVerdictPhase.run
 
     def _falha_simulada(self, data, context):
-        raise RuntimeError("falha simulada pela demo (ex.: timeout do modelo)")
+        # Passa pelo coletor.fase() real, exatamente como o `.run()` original
+        # faz por dentro do `with _fase_medida(...)` — sem isso, a exceção
+        # nunca seria registrada como métrica, e o resumo impresso logo
+        # abaixo mentiria mostrando "status: sucesso" mesmo com a falha
+        # acontecendo (a instrumentação de fato funciona; só não era
+        # exercitada por esta simulação).
+        coletor = context.config.get("_metrics_collector")
+        medicao = coletor.fase(self.name) if coletor is not None else nullcontext()
+        with medicao:
+            raise RuntimeError("falha simulada pela demo (ex.: timeout do modelo)")
 
     EditorVerdictPhase.run = _falha_simulada
     try:
