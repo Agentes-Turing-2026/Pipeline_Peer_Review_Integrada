@@ -322,3 +322,50 @@ def test_gerar_resumo_com_precos_preenche_custo_estimado(coletor):
     precos = PrecosModelo(usd_por_milhao_tokens_entrada=1.0, usd_por_milhao_tokens_saida=10.0)
     resumo = gerar_resumo(coletor.eventos, run_id=coletor.run_id, precos=precos)
     assert resumo.custo_estimado == pytest.approx(390 / 1e6 * 1.0 + 150 / 1e6 * 10.0)
+
+
+def test_gerar_resumo_custo_precifica_cada_chamada_pelo_seu_proprio_modelo(coletor, monkeypatch):
+    """Regressão: editor com modelo diferente do resto, ou fallback assumindo
+    a resposta, não pode ser precificado por um preço ÚNICO aplicado ao total
+    agregado de tokens da execução — cada chamada usa o preço do MODELO que
+    respondeu NAQUELA chamada especificamente.
+    """
+    monkeypatch.delenv(VAR_PRECO_ENTRADA, raising=False)
+    monkeypatch.delenv(VAR_PRECO_SAIDA, raising=False)
+    registrar_usage_adk(
+        _evento_adk(
+            event_id="e1", author="revisor_metodologia", model_version="gemini-2.5-flash",
+            usage=_usage(prompt=1_000_000, candidates=1_000_000, total=2_000_000),
+        ),
+        fase="fase_1_revisao_independente",
+    )
+    registrar_usage_adk(
+        _evento_adk(
+            event_id="e2", author="editor_chefe", model_version="gpt-4o-mini",
+            usage=_usage(prompt=1_000_000, candidates=1_000_000, total=2_000_000),
+        ),
+        fase="fase_3_editor_chefe",
+    )
+    resumo = gerar_resumo(coletor.eventos, run_id=coletor.run_id)
+
+    from metrics.precos_modelos import preco_oficial
+
+    preco_gemini = preco_oficial("gemini", "gemini-2.5-flash")
+    preco_gpt = preco_oficial("openai", "gpt-4o-mini")
+    custo_correto_por_chamada = (
+        1_000_000 / 1e6 * preco_gemini.usd_por_milhao_tokens_entrada
+        + 1_000_000 / 1e6 * preco_gemini.usd_por_milhao_tokens_saida
+        + 1_000_000 / 1e6 * preco_gpt.usd_por_milhao_tokens_entrada
+        + 1_000_000 / 1e6 * preco_gpt.usd_por_milhao_tokens_saida
+    )
+    assert resumo.custo_estimado == pytest.approx(custo_correto_por_chamada)
+
+    # Prova de que o bug antigo (um preço único para a execução inteira)
+    # daria um número DIFERENTE: aplicar só o preço do gemini aos 4M de
+    # tokens agregados (2M+2M de entrada/saída) superestima o custo real,
+    # porque metade desses tokens veio do gpt-4o-mini, mais barato.
+    custo_com_preco_unico_do_gemini = (
+        2_000_000 / 1e6 * preco_gemini.usd_por_milhao_tokens_entrada
+        + 2_000_000 / 1e6 * preco_gemini.usd_por_milhao_tokens_saida
+    )
+    assert resumo.custo_estimado != pytest.approx(custo_com_preco_unico_do_gemini)
