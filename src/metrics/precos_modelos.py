@@ -109,62 +109,80 @@ TABELA_PRECOS_OFICIAIS: tuple[tuple[str, str, PrecosModelo, str], ...] = (
     (
         "gemini", "gemini-2.5-flash",
         PrecosModelo(usd_por_milhao_tokens_entrada=0.30, usd_por_milhao_tokens_saida=2.50),
-        "https://ai.google.dev/gemini-api/docs/pricing — Gemini 2.5 Flash, "
-        "standard, texto (consultado em 2026-08-06).",
+        (
+            "https://ai.google.dev/gemini-api/docs/pricing — Gemini 2.5 Flash, "
+            "standard, texto (consultado em 2026-08-06)."
+        ),
     ),
     (
         "gemini", "gemini-2.0-flash",
         PrecosModelo(usd_por_milhao_tokens_entrada=0.10, usd_por_milhao_tokens_saida=0.40),
-        "https://ai.google.dev/gemini-api/docs/pricing — Gemini 2.0 Flash, "
-        "standard, texto (consultado em 2026-08-06; modelo com fim de vida "
-        "anunciado para 2026-06-01, mantido para precificar execuções antigas).",
+        (
+            "https://ai.google.dev/gemini-api/docs/pricing — Gemini 2.0 Flash, "
+            "standard, texto (consultado em 2026-08-06; modelo com fim de vida "
+            "anunciado para 2026-06-01, mantido para precificar execuções antigas)."
+        ),
     ),
     (
         "openai", "gpt-4o-mini",
         PrecosModelo(usd_por_milhao_tokens_entrada=0.15, usd_por_milhao_tokens_saida=0.60),
-        "https://openai.com/api/pricing — gpt-4o-mini (consultado em "
-        "2026-08-06; modelo padrão do provedor OpenAI em model_provider.py).",
+        (
+            "https://openai.com/api/pricing — gpt-4o-mini (consultado em "
+            "2026-08-06; modelo padrão do provedor OpenAI em model_provider.py)."
+        ),
     ),
     (
         "openai", "gpt-4o",
         PrecosModelo(usd_por_milhao_tokens_entrada=2.50, usd_por_milhao_tokens_saida=10.00),
-        "https://openai.com/api/pricing — gpt-4o (consultado em 2026-08-06; "
-        "citado como exemplo de override em README.md §2.3).",
+        (
+            "https://openai.com/api/pricing — gpt-4o (consultado em 2026-08-06; "
+            "citado como exemplo de override em README.md §2.3)."
+        ),
     ),
     (
         "openai", "gpt-5.6-luna",
         PrecosModelo(usd_por_milhao_tokens_entrada=0.20, usd_por_milhao_tokens_saida=1.20),
-        "https://openai.com/index/advancing-the-price-performance-frontier-with-gpt-5-6/ "
-        "— GPT-5.6 Luna, preço padrão pós-corte de 30/07/2026 (lançamento em "
-        "01/06/2026 era US$1,00/US$6,00; confirmado por CNBC/Axios/VentureBeat "
-        "e por litellm.model_cost, consultado em 2026-08-06). Verificado como "
-        "modelo real via chamada de teste com chave fornecida pelo usuário — "
-        "NÃO é um gateway/proxy, ver nota de correção no docstring do módulo.",
+        (
+            "https://openai.com/index/advancing-the-price-performance-frontier-with-gpt-5-6/ "
+            "— GPT-5.6 Luna, preço padrão pós-corte de 30/07/2026 (lançamento em "
+            "01/06/2026 era US$1,00/US$6,00; confirmado por CNBC/Axios/VentureBeat "
+            "e por litellm.model_cost, consultado em 2026-08-06). Verificado como "
+            "modelo real via chamada de teste com chave fornecida pelo usuário — "
+            "NÃO é um gateway/proxy, ver nota de correção no docstring do módulo."
+        ),
     ),
     (
         "maritaca", "sabiazinho-4",
         _preco_brl(1.00, 4.00),
-        "https://docs.maritaca.ai/pt/precos — Sabiazinho 4, R$1,00/R$4,00 por "
-        "milhão de tokens, câmbio aproximado US$1≈R$5,14 (consultado em "
-        "2026-08-06).",
+        (
+            "https://docs.maritaca.ai/pt/precos — Sabiazinho 4, R$1,00/R$4,00 por "
+            "milhão de tokens, câmbio aproximado US$1≈R$5,14 (consultado em "
+            "2026-08-06). É o modelo padrão do provedor 'maritaca' desde a "
+            "atualização do Grupo 3 (model_provider.PROVEDORES)."
+        ),
     ),
     (
         "maritaca", "sabia-4",
         _preco_brl(5.00, 20.00),
-        "https://docs.maritaca.ai/pt/precos — Sabiá 4, R$5,00/R$20,00 por "
-        "milhão de tokens, câmbio aproximado US$1≈R$5,14 (consultado em "
-        "2026-08-06).",
+        (
+            "https://docs.maritaca.ai/pt/precos — Sabiá 4, R$5,00/R$20,00 por "
+            "milhão de tokens, câmbio aproximado US$1≈R$5,14 (consultado em "
+            "2026-08-06)."
+        ),
     ),
     (
         "maritaca", "sabia-3",
         _preco_brl(5.00, 10.00),
-        "Sabiá-3 não está mais na tabela oficial da Maritaca (só Sabiá 4 e "
-        "variantes em 2026-08-06); valor aproximado pelo preço de lançamento "
-        "do Sabiá-3 (R$5,00/R$10,00 por milhão de tokens), câmbio aproximado "
-        "US$1≈R$5,14 — é o modelo padrão do provedor 'maritaca' neste "
-        "repositório (model_provider.PROVEDORES), por isso precisa de uma "
-        "entrada mesmo desatualizada. Configure o preço real por ambiente se "
-        "souber o valor vigente.",
+        (
+            "Sabiá-3 não está mais na tabela oficial da Maritaca (só Sabiá 4 e "
+            "variantes em 2026-08-06); valor aproximado pelo preço de lançamento "
+            "do Sabiá-3 (R$5,00/R$10,00 por milhão de tokens), câmbio aproximado "
+            "US$1≈R$5,14. O modelo foi DESCONTINUADO e deixou de ser o padrão do "
+            "provedor 'maritaca' (o Grupo 3 trocou para sabiazinho-4); a entrada "
+            "fica na tabela para precificar execuções ANTIGAS, gravadas antes da "
+            "troca, que ainda aparecem em resultados/ e nos checkpoints. "
+            "Configure o preço real por ambiente se souber o valor vigente."
+        ),
     ),
 )
 

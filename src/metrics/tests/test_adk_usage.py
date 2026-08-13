@@ -16,11 +16,11 @@ SRC = Path(__file__).resolve().parents[2]  # .../src
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from metrics.adk_usage import (  # noqa: E402
-    PrecosModelo,
-    UsageChamada,
+from metrics.adk_usage import (
     VAR_PRECO_ENTRADA,
     VAR_PRECO_SAIDA,
+    PrecosModelo,
+    UsageChamada,
     chave_dedup_usage,
     definir_coletor_adk,
     estimar_custo_usd,
@@ -28,8 +28,8 @@ from metrics.adk_usage import (  # noqa: E402
     precos_de_ambiente,
     registrar_usage_adk,
 )
-from metrics.coletor import ExecutionCollector  # noqa: E402
-from metrics.resumo import gerar_resumo  # noqa: E402
+from metrics.coletor import ExecutionCollector
+from metrics.resumo import gerar_resumo
 
 
 def _usage(prompt=None, candidates=None, thoughts=None, cached=None, total=None):

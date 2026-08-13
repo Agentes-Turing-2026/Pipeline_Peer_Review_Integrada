@@ -10,14 +10,12 @@ chave e chamada real); ``model_provider`` já tem cobertura própria offline.
 import sys
 from pathlib import Path
 
-import pytest
-
 SRC = Path(__file__).resolve().parents[2]  # .../src
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from benchmark.corpus import DocumentoCorpus  # noqa: E402
-from benchmark.executar import _config_llm, processar_documento  # noqa: E402
+from benchmark.corpus import DocumentoCorpus
+from benchmark.executar import _config_llm, processar_documento
 
 
 def _doc_smoke_test() -> DocumentoCorpus:

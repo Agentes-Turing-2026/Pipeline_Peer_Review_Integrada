@@ -13,7 +13,11 @@ SRC = Path(__file__).resolve().parents[2]  # .../src
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from benchmark.corpus import DocumentoCorpus, carregar_corpus, resolver_pdf_local  # noqa: E402
+from benchmark.corpus import (
+    DocumentoCorpus,
+    carregar_corpus,
+    resolver_pdf_local,
+)
 
 
 def _escrever_manifest(tmp_path: Path, documentos: list[dict]) -> Path:
