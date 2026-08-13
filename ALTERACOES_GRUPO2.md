@@ -3,12 +3,12 @@
 Branch `grupo-2-corpus-publico-docs-e-ci`, criada a partir de `dev`.
 5 commits · 29 arquivos · +984 / −288 linhas.
 
-Este documento apresenta, para cada ponto levantado pelo gerente, **o estado
+Este documento apresenta, para cada ponto levantado nesta rodada, **o estado
 anterior e o estado atual**. As seções seguem a ordem da apresentação.
 
 | Indicador | Antes | Depois |
 |---|---|---|
-| Demandas do gerente atendidas | — | **6 de 6** |
+| Pontos levantados e atendidos | — | **6 de 6** |
 | Testes da suíte | 274 passando | **280 passando** |
 | Ruff em `metrics` + `benchmark` | 50 erros | **0** |
 | Mypy em `metrics` + `benchmark` | 3 erros | **0** |
@@ -20,7 +20,7 @@ anterior e o estado atual**. As seções seguem a ordem da apresentação.
 
 ## 1. Custo por chamada: uma pendência exclusivamente documental
 
-O gerente pediu que o custo passasse a ser calculado por chamada, com base no
+Foi solicitado que o custo passasse a ser calculado por chamada, com base no
 modelo que efetivamente respondeu, em vez de um preço único aplicado ao total
 da execução.
 
@@ -167,10 +167,10 @@ impede que ela se perca em revisões futuras.
 
 ### 6.1. O alerta de severidade média
 
-O relatório encaminhado pelo Marcelo atribuía o único alerta médio do projeto
-ao teste **B110** (`try_except_pass`), em `src/validacao_retry.py`. A execução
-da ferramenta indica **B310** (`urlopen` sem validação de esquema), em
-`src/benchmark/corpus.py` — arquivo do Grupo 2.
+O relatório de CI encaminhado ao grupo atribuía o único alerta médio do
+projeto ao teste **B110** (`try_except_pass`), em `src/validacao_retry.py`. A
+execução da ferramenta indica **B310** (`urlopen` sem validação de esquema),
+em `src/benchmark/corpus.py` — arquivo do Grupo 2.
 
 A contagem do relatório estava correta: 835 alertas B101, 5 B105 e 3 B110
 totalizam 843 de severidade baixa; somado 1 de severidade média, chega-se aos
@@ -250,7 +250,8 @@ permite executar o pipeline sem rede, sem chave de API e sem custo.
 
 ## 8. Configuração do CI
 
-*Alteração em arquivos do Marcelo, realizada com autorização dele.*
+*Alteração nos arquivos de configuração do CI, realizada mediante autorização
+prévia.*
 
 O passo `bandit -r src/` encerrava com código 1 independentemente do conteúdo
 do PR, em razão de 843 alertas de severidade baixa — 835 deles `assert_used`.

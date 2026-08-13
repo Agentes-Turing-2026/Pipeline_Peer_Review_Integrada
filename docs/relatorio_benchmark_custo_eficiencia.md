@@ -90,7 +90,7 @@ entrega resolvia **um** preço por execução, em `pipeline.run_demo()`, e o
 aplicava ao total agregado de tokens. Isso erra sempre que mais de um modelo
 responde na mesma execução — o editor configurado com um modelo diferente do
 resto do pipeline, ou o fallback do Grupo 3 assumindo no meio da execução.
-O gerente apontou o problema e ele foi corrigido:
+O problema foi apontado e corrigido:
 
 - `resolver_precos_por_modelo()` resolve o preço a partir do **modelo que
   efetivamente respondeu** (campo `detalhes.modelo` do evento, vindo de
