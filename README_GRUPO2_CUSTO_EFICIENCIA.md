@@ -1,9 +1,12 @@
 # Grupo 2 — Benchmark, Custo e Eficiência
 
-Branch: `grupo-2-custo-config-e-comparacao-cross-review`
+Este arquivo é o resumo de entrada da entrega do Grupo 2. Para o relatório
+técnico completo, ver
+[`docs/relatorio_benchmark_custo_eficiencia.md`](docs/relatorio_benchmark_custo_eficiencia.md).
 
-Este arquivo é o resumo de entrada desta branch. Para o relatório técnico
-completo, ver [`docs/relatorio_benchmark_custo_eficiencia.md`](docs/relatorio_benchmark_custo_eficiencia.md).
+Histórico: entregue em `grupo-2-custo-config-e-comparacao-cross-review`
+(PR #16), custo por chamada em `grupo-2-custo-por-chamada-modelo` (PR #18),
+correções de documentação/corpus/CI em `grupo-2-corpus-publico-docs-e-ci`.
 
 ## A task
 
@@ -47,7 +50,31 @@ documentos abaixo, duas vezes cada (com e sem leitura cruzada), modelo
 gateway/proxy, como uma suposição anterior errada tinha documentado; ver
 correção em `docs/benchmark_reference.md §6`).
 
-**Custo total real da comparação: US$ 0,248** (10 execuções).
+As **10 execuções são reais**: chamadas de verdade à API da OpenAI, com
+tokens medidos pelo `usage_metadata` do ADK. O que **não** é medido é o
+custo em dinheiro.
+
+> **Custo total ESTIMADO da comparação: US$ 0,248** (10 execuções reais).
+>
+> "Estimado", não "real": este valor não vem da fatura da OpenAI nem de
+> nenhuma API de billing. Ele é calculado por
+> [`src/metrics/precos_modelos.py`](src/metrics/precos_modelos.py)
+> multiplicando os **tokens realmente consumidos** pela **tabela de preços
+> por milhão de tokens** documentada no módulo. Divergências com a cobrança
+> real são esperadas quando o preço de tabela estiver desatualizado, quando
+> houver desconto/crédito na conta, ou quando o provedor cobrar itens que os
+> tokens não capturam (cache, ferramentas, requisições mínimas). O que é
+> medido é o consumo; o preço é configuração — e os dois nunca se misturam
+> no código (ver `docs/metricas_reference.md §5.3`).
+
+Desde o [PR #18](https://github.com/Agentes-Turing-2026/Pipeline_Peer_Review_Integrada/pull/18),
+o custo é somado **chamada a chamada**, cada uma precificada pelo modelo que
+de fato respondeu — e não mais por um preço único aplicado ao total agregado
+da execução. Isso importa quando o editor usa um modelo diferente do resto do
+pipeline ou quando o fallback do Grupo 3 troca de modelo no meio da execução.
+Nas 10 execuções abaixo todas as chamadas foram no mesmo modelo, então o total
+coincide com o que o cálculo antigo daria; a diferença aparece em execuções
+com mais de um modelo.
 
 | Documento | Chamadas | Duração (s) | Tokens | Custo (US$) | Decisão | Críticas (total/bloqueantes) |
 |---|---|---|---|---|---|---|
@@ -75,8 +102,28 @@ correção em `docs/benchmark_reference.md §6`).
   cruzada, quando existe, está em moderar posições isoladas mais severas
   dos revisores, não em produzir mais críticas.
 
+> **Limite desta avaliação.** Tudo acima é medido por **indicadores
+> automáticos**: quantidade de críticas, quantas são bloqueantes, se a
+> decisão final mudou e se as notas por revisor mudaram. **Nenhum avaliador
+> humano leu o conteúdo das críticas** para julgar se são pertinentes,
+> corretas ou bem argumentadas, e não houve LLM-juiz. Ou seja: está medido
+> o quanto a leitura cruzada **custa** e se ela **muda** o resultado — não
+> se ela o **melhora**. Responder isso exige leitura humana dos pareceres
+> (texto de `resposta_aos_pares` em cada `final_report.md`), que fica como
+> próximo passo.
+
 Dados completos em [`src/benchmark/resultados/ablacao_cross_review.json`](src/benchmark/resultados/ablacao_cross_review.json)
-e [`.md`](src/benchmark/resultados/ablacao_cross_review.md).
+e [`.md`](src/benchmark/resultados/ablacao_cross_review.md), onde as
+execuções reais e o smoke test em modo mock aparecem em **seções separadas**
+— o mock não entra em nenhuma média.
+
+> **Nota de corpus.** O documento `psicologia_slides_ciclo_sono`, usado numa
+> destas 5 comparações, era um PDF **local** e foi aposentado do
+> `corpus_manifest.json` em 13/08/2026, quando o corpus passou a ser
+> inteiramente público. O registro da execução continua no
+> `ablacao_cross_review.json` (não se apaga resultado de execução paga), mas
+> esse documento específico não é mais reprodutível por terceiros; os outros
+> 4 são.
 
 ## Como rodar
 

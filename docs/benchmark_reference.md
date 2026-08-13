@@ -56,14 +56,16 @@ responsabilidade de `pipeline.py`/`metrics/`; este pacote não os altera.
 | `resultados/execucoes/<run_id>_resumo.json` | Um arquivo por **execução** (histórico completo, não só a mais recente) — cópia do `ResumoExecucao` daquela rodada. | Sim |
 | `resultados/comparativo.json` / `comparativo.md` | Saída de `comparar.py` — snapshot mais recente do comparativo. | Sim |
 | `resultados/ablacao_cross_review.json` / `.md` | Saída de `ablacao_cross_review.py` — pares (com/sem leitura cruzada) por `doc_id`, com o delta calculado e uma conclusão agregada. | Sim |
-| `cache_pdfs/` | PDFs baixados de `fonte_url` (cache de download) e PDFs fornecidos manualmente via `caminho_local`. | **Não** (`.gitignore`) |
+| `cache_pdfs/` | PDFs baixados de `fonte_url` (cache de download). | **Não** (`.gitignore`) |
 | `tests/test_corpus.py`, `tests/test_comparar.py`, `tests/test_executar.py`, `tests/test_ablacao_cross_review.py` | Testes 100% offline (modo mock quando exercitam `run_demo`) — nunca gastam API real. | Sim |
 
-`cache_pdfs/` é gitignorado porque parte do seu conteúdo é reconstruível
-(download via `fonte_url`) e parte não é rastreada por design — documentos
-fornecidos via `caminho_local` (ver §3) não têm `fonte_url` e, portanto, não
-são reproduzíveis automaticamente num clone novo do repositório; isso é uma
-limitação conhecida, não um bug (ver §7).
+`cache_pdfs/` é gitignorado porque todo o seu conteúdo é **reconstruível**:
+desde 13/08/2026 todos os documentos do corpus têm `fonte_url` pública, então
+um clone novo do repositório baixa o corpus inteiro sozinho na primeira
+execução. O campo `caminho_local` continua existindo no schema (ver §3) para
+quem quiser apontar um PDF que ainda não é público, mas **nenhum documento do
+corpus atual o usa** — a limitação de reprodutibilidade descrita aqui antes
+foi eliminada (ver §5.1).
 
 ---
 
@@ -203,22 +205,61 @@ se a decisão final, as notas por revisor ou a quantidade de críticas mudaram
 
 ## 5. Composição atual do corpus
 
-Lido diretamente de `src/benchmark/corpus_manifest.json` (10 documentos):
+Lido diretamente de `src/benchmark/corpus_manifest.json` (**15 documentos**,
+atualizado em 13/08/2026):
 
 | Área | Quantidade |
 |---|---|
 | `inteligencia_artificial` | 5 |
 | `psicologia` | 4 |
+| `quimica` | 3 |
+| `arquitetura` | 2 |
 | `smoke_test` | 1 |
 
+**Todo o corpus é público e reprodutível.** 14 dos 15 documentos têm
+`fonte_url` pública (baixável por qualquer pessoa que clone o repositório) e
+**nenhum** depende mais de `caminho_local`. O 15º é o `exemplo_mock`, que não
+tem PDF de propósito (smoke test). Cada URL foi verificada baixando o arquivo
+e conferindo que ele é mesmo um PDF; os números de página, produtor e
+densidade de texto registrados em `observacoes` foram **medidos**, não
+estimados.
+
 Características cobertas (contagem de documentos que trazem cada uma —
-um documento pode ter várias): `medio` (4), `tabelas` (3), `curto` (2),
-`duas_colunas` (2), `slide` (2), `citacoes_extensas` (2),
-`nao_e_artigo_academico` (2), e mais uma ocorrência cada de
-`autor_unico`, `baixa_qualidade`, `escaneado`, `sem_camada_de_texto`,
-`formulas_matematicas`, `longo`, `monografia_tcc`,
-`nao_e_artigo_de_periodico`, `apresentacao_curso`, `smoke_test`,
-`sem_pdf_real`.
+um documento pode ter várias): `medio` (8), `tabelas` (7),
+`citacoes_extensas` (3), `curto` (2), `duas_colunas` (2),
+`formulas_matematicas` (2), `formulas_quimicas` (2), `idioma_portugues` (2),
+`nao_e_artigo_academico` (2), `pouco_texto_por_pagina` (2), `slide` (2), e
+mais uma ocorrência cada de `apresentacao_curso`, `artigo_de_revisao`,
+`autor_unico`, `camada_de_texto_ilegivel`, `encoding_sem_tounicode`,
+`estudo_de_caso`, `graficos`, `idioma_espanhol`, `livro_completo`, `longo`,
+`mapas_e_fotos`, `muito_longo`, `muitos_autores`,
+`nao_e_artigo_de_periodico`, `plantas_e_diagramas`, `sem_pdf_real`,
+`smoke_test`.
+
+### 5.1. Documentos aposentados em 13/08/2026
+
+Quatro PDFs de psicologia existiam só em disco (`caminho_local` apontando
+para `cache_pdfs/`, que é gitignored): ninguém além de quem os coletou
+conseguia reproduzir o benchmark com eles. Foram trocados por equivalentes
+**públicos** escolhidos para preservar o papel de cada um:
+
+| Aposentado (local) | Substituto (público) | Papel preservado |
+|---|---|---|
+| `psicologia_neuropsi_escaneado` | `psicologia_lacan_cinema_pepsic` | Entrada problemática que deve ser barrada/alertada antes de gastar LLM |
+| `psicologia_respiracao_monografia` | `psicologia_historia_livro_scielo` | Documento longo que não é artigo de periódico |
+| `psicologia_slides_modalidades_grupais` | `psicologia_slides_psiquismo_trt6` | Slide (4:3), pouco texto por página |
+| `psicologia_slides_ciclo_sono` | `psicologia_slides_autocuidado_tcerj` | Slide (16:9), material de curso |
+
+O substituto do escaneado **não** é um escaneado: é um caso mais difícil. O
+PDF do PePSIC tem volume normal de texto extraível (~3.243 chars/página),
+mas as fontes usam encoding próprio sem `ToUnicode` CMap, então o que sai da
+extração é lixo de caracteres de controle. Uma heurística de "tem texto
+suficiente?" passa; só uma checagem de **legibilidade** pega o problema.
+
+Os registros de execução dos documentos aposentados **continuam** em
+`resultados/` — em particular `psicologia_slides_ciclo_sono`, que foi um dos
+5 PDFs da comparação real paga. Resultado de execução paga não se apaga; o
+que muda é que esse documento específico não é mais reprodutível.
 
 Lido de `src/benchmark/resultados/execucoes.json` (10 documentos com
 execução registrada — o registro mais recente de cada `doc_id`):
@@ -241,6 +282,16 @@ execução já rodada (histórico completo), não deduplicado por documento como
 ---
 
 ## 6. Achados até agora
+
+> Os achados abaixo vêm de execuções reais já feitas. Alguns citam documentos
+> que foram **aposentados do manifesto em 13/08/2026** por não serem públicos
+> (`psicologia_neuropsi_escaneado`, `psicologia_respiracao_monografia`,
+> `psicologia_slides_modalidades_grupais`, `psicologia_slides_ciclo_sono` —
+> ver §5.1). A observação continua válida: ela foi medida quando o documento
+> estava no corpus, e os resumos daquelas execuções seguem em `resultados/`.
+> O que muda é que esses casos específicos não podem ser re-rodados por
+> terceiros; os substitutos públicos cobrem os mesmos papéis, mas ainda não
+> foram executados em modo `api`.
 
 - **O bloqueio de entrada (Grupo 1) funciona corretamente para PDF
   escaneado sem camada de texto.** `psicologia_neuropsi_escaneado` (PDF
