@@ -28,3 +28,31 @@ dev = [
     "mypy (>=2.3.0,<3.0.0)",
     "bandit (>=1.9.4,<2.0.0)"
 ]
+
+# O Bandit sai com codigo 1 se encontrar QUALQUER issue, e a suite de testes
+# gera 835 alertas B101 (assert_used) — 100% deles dentro de tests/, nenhum em
+# codigo de producao. Isso deixava o passo de seguranca vermelho em todo PR,
+# independente do que o PR mexesse, e um check que sempre falha e um check que
+# ninguem le.
+#
+# A escolha aqui e EXCLUIR os diretorios de teste, e nao desligar a regra com
+# skips = ["B101"]. O motivo: `assert` em codigo de producao continua sendo um
+# problema real (o interpretador roda com -O em varios deploys e remove os
+# asserts, junto com a verificacao que eles faziam). Desligar B101 global
+# perderia isso; excluir tests/ mantem a regra ativa exatamente onde ela
+# importa.
+#
+# ATENCAO: o Bandit NAO le este arquivo sozinho. O passo do CI precisa passar
+# `-c pyproject.toml` explicitamente — sem a flag esta secao e ignorada em
+# silencio e os 835 asserts voltam. Nao e preciso o extra `bandit[toml]`: o
+# Bandit usa `tomllib` da stdlib, presente desde o Python 3.11 (o CI roda
+# 3.14). Manter a dependencia como `bandit` puro tambem evita invalidar o
+# content-hash do poetry.lock.
+#
+# Os padroes usam glob com curinga em vez de caminhos literais
+# ("src/metrics/tests"): o Bandit casa o padrao contra o caminho como o SO o
+# escreve, e no Windows o separador e "\", entao um padrao com "/" so pega o
+# primeiro nivel e deixa passar src/metrics/tests, src/tools/tests etc.
+# "*tests*" casa nos dois sistemas.
+[tool.bandit]
+exclude_dirs = ["*tests*"]
