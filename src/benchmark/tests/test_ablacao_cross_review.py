@@ -16,13 +16,32 @@ SRC = Path(__file__).resolve().parents[2]  # .../src
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from benchmark.ablacao_cross_review import (  # noqa: E402
+from benchmark.ablacao_cross_review import (
     comparar_par,
     gerar_conclusao,
     rodar_par,
     salvar,
+    separar_por_modo,
 )
-from benchmark.corpus import DocumentoCorpus  # noqa: E402
+from benchmark.corpus import DocumentoCorpus
+
+
+def _par(com: dict, sem: dict, *, mode: str = "api", **overrides) -> dict:
+    """Monta um par no MESMO formato que ``rodar_par`` devolve.
+
+    O ``mode`` no nível do par é o que separa execução real de smoke test em
+    ``separar_por_modo`` — um par sem ele conta como mock.
+    """
+    par = {
+        "mode": mode,
+        "provider": com.get("provider"),
+        "model": com.get("model"),
+        "com_cross_review": com,
+        "sem_cross_review": sem,
+        "delta": comparar_par(com, sem),
+    }
+    par.update(overrides)
+    return par
 
 
 def _registro(**overrides) -> dict:
@@ -106,23 +125,18 @@ def test_comparar_par_nao_divide_por_zero_quando_com_e_zero():
 # ---------------------------------------------------------------------------
 
 def test_gerar_conclusao_sem_pares_comparaveis_nao_quebra():
-    pares = {
-        "doc_bloqueado": {
-            "delta": comparar_par(_registro(resultado="entrada_bloqueada"), _registro(resultado="entrada_bloqueada"))
-        }
-    }
+    bloqueado = _registro(resultado="entrada_bloqueada")
+    pares = {"doc_bloqueado": _par(bloqueado, bloqueado)}
     texto = gerar_conclusao(pares)
-    assert "Nenhum par" in texto
+    assert "Nenhuma execução REAL" in texto
 
 
 def test_gerar_conclusao_relata_documentos_nao_comparaveis_separadamente():
     com_ok = _registro()
     sem_ok = _registro(duracao_total_s=40.0, tokens_totais=90_000, custo_estimado=0.12, chamadas_llm=4)
     pares = {
-        "doc_ok": {"delta": comparar_par(com_ok, sem_ok)},
-        "doc_falhou": {
-            "delta": comparar_par(_registro(resultado="sucesso"), _registro(resultado="falha_execucao"))
-        },
+        "doc_ok": _par(com_ok, sem_ok),
+        "doc_falhou": _par(_registro(resultado="sucesso"), _registro(resultado="falha_execucao")),
     }
     texto = gerar_conclusao(pares)
     assert "1 documento(s) comparável" in texto
@@ -132,10 +146,69 @@ def test_gerar_conclusao_relata_documentos_nao_comparaveis_separadamente():
 def test_gerar_conclusao_relata_quando_decisao_muda():
     com = _registro(decisao_final=2)
     sem = _registro(decisao_final=3, duracao_total_s=40.0, tokens_totais=90_000, custo_estimado=0.12, chamadas_llm=4)
-    pares = {"doc_x": {"delta": comparar_par(com, sem)}}
+    pares = {"doc_x": _par(com, sem)}
     texto = gerar_conclusao(pares)
     assert "MUDOU em 1/1" in texto
     assert "doc_x" in texto
+
+
+# ---------------------------------------------------------------------------
+# Separação mock x real: o smoke test não pode contaminar o agregado
+# ---------------------------------------------------------------------------
+
+def test_separar_por_modo_classifica_api_como_real_e_o_resto_como_mock():
+    reais, mock = separar_por_modo({
+        "doc_api": _par(_registro(), _registro(), mode="api"),
+        "doc_mock": _par(_registro(), _registro(), mode="mock"),
+        "doc_sem_modo": {"delta": {}},
+    })
+    assert set(reais) == {"doc_api"}
+    assert set(mock) == {"doc_mock", "doc_sem_modo"}
+
+
+def test_gerar_conclusao_nao_conta_o_mock_entre_os_documentos_comparaveis():
+    com = _registro()
+    sem = _registro(duracao_total_s=40.0, tokens_totais=90_000, custo_estimado=0.12, chamadas_llm=4)
+    pares = {
+        "doc_real": _par(com, sem, mode="api"),
+        "exemplo_mock": _par(com, sem, mode="mock"),
+    }
+    texto = gerar_conclusao(pares)
+
+    # 1 real, não 2 — o mock sai do agregado e vira uma linha própria.
+    assert "1 documento(s) comparável(is)" in texto
+    assert "de 1 rodado(s)" in texto
+    assert "2 execuções reais" in texto
+    assert "SMOKE TEST" in texto
+    assert "exemplo_mock" in texto
+    assert "MUDOU em 0/1" in texto
+
+
+def test_gerar_conclusao_mock_nao_desloca_a_media_das_execucoes_reais():
+    """O mock tem duração ~0 e nenhum token: se entrasse na média, mexeria nela."""
+    com = _registro(duracao_total_s=60.0)
+    sem = _registro(duracao_total_s=30.0, tokens_totais=90_000, custo_estimado=0.12, chamadas_llm=4)
+    so_real = {"doc_real": _par(com, sem, mode="api")}
+    com_mock = {
+        "doc_real": _par(com, sem, mode="api"),
+        "exemplo_mock": _par(
+            _registro(duracao_total_s=0.01, tokens_totais=None, custo_estimado=None, chamadas_llm=None),
+            _registro(duracao_total_s=0.01, tokens_totais=None, custo_estimado=None, chamadas_llm=None),
+            mode="mock",
+        ),
+    }
+
+    linha_duracao = "Duração total: -50.0% em média sem leitura cruzada."
+    assert linha_duracao in gerar_conclusao(so_real)
+    assert linha_duracao in gerar_conclusao(com_mock)
+
+
+def test_gerar_conclusao_sempre_declara_que_nao_houve_avaliacao_humana():
+    com = _registro()
+    sem = _registro(duracao_total_s=40.0, tokens_totais=90_000, custo_estimado=0.12, chamadas_llm=4)
+    texto = gerar_conclusao({"doc_x": _par(com, sem)})
+    assert "NÃO houve avaliação humana" in texto
+    assert "indicadores automáticos" in texto
 
 
 # ---------------------------------------------------------------------------
@@ -145,10 +218,7 @@ def test_gerar_conclusao_relata_quando_decisao_muda():
 def test_salvar_grava_json_e_md_navegaveis(tmp_path):
     com = _registro()
     sem = _registro(duracao_total_s=40.0, tokens_totais=90_000, custo_estimado=0.12, chamadas_llm=4)
-    pares = {"doc_x": {
-        "doc_id": "doc_x", "provider": "gemini", "model": "gemini-2.5-flash",
-        "com_cross_review": com, "sem_cross_review": sem, "delta": comparar_par(com, sem),
-    }}
+    pares = {"doc_x": _par(com, sem, doc_id="doc_x")}
     conclusao = gerar_conclusao(pares)
 
     json_path, md_path = salvar(pares, conclusao, destino_dir=tmp_path)
@@ -162,7 +232,40 @@ def test_salvar_grava_json_e_md_navegaveis(tmp_path):
     conteudo_md = md_path.read_text(encoding="utf-8")
     assert "doc_x" in conteudo_md
     assert "Conclusão" in conteudo_md
-    assert "Tabela" in conteudo_md
+    assert "Execuções reais (modo api)" in conteudo_md
+
+
+def test_salvar_separa_a_tabela_real_da_tabela_de_smoke_test(tmp_path):
+    com = _registro()
+    sem = _registro(duracao_total_s=40.0, tokens_totais=90_000, custo_estimado=0.12, chamadas_llm=4)
+    pares = {
+        "doc_real": _par(com, sem, mode="api"),
+        "exemplo_mock": _par(com, sem, mode="mock"),
+    }
+    _, md_path = salvar(pares, gerar_conclusao(pares), destino_dir=tmp_path)
+    conteudo = md_path.read_text(encoding="utf-8")
+
+    secao_real = conteudo.index("## Execuções reais (modo api)")
+    secao_mock = conteudo.index("## Smoke test")
+    assert secao_real < secao_mock
+    # cada doc aparece só na sua seção
+    assert "doc_real" in conteudo[secao_real:secao_mock]
+    assert "doc_real" not in conteudo[secao_mock:]
+    assert "exemplo_mock" in conteudo[secao_mock:]
+    assert "exemplo_mock" not in conteudo[secao_real:secao_mock]
+
+
+def test_salvar_arredonda_numeros_da_tabela_em_vez_de_imprimir_o_float_cru(tmp_path):
+    com = _registro(duracao_total_s=36.0511250999989, custo_estimado=0.0335826)
+    sem = _registro(duracao_total_s=26.973181100009242, custo_estimado=0.019246399999999997)
+    pares = {"doc_x": _par(com, sem)}
+    _, md_path = salvar(pares, gerar_conclusao(pares), destino_dir=tmp_path)
+    conteudo = md_path.read_text(encoding="utf-8")
+
+    assert "36.05/26.97" in conteudo
+    assert "0.0336/0.0192" in conteudo
+    assert "36.0511250999989" not in conteudo
+    assert "0.019246399999999997" not in conteudo
 
 
 # ---------------------------------------------------------------------------
