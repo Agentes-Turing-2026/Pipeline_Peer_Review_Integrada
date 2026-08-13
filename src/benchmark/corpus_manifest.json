@@ -6,8 +6,11 @@
       "area": "smoke_test",
       "fonte_url": null,
       "caminho_local": null,
-      "caracteristicas": ["smoke_test", "sem_pdf_real"],
-      "observacoes": "Usado só para validar a ferramenta em modo mock, sem custo. Substituir/completar com os PDFs reais do corpus (grupos de IA e psicologia) quando estiverem disponíveis."
+      "caracteristicas": [
+        "smoke_test",
+        "sem_pdf_real"
+      ],
+      "observacoes": "NÃO É UM PDF e não deve ser confundido com um documento sem fonte pública: 'fonte_url' e 'caminho_local' são AMBOS null de propósito. Com os dois nulos, resolver_pdf_local() devolve None e o executor roda o pipeline com pdf_path=None, usando o artigo embutido em src/examples/example_article.txt. É o smoke test do corpus: prova que a ferramenta roda de ponta a ponta sem rede, sem chave de API e sem custo. Não entra em nenhuma média das execuções reais (ver separar_por_modo em ablacao_cross_review.py). Todos os OUTROS 14 documentos do corpus têm fonte_url pública verificada."
     },
     {
       "id": "icd_hallucinations_2312_15710",
@@ -15,7 +18,13 @@
       "area": "inteligencia_artificial",
       "fonte_url": "https://arxiv.org/pdf/2312.15710v2",
       "caminho_local": null,
-      "caracteristicas": ["duas_colunas", "tabelas", "formulas_matematicas", "citacoes_extensas", "medio"],
+      "caracteristicas": [
+        "duas_colunas",
+        "tabelas",
+        "formulas_matematicas",
+        "citacoes_extensas",
+        "medio"
+      ],
       "observacoes": "arXiv 2312.15710v2 (Zhang, Cui, Bi, Shi). Formato padrao ACL. Caracteristicas de layout (colunas/paginas) a confirmar apos a extracao real — ajustar aqui se a extracao mostrar algo diferente."
     },
     {
@@ -24,7 +33,12 @@
       "area": "inteligencia_artificial",
       "fonte_url": "https://aclanthology.org/2024.emnlp-main.116.pdf",
       "caminho_local": null,
-      "caracteristicas": ["duas_colunas", "tabelas", "citacoes_extensas", "medio"],
+      "caracteristicas": [
+        "duas_colunas",
+        "tabelas",
+        "citacoes_extensas",
+        "medio"
+      ],
       "observacoes": "ACL Anthology, EMNLP 2024 main, paginas 1950-1959 (10p). CC-BY 4.0."
     },
     {
@@ -33,7 +47,10 @@
       "area": "inteligencia_artificial",
       "fonte_url": "https://arxiv.org/pdf/2507.04137v3",
       "caminho_local": null,
-      "caracteristicas": ["medio", "autor_unico"],
+      "caracteristicas": [
+        "medio",
+        "autor_unico"
+      ],
       "observacoes": "arXiv 2507.04137v3 (Keshav Kumar). Layout (colunas) a confirmar apos extracao real."
     },
     {
@@ -42,7 +59,9 @@
       "area": "inteligencia_artificial",
       "fonte_url": "https://arxiv.org/pdf/2606.00819v1",
       "caminho_local": null,
-      "caracteristicas": ["curto"],
+      "caracteristicas": [
+        "curto"
+      ],
       "observacoes": "arXiv 2606.00819v1. 5 paginas conforme comentario dos autores — caso de teste para documento curto."
     },
     {
@@ -51,44 +70,136 @@
       "area": "inteligencia_artificial",
       "fonte_url": "https://comdem.org/index.php/comdem/article/download/17665/12131",
       "caminho_local": null,
-      "caracteristicas": ["medio", "tabelas"],
+      "caracteristicas": [
+        "medio",
+        "tabelas"
+      ],
       "observacoes": "Computer and Decision Making (COMDEM), paginas 805-819 (15p), CC-BY 4.0. Qualidade editorial do periodico incerta (nao e o foco do teste, mas registrar caso a extracao mostre algo atipico)."
     },
     {
-      "id": "psicologia_neuropsi_escaneado",
-      "titulo": "Avaliação Neuropsicológica e Funções Cognitivas (trecho digitalizado)",
+      "id": "psicologia_lacan_cinema_pepsic",
+      "titulo": "Tudo Que Você Gostaria de Saber Sobre Lacan e Ousou Perguntar a Slavoj Žižek: Psicanálise e Cinema",
       "area": "psicologia",
-      "fonte_url": null,
-      "caminho_local": "src/benchmark/cache_pdfs/1 Avaliação Neuropsi e Funções Cognitivas_2025 (Livro Neuropsicologia Clínica)_cópia.pdf",
-      "caracteristicas": ["escaneado", "baixa_qualidade", "curto", "sem_camada_de_texto"],
-      "observacoes": "Producer: Epson Scan 2, sem texto pesquisavel nos metadados, 9p/5.4MB. Extrator roda com ocr_enabled=False por padrao (src/extraction/extractor.py) — esperado aviso de possivel escaneamento e/ou bloqueio na validacao do Grupo 1. Este e o teste principal do caminho entrada_bloqueada/aviso que ainda nao tinhamos exercitado com dado real."
+      "fonte_url": "https://pepsic.bvsalud.org/pdf/ep/n28/n28a04.pdf",
+      "caminho_local": null,
+      "caracteristicas": [
+        "camada_de_texto_ilegivel",
+        "encoding_sem_tounicode",
+        "medio"
+      ],
+      "observacoes": "Estudos de Psicanálise n.28 (set. 2005), PePSIC/BVS. 14p, 260KB, ~3.243 chars/pagina extraidos — MAS o texto extraido e LIXO: as fontes do PDF usam encoding proprio sem ToUnicode CMap, entao o extrator devolve caracteres de controle no lugar das letras. Substitui o PDF escaneado local (aposentado por nao ser publico) no papel de teste do caminho entrada_bloqueada/aviso do Grupo 1, e e um caso MAIS DIFICIL que o escaneado: aqui a heuristica de 'tem texto suficiente?' passa (volume normal de caracteres) e so uma checagem de legibilidade pega o problema. Vale o mesmo para todo o fasciculo n28 (a01..a16), se precisar de mais um caso."
     },
     {
-      "id": "psicologia_respiracao_monografia",
-      "titulo": "Técnicas de respiração diafragmática (monografia)",
+      "id": "psicologia_historia_livro_scielo",
+      "titulo": "História da Psicologia: pesquisa, formação, ensino (livro completo)",
       "area": "psicologia",
-      "fonte_url": null,
-      "caminho_local": "src/benchmark/cache_pdfs/Artigo sobre técnicas de respiração diafragmática-2024.pdf",
-      "caracteristicas": ["longo", "monografia_tcc", "nao_e_artigo_de_periodico"],
-      "observacoes": "48 paginas — 3x o maior documento ja testado (15p). NAO rodar em api sem antes checar em mock quantas paginas o extrator confirma e sem estimar volume de token por chamada."
+      "fonte_url": "https://static.scielo.org/scielobooks/c2248/pdf/freitas-9788599662830.pdf",
+      "caminho_local": null,
+      "caracteristicas": [
+        "muito_longo",
+        "livro_completo",
+        "nao_e_artigo_de_periodico"
+      ],
+      "observacoes": "SciELO Books, org. Regina Helena de Freitas Campos, ISBN 978-85-99662-83-0. 139 paginas, 1,7MB, ~2.076 chars/pagina (~288 mil caracteres no total). Substitui a monografia local de 48p no papel de 'documento longo que nao e artigo de periodico', e e ~3x maior que ela. ATENCAO DE CUSTO: NAO rodar em modo api sem antes estimar o volume de tokens — 288 mil caracteres é cerca de uma ordem de grandeza acima do maior documento ja rodado no benchmark, e pode estourar a janela de contexto do modelo. E deliberadamente o caso extremo do corpus."
     },
     {
-      "id": "psicologia_slides_modalidades_grupais",
-      "titulo": "Modalidades grupais (slide de aula)",
+      "id": "psicologia_slides_psiquismo_trt6",
+      "titulo": "Contemporaneidade: repercussões no psiquismo (slides de palestra)",
       "area": "psicologia",
-      "fonte_url": null,
-      "caminho_local": "src/benchmark/cache_pdfs/Modalidades grupais- slides.pdf.pdf",
-      "caracteristicas": ["slide", "nao_e_artigo_academico"],
-      "observacoes": "Canva, 12p, widescreen. Nome de arquivo com extensao duplicada .pdf.pdf — preservado assim de proposito, e o nome real em disco."
+      "fonte_url": "https://www.trt6.jus.br/portal/sites/default/files/documents/contemporaneidade_repercussoes_no_psiquismo_-_andrea_guimaraes_nunes_de_oliveira_e_luryaga_porto_farias.pdf",
+      "caminho_local": null,
+      "caracteristicas": [
+        "slide",
+        "nao_e_artigo_academico",
+        "pouco_texto_por_pagina"
+      ],
+      "observacoes": "TRT da 6a Regiao (dominio .jus.br, publico). PowerPoint 2010, 24 slides, 445KB, formato 4:3 (720x540pt), ~337 chars/pagina. Substitui os slides locais de modalidades grupais. Densidade de texto ~10x menor que a de um artigo — testa se o pipeline reconhece que nao ha conteudo suficiente para uma revisao por pares seria, em vez de gerar criticas sobre um material que nao e artigo."
     },
     {
-      "id": "psicologia_slides_ciclo_sono",
-      "titulo": "Ciclo sono-vigília — Parte 06 (material de curso)",
+      "id": "psicologia_slides_autocuidado_tcerj",
+      "titulo": "Ciclo de Palestras Saúde Mental — Autocuidado Emocional (slides)",
       "area": "psicologia",
-      "fonte_url": null,
-      "caminho_local": "src/benchmark/cache_pdfs/Parte 06 - Ciclo sono vigilia Abril 2026.pdf",
-      "caracteristicas": ["slide", "nao_e_artigo_academico", "apresentacao_curso"],
-      "observacoes": "PowerPoint, 38p, material IPOG. 'Parte 06' indica modulo fatiado de uma serie maior."
+      "fonte_url": "https://portal-br.tcerj.tc.br/documents/454798/111450209/CicloPalestras_SaudeMental-Tema1_AutocuidadoEmocional_02092021_Slides.pdf",
+      "caminho_local": null,
+      "caracteristicas": [
+        "slide",
+        "nao_e_artigo_academico",
+        "apresentacao_curso",
+        "pouco_texto_por_pagina"
+      ],
+      "observacoes": "Tribunal de Contas do Estado do RJ (dominio publico .tc.br), palestra de 02/09/2021 por Rogeria Almeida Quintella (psicologa). PowerPoint Microsoft 365, 21 slides, 1,2MB, formato 16:9 (960x540pt), ~269 chars/pagina. Substitui os slides locais de ciclo sono-vigilia. O par com psicologia_slides_psiquismo_trt6 da as DUAS proporcoes de slide (4:3 e 16:9) no corpus. IMPORTANTE: o documento aposentado aqui (psicologia_slides_ciclo_sono) foi um dos 5 PDFs das execucoes reais de 06/08/2026 — o registro daquela execucao continua em resultados/ablacao_cross_review.json e NAO deve ser apagado."
+    },
+    {
+      "id": "quimica_solvente_eutetico_qn",
+      "titulo": "Solvente eutético profundo para extração de cobre em amostras de chás e determinação por GF AAS",
+      "area": "quimica",
+      "fonte_url": "https://www.scielo.br/j/qn/a/6zrmWjPTGwVJz5WLKFTSfgx/?lang=pt&format=pdf",
+      "caminho_local": null,
+      "caracteristicas": [
+        "tabelas",
+        "formulas_quimicas",
+        "curto",
+        "idioma_portugues"
+      ],
+      "observacoes": "Quimica Nova v.48 n.8 (2025), SciELO. 9p, 1,0MB, ~5.705 chars/pagina (a MAIOR densidade de texto do corpus). Adobe PDF Library 17.0, A4 retrato. Quimica analitica em portugues — o corpus so tinha artigos de IA em ingles nessa faixa de tamanho."
+    },
+    {
+      "id": "quimica_nanoparticulas_magnetita_qn",
+      "titulo": "Tannic acid supported by magnetite nanoparticles for the removal of Cd(II) and Pb(II) from water",
+      "area": "quimica",
+      "fonte_url": "https://www.scielo.br/j/qn/a/FvXWxtxpydjWt6dLjTgGXHb/?lang=en&format=pdf",
+      "caminho_local": null,
+      "caracteristicas": [
+        "tabelas",
+        "graficos",
+        "formulas_quimicas",
+        "medio"
+      ],
+      "observacoes": "Quimica Nova v.48 n.8 (2025), SciELO, em ingles. 11p, 3,3MB (o maior peso por pagina do corpus — muitos espectros e micrografias), ~4.287 chars/pagina. Testa extracao em documento com alta proporcao de imagem por pagina."
+    },
+    {
+      "id": "quimica_phase_space_arxiv_2608_11448",
+      "titulo": "A Perspective on Phase Space Electronic Structure Theory: from its surface hopping origins through to its future promise",
+      "area": "quimica",
+      "fonte_url": "https://arxiv.org/pdf/2608.11448v1",
+      "caminho_local": null,
+      "caracteristicas": [
+        "longo",
+        "formulas_matematicas",
+        "citacoes_extensas",
+        "muitos_autores",
+        "artigo_de_revisao"
+      ],
+      "observacoes": "arXiv 2608.11448v1 (Subotnik et al.), quimica teorica/quantica. 55 paginas, 1,9MB, ~1.816 chars/pagina — densidade BAIXA para um artigo porque a maior parte da area util e formula matematica, que o extrator nao converte em texto util. Artigo de revisao (perspective) com dezenas de autores: caso oposto ao arxiv_2507_04137 (autor unico, curto)."
+    },
+    {
+      "id": "arquitetura_iluminacao_consultorios_ac",
+      "titulo": "Propuesta metodológica para analizar la iluminación en consultorios ginecológico-obstétricos de emergencia: caso de estudio",
+      "area": "arquitetura",
+      "fonte_url": "https://www.scielo.br/j/ac/a/G8VqJVmNgHK64kNBMvvs9Wh/?lang=es&format=pdf",
+      "caminho_local": null,
+      "caracteristicas": [
+        "idioma_espanhol",
+        "tabelas",
+        "plantas_e_diagramas",
+        "medio"
+      ],
+      "observacoes": "Ambiente Construido v.25 (2025), SciELO — periodico da ANTAC, conforto ambiental/iluminacao em arquitetura hospitalar. 21p, 1,7MB, ~3.392 chars/pagina, gerado do Microsoft Word (nao LaTeX/Distiller como o resto do corpus). UNICO documento em ESPANHOL do corpus: testa se os agentes revisam em portugues um artigo que nao esta nem em portugues nem em ingles."
+    },
+    {
+      "id": "arquitetura_parques_urbanos_ac",
+      "titulo": "Configuração espacial e qualidade física de parques urbanos lineares: o caso do Parque Parahyba I, João Pessoa - PB",
+      "area": "arquitetura",
+      "fonte_url": "https://www.scielo.br/j/ac/a/kvnRQYRPTW67zdxvCWX9dRm/?lang=pt&format=pdf",
+      "caminho_local": null,
+      "caracteristicas": [
+        "mapas_e_fotos",
+        "tabelas",
+        "estudo_de_caso",
+        "medio",
+        "idioma_portugues"
+      ],
+      "observacoes": "Ambiente Construido v.25 (2025), SciELO. Urbanismo/desenho urbano (sintaxe espacial aplicada a parques lineares). 21p, 1,4MB, ~3.376 chars/pagina, Microsoft Word. Estudo de caso empirico com forte apoio em mapas e fotos — a critica dos revisores tende a citar figuras que o extrator nao le, o que torna esse documento util para avaliar alucinacao sobre conteudo visual."
     }
   ]
 }

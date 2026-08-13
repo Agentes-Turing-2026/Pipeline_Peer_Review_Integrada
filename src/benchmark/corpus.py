@@ -22,11 +22,19 @@ from __future__ import annotations
 
 import json
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 
 CAMPOS_OBRIGATORIOS = ("id", "titulo", "area", "caracteristicas")
+
+#: Esquemas aceitos em `fonte_url`. `urlopen` sozinho também abriria
+#: `file://`, `ftp://` e esquemas customizados — um manifesto de corpus
+#: (arquivo de dados, editável por qualquer pessoa do projeto) não deveria
+#: conseguir fazer o benchmark ler um caminho arbitrário do disco achando
+#: que baixou um PDF da internet. Ver Bandit B310.
+ESQUEMAS_PERMITIDOS = ("http", "https")
 
 
 @dataclass
@@ -124,13 +132,21 @@ def resolver_pdf_local(doc: DocumentoCorpus, cache_dir: Path) -> Path | None:
     if destino.exists():
         return destino
 
+    esquema = urllib.parse.urlparse(doc.fonte_url).scheme.lower()
+    if esquema not in ESQUEMAS_PERMITIDOS:
+        raise ValueError(
+            f"fonte_url do documento '{doc.id}' usa o esquema '{esquema}', "
+            f"fora dos permitidos {ESQUEMAS_PERMITIDOS}: {doc.fonte_url}"
+        )
+
     # arXiv (e outras fontes) devolvem 403 para requisições sem User-Agent reconhecível.
     requisicao = urllib.request.Request(
         doc.fonte_url,
         headers={"User-Agent": "Mozilla/5.0 (compatible; PipelinePeerReview-Benchmark/1.0)"},
     )
     try:
-        with urllib.request.urlopen(requisicao) as resposta:
+        # nosec B310 - o esquema foi restrito a http/https logo acima
+        with urllib.request.urlopen(requisicao) as resposta:  # nosec B310
             conteudo = resposta.read()
     except (urllib.error.URLError, OSError) as exc:
         raise RuntimeError(
