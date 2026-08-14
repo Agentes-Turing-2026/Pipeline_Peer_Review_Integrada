@@ -29,14 +29,19 @@ if str(SRC) not in sys.path:
 from tools.validar_completude import validar_completude  # noqa: E402
 
 # Importações guardadas das tools dos colegas (ainda em integração).
+#
+# O `type: ignore[assignment]` do fallback é necessário: o nome já está ligado
+# ao tipo da função pelo import do `try`, e atribuir None a ele é justamente o
+# que sinaliza "tool ausente" para os `if ... is None` mais abaixo. Sem a
+# supressão o mypy acusa incompatibilidade nas duas linhas.
 try:
     from tools.checar_coerencia import checar_coerencia  # type: ignore  # noqa: E402
 except ImportError:
-    checar_coerencia = None
+    checar_coerencia = None  # type: ignore[assignment]
 try:
     from tools.auditar_decisao_final import auditar_decisao_final  # type: ignore  # noqa: E402
 except ImportError:
-    auditar_decisao_final = None
+    auditar_decisao_final = None  # type: ignore[assignment]
 
 LARGURA = 72
 

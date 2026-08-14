@@ -29,6 +29,39 @@ dev = [
     "bandit (>=1.9.4,<2.0.0)"
 ]
 
+# O CI rodava `ruff check src/` sem NENHUMA secao [tool.ruff] no repositorio, ou
+# seja, na regua padrao da versao do ruff que estivesse instalada. Isso torna o
+# resultado do lint dependente da versao da ferramenta, e nao do codigo: o
+# padrao do ruff 0.16 acusa 167 apontamentos, e o padrao classico documentado
+# (E4, E7, E9, F) acusa 37 — na MESMA arvore, sem uma linha de diferenca.
+#
+# Dos 167, 85 eram RUF100 ("unused noqa"): sao os `# noqa: E402` espalhados
+# pelo codigo. Eles foram escritos porque o time programava contra uma regua com
+# E402 ligado; como o padrao do 0.16 nao liga E402, cada comentario virou
+# "diretiva inutil". Nao e divida de codigo, e efeito de nao haver configuracao
+# fixada. Outros ~34 sao regras opinativas (SIM117, BLE001, RUF059, S110) que o
+# projeto nunca escolheu adotar.
+#
+# Fixar `select` aqui e o que impede o CI de mudar de veredito sozinho quando o
+# ruff lancar uma versao nova. O conjunto adotado e o padrao DOCUMENTADO da
+# ferramenta, nao um recorte conveniente para ficar verde.
+#
+# E402 fica em `ignore` por um motivo estrutural: praticamente todo modulo deste
+# repositorio faz `sys.path.insert(...)` antes de importar os irmaos, entao o
+# import fora do topo e o padrao do projeto, nao um deslize pontual. O codigo ja
+# reconhece isso em 85 `# noqa: E402` — desligar a regra em um lugar so e mais
+# honesto que mante-los espalhados. Os noqa ficam inertes e podem ser removidos
+# por cada dono quando passar pelo arquivo.
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+ignore = ["E402"]
+
+# Mesma logica do Bandit abaixo: os diretorios de teste ficam fora do type
+# check. `assert`, monkeypatch e stubs de teste disparam erros de tipo que nao
+# indicam defeito em codigo de producao.
+[tool.mypy]
+exclude = ["tests"]
+
 # O Bandit sai com codigo 1 se encontrar QUALQUER issue, e a suite de testes
 # gera 835 alertas B101 (assert_used) — 100% deles dentro de tests/, nenhum em
 # codigo de producao. Isso deixava o passo de seguranca vermelho em todo PR,
