@@ -37,6 +37,21 @@ jobs:
       if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
       run: poetry install --no-interaction --no-root
 
+    # Os passos de verificacao abaixo levam `if: always()`. Sem isso o job para
+    # no primeiro que sai com codigo 1, e como o Ruff e o primeiro da fila, um
+    # unico apontamento de lint fazia o Bandit, o Mypy e o PYTEST serem PULADOS
+    # — o PR ficava vermelho sem que ninguem soubesse se os testes passam.
+    #
+    # Isso nao e hipotetico: a `dev` tem 223 apontamentos de Ruff e 73 de Mypy,
+    # herdados de antes do CI existir e espalhados por arquivos dos tres grupos.
+    # Enquanto essa divida nao for quitada, TODO PR morre no passo 1 e a suite
+    # nunca roda. Com `always()` os quatro checks reportam de forma
+    # independente: da para ver que os testes passam ao mesmo tempo em que
+    # Ruff e Mypy acusam a divida pendente.
+    #
+    # Nenhum gate foi enfraquecido: cada passo continua saindo com codigo 1 no
+    # seu proprio criterio e o job so fica verde quando os quatro passarem.
+    # `always()` muda apenas QUANDO o passo roda, nunca se ele aprova.
     - name: Run Ruff (Linter)
       run: poetry run ruff check src/
 
@@ -47,6 +62,7 @@ jobs:
     #   um check que ninguem le. Verificado que um B310 (MEDIUM) continua
     #   bloqueando com este limiar.
     - name: Run Bandit (Security gate — MEDIUM+)
+      if: always()
       run: poetry run bandit -c pyproject.toml -r src/ -ll
 
     # Relatorio completo, incluindo LOW, para ficar visivel no log sem travar
@@ -57,7 +73,9 @@ jobs:
       run: poetry run bandit -c pyproject.toml -r src/ || true
 
     - name: Run Mypy (Type Checking)
+      if: always()
       run: poetry run mypy src/
 
     - name: Run Pytest (Tests)
+      if: always()
       run: poetry run pytest

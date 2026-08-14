@@ -268,6 +268,34 @@ O passo foi desdobrado em dois: um gate em severidade média ou superior, que
 bloqueia o merge, e um relatório completo informativo, que mantém os alertas
 de severidade baixa visíveis no log sem impedir a integração.
 
+### 8.1. Os passos de verificação deixam de se bloquear entre si
+
+Constatado na primeira execução do CI sobre este PR (run `31821169112`): o job
+falhou no passo 1, o Ruff, e **Bandit, Mypy e Pytest foram pulados**. Os passos
+de um job são sequenciais, e o primeiro que sai com código 1 aborta os
+seguintes.
+
+| Passo | Resultado nessa execução |
+|---|---|
+| Run Ruff (Linter) | ❌ `Found 167 errors`, exit 1 |
+| Run Bandit (gate MEDIUM+) | ⏭️ pulado |
+| Bandit full report | ✅ aprovado (já possuía `if: always()`) |
+| Run Mypy | ⏭️ pulado |
+| **Run Pytest** | ⏭️ **pulado** |
+
+A consequência é que **a suíte nunca é executada**. Enquanto a dívida de lint
+herdada não for quitada, todo PR de qualquer grupo morre no primeiro passo, e
+o CI não informa se os testes passam — que é justamente a pergunta que ele
+existe para responder.
+
+Os passos passaram a levar `if: always()`, como o relatório informativo do
+Bandit já fazia. Os quatro checks passam a reportar de forma independente.
+
+> [!IMPORTANT]
+> **Nenhum gate foi enfraquecido.** Cada passo continua encerrando com código 1
+> pelo seu próprio critério, e o job só fica verde quando os quatro passarem.
+> `always()` altera apenas **quando** o passo executa, jamais se ele aprova.
+
 ---
 
 ## 9. Estado atual
@@ -278,6 +306,17 @@ de severidade baixa visíveis no log sem impedir a integração.
 | Bandit | Aprovado | Corrigido nesta entrega |
 | Ruff | **167 erros** | 0 no Grupo 2 · 99 compartilhado · 42 Grupo 1 · 26 Grupo 3 |
 | Mypy | **73 erros** | 0 no Grupo 2 · 39 compartilhado · 25 Grupo 1 · 9 Grupo 3 |
+
+Comparação medida com o Ruff `0.16.2` — a versão exata do `poetry.lock` —
+executado sobre as duas árvores:
+
+| Árvore | Apontamentos do Ruff |
+|---|---|
+| `origin/dev` | **223** |
+| Esta branch | **167** |
+
+Os 223 coincidem com o número informado pelo supervisor quando o CI foi
+introduzido. Esta entrega reduz 56 apontamentos e não acrescenta nenhum.
 
 > [!WARNING]
 > Ruff e Mypy permanecem reprovados, **e isso não decorre desta entrega**: os
