@@ -440,5 +440,20 @@ durante a escrita atômica do checkpoint.
 A condição foi verificada, não presumida: com as alterações desta branch
 guardadas em stash, a `origin/dev` limpa apresenta a mesma taxa de falha.
 **Não se trata de regressão desta entrega** e não afeta o CI, que executa em
-`ubuntu-latest`. Recomenda-se que a depuração de persistência no Windows seja
-feita fora de diretórios sincronizados.
+`ubuntu-latest` — lá a suíte fecha em `327 passed`, sem intermitência.
+
+> [!NOTE]
+> **Onde o sintoma aparece não é onde está a causa.** O teste que reprova é
+> `src/benchmark/tests/test_executar.py::test_processar_documento_mock_registra_cross_review_enabled_true_por_default`,
+> um arquivo do Grupo 2, com a mensagem `assert 'falha_execucao' == 'sucesso'`.
+> A causa está na escrita atômica do checkpoint: o teste executa o pipeline
+> completo, e a falha de `os.replace` faz a execução inteira ser marcada como
+> `falha_execucao`. **O benchmark não está quebrado.**
+>
+> Vale registrar o motivo de o `tmp_path` do pytest não proteger contra isso: o
+> teste passa `cache_dir=tmp_path`, mas os checkpoints são gravados em
+> `src/logs/checkpoints/` — caminho fixo dentro do repositório, portanto dentro
+> da pasta sincronizada, independentemente do diretório temporário do teste.
+
+Recomenda-se que a depuração de persistência no Windows seja feita fora de
+diretórios sincronizados.
