@@ -38,13 +38,25 @@ orquestração.
 
 ```
 .
-├── README.md                    # este arquivo
+├── README.md                    # este arquivo — ÚNICO README na raiz
 ├── main.py                      # ponto de entrada: roda TODO o pipeline
 ├── requirements.txt             # dependências Python
+├── pyproject.toml               # config das ferramentas do CI (ruff, mypy, bandit) + poetry
 ├── .env.example                 # template das variáveis de ambiente (modo API)
-├── docs/
+├── .github/
+│   └── workflows/ci.yml         # CI: lint, tipagem, segurança e testes a cada push/PR
+├── scripts/
+│   └── validar_custo_por_chamada.py # reproduz custo com 2 modelos na mesma execução, sem API
+├── docs/                        # toda a documentação longa vive aqui, nada de .md solto na raiz
 │   ├── schema_reference.md       # documentação técnica detalhada dos schemas
-│   └── persistencia_e_retomada.md # Grupo 1 — relatório técnico de checkpoint/retomada
+│   ├── persistencia_e_retomada.md # Grupo 1 — relatório técnico de checkpoint/retomada
+│   ├── metricas_reference.md     # Grupo 2 — schema de métricas e precedência de custo
+│   ├── benchmark_reference.md    # Grupo 2 — schema do benchmark, achados e limitações
+│   ├── entrega_grupo2_custo_eficiencia.md      # Grupo 2 — resumo de entrada da entrega
+│   ├── relatorio_benchmark_custo_eficiencia.md # Grupo 2 — relatório técnico completo
+│   ├── alteracoes_grupo2_corpus_docs_ci.md     # Grupo 2 — antes/depois da última rodada de revisão
+│   ├── tools_reference.md        # Grupo 2 — tools determinísticas e tabela de conversão
+│   └── apresentacao_*.md         # material de apresentação (registro histórico, não normativo)
 └── src/
     ├── pipeline_base.py          # Orquestração GENÉRICA (Pipeline, PipelinePhase, PipelineContext)
     ├── pipeline.py               # As 4 fases concretas + modos (API/Mock) + demo

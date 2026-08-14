@@ -1,7 +1,8 @@
 # Grupo 2 — Alterações desta entrega
 
-Branch `grupo-2-corpus-publico-docs-e-ci`, criada a partir de `dev`.
-5 commits · 29 arquivos · +984 / −288 linhas.
+Branch `grupo-2-corpus-publico-docs-e-ci`, criada a partir de `dev` — e é para
+`dev` que o pull request é aberto: o CI roda lá e, com tudo verde, `dev` segue
+para a `main`.
 
 Este documento apresenta, para cada ponto levantado nesta rodada, **o estado
 anterior e o estado atual**. As seções seguem a ordem da apresentação.
@@ -65,7 +66,7 @@ O princípio que organiza o módulo permanece: **o consumo é medido, o preço �
 configuração**, e ambos só se combinam na multiplicação final. Qualificar o
 resultado como "real" atribuía ao sistema uma precisão que ele não possui.
 
-Corrigido em `README_GRUPO2_CUSTO_EFICIENCIA.md`, `docs/metricas_reference.md`
+Corrigido em `docs/entrega_grupo2_custo_eficiencia.md`, `docs/metricas_reference.md`
 e `README.md`.
 
 ---
@@ -116,7 +117,7 @@ I/O — e as **contagens**.
 
 > [!IMPORTANT]
 > Os valores corrigidos coincidem exatamente com a tabela conferida
-> manualmente em `README_GRUPO2_CUSTO_EFICIENCIA.md`. A tabela manual estava
+> manualmente em `docs/entrega_grupo2_custo_eficiencia.md`. A tabela manual estava
 > correta; o relatório gerado automaticamente é que apresentava desvio. Os
 > dois documentos da entrega se contradiziam, e essa era a origem da
 > divergência.
@@ -149,7 +150,7 @@ está medido **se ela melhora** a revisão — que era a pergunta original da
 atividade.
 
 A ressalva foi inserida em quatro pontos: `README.md`,
-`README_GRUPO2_CUSTO_EFICIENCIA.md`,
+`docs/entrega_grupo2_custo_eficiencia.md`,
 `docs/relatorio_benchmark_custo_eficiencia.md §7.4` e — o mais relevante — no
 próprio código, como a constante `LIMITE_QUALIDADE`, anexada a toda conclusão
 gerada. Um teste falha caso a ressalva seja removida do relatório, o que

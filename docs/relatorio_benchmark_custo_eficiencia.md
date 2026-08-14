@@ -284,7 +284,7 @@ Total estimado das 10 execuções: **US$ 0,248**. Tabela completa, deltas e
 conclusão calculada em
 [`src/benchmark/resultados/ablacao_cross_review.md`](../src/benchmark/resultados/ablacao_cross_review.md);
 leitura interpretada em
-[`README_GRUPO2_CUSTO_EFICIENCIA.md`](../README_GRUPO2_CUSTO_EFICIENCIA.md).
+[`docs/entrega_grupo2_custo_eficiencia.md`](entrega_grupo2_custo_eficiencia.md).
 
 Esta seção antes dizia que a comparação real "continua não validada" — estava
 desatualizada: descrevia o estado do trabalho antes das execuções pagas.

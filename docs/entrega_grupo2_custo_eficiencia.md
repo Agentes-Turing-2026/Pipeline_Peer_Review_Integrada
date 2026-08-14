@@ -2,7 +2,7 @@
 
 Este arquivo é o resumo de entrada da entrega do Grupo 2. Para o relatório
 técnico completo, ver
-[`docs/relatorio_benchmark_custo_eficiencia.md`](docs/relatorio_benchmark_custo_eficiencia.md).
+[`docs/relatorio_benchmark_custo_eficiencia.md`](relatorio_benchmark_custo_eficiencia.md).
 
 Histórico: entregue em `grupo-2-custo-config-e-comparacao-cross-review`
 (PR #16), custo por chamada em `grupo-2-custo-por-chamada-modelo` (PR #18),
@@ -58,7 +58,7 @@ custo em dinheiro.
 >
 > "Estimado", não "real": este valor não vem da fatura da OpenAI nem de
 > nenhuma API de billing. Ele é calculado por
-> [`src/metrics/precos_modelos.py`](src/metrics/precos_modelos.py)
+> [`src/metrics/precos_modelos.py`](../src/metrics/precos_modelos.py)
 > multiplicando os **tokens realmente consumidos** pela **tabela de preços
 > por milhão de tokens** documentada no módulo. Divergências com a cobrança
 > real são esperadas quando o preço de tabela estiver desatualizado, quando
@@ -112,8 +112,8 @@ com mais de um modelo.
 > (texto de `resposta_aos_pares` em cada `final_report.md`), que fica como
 > próximo passo.
 
-Dados completos em [`src/benchmark/resultados/ablacao_cross_review.json`](src/benchmark/resultados/ablacao_cross_review.json)
-e [`.md`](src/benchmark/resultados/ablacao_cross_review.md), onde as
+Dados completos em [`src/benchmark/resultados/ablacao_cross_review.json`](../src/benchmark/resultados/ablacao_cross_review.json)
+e [`.md`](../src/benchmark/resultados/ablacao_cross_review.md), onde as
 execuções reais e o smoke test em modo mock aparecem em **seções separadas**
 — o mock não entra em nenhuma média.
 
@@ -143,6 +143,7 @@ python -m pytest src/metrics/tests/test_precos_modelos.py src/benchmark/tests/ s
 
 ## Documentação completa
 
-- [`docs/relatorio_benchmark_custo_eficiencia.md`](docs/relatorio_benchmark_custo_eficiencia.md) — relatório técnico detalhado (checklist, arquitetura, testes).
-- [`docs/metricas_reference.md`](docs/metricas_reference.md) — schema de métricas e precedência de custo.
-- [`docs/benchmark_reference.md`](docs/benchmark_reference.md) — schema do benchmark, achados e limitações.
+- [`docs/relatorio_benchmark_custo_eficiencia.md`](relatorio_benchmark_custo_eficiencia.md) — relatório técnico detalhado (checklist, arquitetura, testes).
+- [`docs/metricas_reference.md`](metricas_reference.md) — schema de métricas e precedência de custo.
+- [`docs/benchmark_reference.md`](benchmark_reference.md) — schema do benchmark, achados e limitações.
+- [`docs/alteracoes_grupo2_corpus_docs_ci.md`](alteracoes_grupo2_corpus_docs_ci.md) — antes/depois de cada ponto levantado na última rodada de revisão.
