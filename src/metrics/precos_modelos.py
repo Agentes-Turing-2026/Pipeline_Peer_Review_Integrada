@@ -49,9 +49,12 @@ Fontes oficiais consultadas em 2026-08-06 (USD por milhão de tokens):
   em R$; convertidos para USD pela cotação aproximada informada na própria
   página, US$1 ≈ R$5,14). Sabiá-3 não aparece mais na tabela oficial atual
   (só Sabiá 4 e variantes) — mantido aqui como aproximação a partir do preço
-  de lançamento (R$5,00/R$10,00 por milhão de tokens), porque
-  ``model_provider.PROVEDORES[Provider.MARITACA].modelo_padrao == "sabia-3"``
-  ainda é o default do provedor neste repositório.
+  de lançamento (R$5,00/R$10,00 por milhão de tokens). Ele deixou de ser o
+  default do provedor: o Grupo 3 trocou
+  ``model_provider.PROVEDORES[Provider.MARITACA].modelo_padrao`` para
+  ``"sabiazinho-4"`` no PR #17, justamente por descontinuação. A entrada de
+  ``sabia-3`` permanece na tabela porque execuções antigas já registradas
+  citam esse modelo e precisam continuar precificáveis.
 
 **Correção (2026-08-06): "gpt-5.6-luna" NÃO é um gateway/proxy.** Uma versão
 anterior deste módulo (e de ``docs/benchmark_reference.md``/
