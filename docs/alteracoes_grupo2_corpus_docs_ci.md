@@ -421,12 +421,30 @@ acessado sem verificação de `None` (`union-attr`).
 
 ### Pendências
 
-- [ ] Grupo 1 e responsável pelo núcleo: os 40 apontamentos da tabela acima —
-      com eles resolvidos, o job fica verde pela primeira vez
-- [ ] Grupo 3: `.env.example` linha 34, que ainda sugere
+As três primeiras são pré-requisito da quarta, nesta ordem:
+
+- [ ] **Grupo 1 e responsável pelo núcleo:** os 40 apontamentos da tabela acima
+      — com eles resolvidos, o job fica verde pela primeira vez
+- [ ] **Grupo 3:** `.env.example` linha 34, que ainda sugere
       `LLM_FALLBACK_MODEL=sabia-3` (ver §8.2)
-- [ ] Marcelo: validação das alterações em `ci.yml` e `pyproject.toml`
-- [ ] Execução dos 9 documentos novos do corpus em modo `api` (implica custo)
+- [ ] **Marcelo:** validação das alterações em `ci.yml` e `pyproject.toml`
+- [ ] **Nova execução do benchmark, com o corpus completo em modo `api`**
+
+> [!IMPORTANT]
+> A execução do benchmark ficou **deliberadamente para depois** que todos os
+> grupos quitarem seus apontamentos e o CI estiver verde — decisão de sequência,
+> não esquecimento.
+>
+> E não se trata de rodar apenas os 9 documentos novos por cima dos resultados
+> atuais: será uma **rodada nova do benchmark inteiro, com todos os PDFs do
+> corpus atualizado**. O motivo é que os números publicados só são comparáveis
+> entre si se saírem da mesma versão do código — rodar os documentos novos
+> agora produziria uma tabela metade medida antes das correções dos outros
+> grupos e metade depois.
+>
+> A execução implica **custo de API**, então acontece uma vez, no momento certo.
+> A flag `--regerar` (§4) existe justamente para que qualquer reajuste posterior
+> de relatório seja feito sobre os pares já gravados, sem novo consumo.
 
 ---
 
