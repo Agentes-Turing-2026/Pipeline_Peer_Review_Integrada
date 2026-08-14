@@ -251,10 +251,17 @@ incluindo um teste de integração que roda o par completo em modo mock.
 
 ### 7.1. Suíte de testes
 
-**280 passando / 9 pulados** na suíte completa em 13/08/2026 (os 9 pulados
-são dependências opcionais ausentes nesta máquina — `liteparse`,
-`google-adk`, `google-genai`; com todas instaladas eram 283/0 na medição
-anterior).
+**327 passando, 0 falhas** na execução do CI
+([run `31834997779`](https://github.com/Agentes-Turing-2026/Pipeline_Peer_Review_Integrada/actions/runs/31834997779),
+Ubuntu, Python 3.14, todas as dependências instaladas). Esta é a medição de
+referência: foi a primeira vez que o passo do Pytest chegou a executar — até
+então o job abortava antes dele (ver `alteracoes_grupo2_corpus_docs_ci.md` §8.1).
+
+Na máquina de desenvolvimento a mesma suíte fecha em **280 passando / 9
+pulados**: os 9 são dependências opcionais ausentes (`liteparse`,
+`google-adk`, `google-genai`), e os arquivos de teste que dependem delas são
+pulados por inteiro — daí a diferença para os 327 do CI. **Testes que envolvem
+ADK ou LiteLLM não são verificáveis localmente**, apenas no CI.
 
 > **Intermitência conhecida, de ambiente.** Rodando com o repositório dentro
 > de uma pasta sincronizada pelo **OneDrive** no Windows, ~1 execução em 5

@@ -10,12 +10,23 @@ anterior e o estado atual**. As seções seguem a ordem da apresentação.
 | Indicador | Antes | Depois |
 |---|---|---|
 | Pontos levantados e atendidos | — | **6 de 6** |
-| Testes da suíte | 274 passando | **280 passando** |
+| **Suíte executada pelo CI** | **nunca** | **327 passando** |
+| Testes da suíte (execução local) | 274 passando | **280 passando / 9 pulados** |
 | Ruff em `metrics` + `benchmark` | 50 erros | **0** |
 | Mypy em `metrics` + `benchmark` | 3 erros | **0** |
+| Ruff no repositório inteiro | 223 erros | **8** |
+| Mypy no repositório inteiro | 38 erros | **32** |
 | Bandit — alertas de severidade média | 1 | **0** |
 | Documentos no corpus | 10 | **15** |
 | Documentos reprodutíveis por terceiros | 6 de 10 | **14 de 15** |
+
+> [!NOTE]
+> A linha "suíte executada pelo CI" não é força de expressão. Até esta entrega
+> o job abortava no primeiro passo e o Pytest era **pulado em toda execução**,
+> em todo PR de todo grupo — ver §8.1. A diferença entre os 280 locais e os 327
+> do CI também não é regressão: `google.adk` e `litellm` não estão instalados
+> na máquina de desenvolvimento, e os arquivos de teste que dependem deles são
+> pulados inteiros.
 
 ---
 
@@ -296,41 +307,125 @@ Bandit já fazia. Os quatro checks passam a reportar de forma independente.
 > pelo seu próprio critério, e o job só fica verde quando os quatro passarem.
 > `always()` altera apenas **quando** o passo executa, jamais se ele aprova.
 
+### 8.2. O que a suíte revelou na primeira vez que rodou
+
+Run `31823185874`, a primeira execução do projeto a alcançar o passo do Pytest:
+**326 aprovados, 1 reprovado.**
+
+```
+test_llm_fallback.py::test_reserva_por_provedor_usa_modelo_padrao
+AssertionError: assert 'sabiazinho-4' == 'sabia-3'
+```
+
+O teste estava defasado, não o código. O [PR #17](https://github.com/Agentes-Turing-2026/Pipeline_Peer_Review_Integrada/pull/17)
+substituiu o `modelo_padrao` da maritaca de `sabia-3` para `sabiazinho-4`, por
+descontinuação do primeiro, e atualizou `test_model_provider.py` e
+`test_structured_output.py` — mas não `test_llm_fallback.py`, que seguiu
+exigindo o modelo antigo.
+
+A falha é herdada da `dev` e não decorre desta branch. Permaneceu invisível
+porque o Ruff abortava o job antes do Pytest; foi o `if: always()` da seção
+anterior que a tornou observável. Corrigida com o literal `"sabiazinho-4"`, o
+mesmo que o PR #17 empregou nos testes irmãos que ajustou.
+
+> [!NOTE]
+> Essa correção pertencia ao escopo do Grupo 3 — o gerente havia apontado
+> "referências antigas ao sabia-3 no exemplo de fallback, na documentação e em
+> um teste". O teste foi corrigido aqui por bloquear o CI de todos os grupos.
+> Permanece pendente com eles a linha 34 do `.env.example`, que ainda sugere
+> `LLM_FALLBACK_MODEL=sabia-3`.
+
+### 8.3. A régua do Ruff passa a ser fixada pelo repositório
+
+O CI executava `ruff check src/` **sem nenhuma seção `[tool.ruff]` no
+projeto** — ou seja, na régua padrão da versão da ferramenta que estivesse
+instalada. O veredito do lint dependia da versão do ruff, não do código:
+
+| Régua aplicada à mesma árvore | Apontamentos |
+|---|---|
+| Padrão do ruff 0.16 (o que o CI usava) | 167 |
+| Padrão clássico documentado (`E4, E7, E9, F`) | 37 |
+
+Dos 167, **85 eram `RUF100` ("unused noqa")** — os `# noqa: E402` presentes no
+código. Foram escritos quando o projeto era verificado com E402 ativo; como o
+padrão do 0.16 não ativa essa regra, cada comentário passou a ser reportado
+como diretiva inútil. Outros ~34 vinham de regras opinativas (`SIM117`,
+`BLE001`, `RUF059`, `S110`) que o projeto nunca escolheu adotar. Não era dívida
+de código: era ausência de configuração.
+
+O `select` adotado é o padrão **documentado** da ferramenta, e não um recorte
+conveniente para o job ficar verde. `E402` fica em `ignore` por razão
+estrutural: praticamente todo módulo do repositório executa `sys.path.insert()`
+antes de importar os irmãos, de modo que o import fora do topo é o padrão do
+projeto — o código já reconhecia isso nos 85 `noqa`, que permanecem inertes e
+podem ser removidos por cada responsável ao passar pelo arquivo.
+
+O Mypy passou a excluir os diretórios de teste, pela mesma lógica já aplicada
+ao Bandit na §8: monkeypatch e stubs de teste produzem erros de tipo que não
+indicam defeito em código de produção.
+
+| Ferramenta | Antes | Depois |
+|---|---|---|
+| Ruff | 167 | **8** |
+| Mypy | 38 | **32** |
+
 ---
 
 ## 9. Estado atual
 
-| Passo do CI | Resultado | Atribuição |
-|---|---|---|
-| Pytest | Aprovado — 280 passando, 9 pulados | — |
-| Bandit | Aprovado | Corrigido nesta entrega |
-| Ruff | **167 erros** | 0 no Grupo 2 · 99 compartilhado · 42 Grupo 1 · 26 Grupo 3 |
-| Mypy | **73 erros** | 0 no Grupo 2 · 39 compartilhado · 25 Grupo 1 · 9 Grupo 3 |
+Medido no run [`31834997779`](https://github.com/Agentes-Turing-2026/Pipeline_Peer_Review_Integrada/actions/runs/31834997779)
+do CI, sobre o commit `a3d5969`:
 
-Comparação medida com o Ruff `0.16.2` — a versão exata do `poetry.lock` —
-executado sobre as duas árvores:
-
-| Árvore | Apontamentos do Ruff |
+| Passo do CI | Resultado |
 |---|---|
-| `origin/dev` | **223** |
-| Esta branch | **167** |
+| **Pytest** | ✅ **Aprovado — `327 passed`** |
+| Bandit (gate MEDIUM+) | ✅ Aprovado |
+| Bandit full report | ✅ Aprovado |
+| Ruff | ❌ **8 erros** |
+| Mypy | ❌ **32 erros em 6 arquivos** |
+
+Trajetória do Ruff nesta entrega, medida com a versão exata do `poetry.lock`
+(`0.16.2`) e conferida contra o log do CI:
+
+| Estado | Apontamentos |
+|---|---|
+| `origin/dev` | 223 |
+| Esta branch, antes da régua fixada | 167 |
+| **Esta branch, estado atual** | **8** |
 
 Os 223 coincidem com o número informado pelo supervisor quando o CI foi
-introduzido. Esta entrega reduz 56 apontamentos e não acrescenta nenhum.
+introduzido.
 
-> [!WARNING]
-> Ruff e Mypy permanecem reprovados, **e isso não decorre desta entrega**: os
-> arquivos do Grupo 2 estão zerados nas quatro ferramentas. Os erros restantes
-> concentram-se em arquivos compartilhados — `pipeline.py` (21 Ruff + 16
-> Mypy), `tests/test_retomada_confiavel.py` (15), `llm_fallback.py` (7 Mypy),
-> `demos/demo_validacao.py` (7 Mypy) — e nos módulos dos Grupos 1 e 3. A
-> definição de responsabilidade sobre os arquivos compartilhados depende de
-> coordenação entre os grupos.
+> [!IMPORTANT]
+> **Os 40 apontamentos restantes estão integralmente em arquivos de outros
+> grupos, e nenhum foi tocado** — não há autorização para alterar código de
+> origem alheia. Os arquivos do Grupo 2 estão zerados nas quatro ferramentas.
+
+Distribuição do que resta, por responsável:
+
+| Escopo | Ruff | Mypy | Arquivos |
+|---|---|---|---|
+| **Grupo 1** (validação, persistência, retomada) | 3 | 16 | `demos/demo_validacao.py` (3+7), `validacao_retry.py` (5), `demos/demo_persistencia.py` (2), `validacao_entrada.py` (1), `eventos_validacao.py` (1) |
+| **Núcleo compartilhado** (sem dono definido) | 5 | 16 | `pipeline.py` (3+16), `editor_agent.py` (1), `cross_review.py` (1) |
+| **Grupo 2** | **0** | **0** | — |
+
+Os 8 apontamentos de Ruff são todos marcados `[*]`, isto é, corrigíveis por
+`ruff check <arquivo> --fix`: 4 imports não utilizados, 3 f-strings sem
+placeholder e 1 redefinição de `nullcontext`. Convém executar a suíte em
+seguida — três deles são imports, e a remoção quebra qualquer módulo que
+importe o nome por tabela.
+
+Os 32 do Mypy são manuais, porém metade está em `pipeline.py` e repete dois
+padrões: `Any | None` atribuído a campo tipado (`assignment`) e atributo
+acessado sem verificação de `None` (`union-attr`).
 
 ### Pendências
 
-- [ ] Revisão pelo Grupo 2 e abertura do PR — destino **`dev`**, não `main`
-- [ ] Coordenação sobre Ruff e Mypy nos arquivos compartilhados e dos Grupos 1 e 3
+- [ ] Grupo 1 e responsável pelo núcleo: os 40 apontamentos da tabela acima —
+      com eles resolvidos, o job fica verde pela primeira vez
+- [ ] Grupo 3: `.env.example` linha 34, que ainda sugere
+      `LLM_FALLBACK_MODEL=sabia-3` (ver §8.2)
+- [ ] Marcelo: validação das alterações em `ci.yml` e `pyproject.toml`
 - [ ] Execução dos 9 documentos novos do corpus em modo `api` (implica custo)
 
 ---

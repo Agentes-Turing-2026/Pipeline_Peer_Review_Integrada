@@ -39,7 +39,8 @@ correções de documentação/corpus/CI em `grupo-2-corpus-publico-docs-e-ci`.
 - **`src/benchmark/ablacao_cross_review.py`** (novo) — roda cada documento
   duas vezes (com/sem leitura cruzada) e gera tabela + conclusão em
   `src/benchmark/resultados/ablacao_cross_review.{json,md}`.
-- **44 testes novos**, suíte completa (283 testes) passando.
+- **44 testes novos**. Suíte completa aprovada no CI: **`327 passed`, 0 falhas**
+  ([run `31834997779`](https://github.com/Agentes-Turing-2026/Pipeline_Peer_Review_Integrada/actions/runs/31834997779)).
 
 ## Validação real feita nesta branch
 
