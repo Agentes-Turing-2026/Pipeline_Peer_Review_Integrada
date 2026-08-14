@@ -415,7 +415,7 @@ fallback aparecem corretamente aninhados sob o span da fase em
     "timestamp": 1731000000.123,
     "provedor_inicial": "gemini:gemini-2.5-flash",
     "motivo_falha": "limite_de_requisicoes",
-    "opcao_fallback": "maritaca:sabia-3",
+    "opcao_fallback": "maritaca:sabiazinho-4",
     "modelo_que_respondeu": null
   },
   {
@@ -426,8 +426,8 @@ fallback aparecem corretamente aninhados sob o span da fase em
     "timestamp": 1731000000.456,
     "provedor_inicial": "gemini:gemini-2.5-flash",
     "motivo_falha": null,
-    "opcao_fallback": "maritaca:sabia-3",
-    "modelo_que_respondeu": "maritaca:sabia-3"
+    "opcao_fallback": "maritaca:sabiazinho-4",
+    "modelo_que_respondeu": "maritaca:sabiazinho-4"
   }
 ]
 ```
