@@ -194,7 +194,22 @@ def test_chave_dedup_nao_vaza_para_os_detalhes_do_evento():
     coletor = ExecutionCollector(run_id="run-dedup")
     evento = coletor.registrar(
         fase="fase_1", tipo="tool", nome="chamada_llm", status="sucesso",
-        chave_dedup="evento-adk-123", agente="reviewer_a",
+        chave_dedup="evento-adk-123", detalhes={"agente": "reviewer_a"},
     )
     assert evento is not None
     assert evento.detalhes == {"agente": "reviewer_a"}
+
+
+# ---------------------------------------------------------------------------
+# `detalhes` não pode colidir com os campos estruturais do evento
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("chave_reservada", ["duracao_s", "chave_dedup", "fase", "status"])
+def test_detalhe_com_chave_reservada_levanta_erro_em_vez_de_sobrescrever(chave_reservada):
+    coletor = ExecutionCollector(run_id="run-reservado")
+    with pytest.raises(ValueError, match=chave_reservada):
+        coletor.registrar(
+            fase="fase_1", tipo="tool", nome="chamada_llm", status="sucesso",
+            duracao_s=1.0, detalhes={chave_reservada: "valor_espurio"},
+        )
+    assert coletor.eventos == []
