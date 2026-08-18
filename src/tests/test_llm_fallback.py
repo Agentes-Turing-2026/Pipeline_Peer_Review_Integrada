@@ -148,7 +148,7 @@ def test_reserva_por_provedor_usa_modelo_padrao(monkeypatch):
     cfg = resolver_config_fallback()
     assert cfg is not None
     assert cfg.provider is Provider.MARITACA
-    assert cfg.model == "sabia-3"
+    assert cfg.model == "sabiazinho-4"
 
 
 def test_reserva_so_com_modelo_herda_o_provedor_principal(monkeypatch):
