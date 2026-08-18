@@ -22,7 +22,6 @@ from __future__ import annotations
 import hashlib
 import shutil
 import sys
-from contextlib import nullcontext
 from pathlib import Path
 
 SRC = Path(__file__).resolve().parents[1]  # .../src (as demos vivem em src/demos/)
@@ -30,7 +29,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from persistencia import CheckpointManager  # noqa: E402
-from pipeline import EditorVerdictPhase, run_demo  # noqa: E402
+from pipeline import EditorVerdictPhase, _fase_medida, run_demo  # noqa: E402
 
 LARGURA = 70
 DEMO_RUN_ID = "demo_persistencia_grupo1"
@@ -85,15 +84,12 @@ def main() -> None:
     original_run = EditorVerdictPhase.run
 
     def _falha_simulada(self, data, context):
-        # Passa pelo coletor.fase() real, exatamente como o `.run()` original
-        # faz por dentro do `with _fase_medida(...)` — sem isso, a exceção
-        # nunca seria registrada como métrica, e o resumo impresso logo
-        # abaixo mentiria mostrando "status: sucesso" mesmo com a falha
-        # acontecendo (a instrumentação de fato funciona; só não era
-        # exercitada por esta simulação).
+        # Passa por _fase_medida() — o MESMO wrapper que o `.run()` original
+        # usa — em vez de chamar coletor.fase() diretamente: sem isso, a
+        # exceção não vira evento de métrica completo (nem o resumo mostraria
+        # "status: falha" corretamente, nem "Falhas:" contaria a interrupção).
         coletor = context.config.get("_metrics_collector")
-        medicao = coletor.fase(self.name) if coletor is not None else nullcontext()
-        with medicao:
+        with _fase_medida(coletor, self.name):
             raise RuntimeError("falha simulada pela demo (ex.: timeout do modelo)")
 
     EditorVerdictPhase.run = _falha_simulada
