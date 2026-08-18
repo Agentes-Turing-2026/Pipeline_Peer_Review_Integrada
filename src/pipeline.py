@@ -139,7 +139,7 @@ DEFAULT_MOCK_FILE = HERE / "mocks" / "peer_review_mock.json"
 
 
 import time
-from contextlib import nullcontext
+from contextlib import contextmanager, nullcontext
 
 # Métricas de execução do Grupo 2 (importação guardada: pipeline funciona sem elas).
 try:
@@ -155,9 +155,46 @@ except ImportError:
     definir_coletor_adk = None
 
 
+@contextmanager
 def _fase_medida(coletor: ExecutionCollector | None, nome: str):
-    """Context manager: mede a fase via coletor.fase(nome); no-op se coletor for None."""
-    return coletor.fase(nome) if coletor is not None else nullcontext()
+    """Mede a fase via coletor.fase(nome) e registra uma nota histórica de falha.
+
+    ``coletor.fase(nome)`` (metrics/coletor.py, Grupo 2) já registra, sozinho,
+    um evento ``tipo="fase", status="falha"`` no instante da exceção — é o que
+    faz o resumo IMEDIATO (na hora da falha) mostrar ``status_final="falha"``
+    corretamente. Mas esse evento é, de propósito, filtrado do estado
+    persistido no bloco ``except`` de ``run_demo()`` (para uma retomada
+    bem-sucedida não herdar ``status_final="falha"`` de um problema já
+    resolvido) — e ``quantidade_falhas`` (metrics/resumo.py) só conta eventos
+    ``tipo="falha"``, não ``tipo="fase"``. Resultado: nenhuma interrupção de
+    fase jamais incrementava ``quantidade_falhas``, nem no resumo parcial nem
+    depois de uma retomada.
+
+    Por isso, aqui registramos um SEGUNDO evento, ``tipo="falha"`` (o único
+    tipo que ``quantidade_falhas`` conta) com ``status="aviso"`` — não
+    ``"falha"`` — de propósito: sobrevive ao filtro do bloco ``except`` (que só
+    remove ``status="falha"``) e por isso volta na retomada, mas não reacende
+    ``houve_falha`` (que checa ``status=="falha"`` em qualquer evento) numa
+    retomada já concluída. Também vira uma linha em ``alertas``
+    (comportamento padrão de ``gerar_resumo()`` para ``status="aviso"``) e
+    empurra ``status_final`` para ``"sucesso_com_alertas"`` — a interrupção
+    fica visível no histórico da execução, mesmo com a retomada dando certo.
+
+    No-op se ``coletor`` for ``None`` (execução sem métricas configuradas).
+    """
+    if coletor is None:
+        yield
+        return
+    try:
+        with coletor.fase(nome):
+            yield
+    except Exception as exc:
+        coletor.registrar(
+            fase=nome, tipo="falha", nome=nome, status="aviso",
+            erro=str(exc), erro_tipo=type(exc).__name__,
+            mensagem=f"fase '{nome}' interrompida: {exc}",
+        )
+        raise
 
 
 def _registrar_validacao(coletor: ExecutionCollector | None, *, fase: str, agente: str, resultado) -> None:

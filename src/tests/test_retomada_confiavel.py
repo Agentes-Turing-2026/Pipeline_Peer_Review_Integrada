@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import json
 import sys
-from contextlib import contextmanager, nullcontext
+from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -86,9 +86,11 @@ def _falha_em(fase_cls, mensagem: str):
     resposta irrecuperável). Sair do bloco representa "o problema foi resolvido"
     — é a condição para a retomada fazer sentido.
 
-    A falha passa pelo ``coletor.fase(nome)`` real (mesma API que o `.run()`
-    original usa por dentro do `with _fase_medida(...)`, ver pipeline.py) —
-    sem isso, a exceção nunca vira evento de métrica, e um teste que olhasse
+    A falha passa por ``pipeline_mod._fase_medida(coletor, nome)`` — o MESMO
+    wrapper que o `.run()` original usa (não a API mais crua de
+    ``coletor.fase()``): é ele quem registra tanto o evento imediato de fase
+    quanto a nota histórica de interrupção que ``quantidade_falhas`` conta.
+    Sem isso, a exceção nunca vira evento de métrica, e um teste que olhasse
     o resumo no momento da falha veria "sucesso" mesmo com o RuntimeError
     subindo (foi exatamente esse ponto cego que deixou passar o bug do
     resumo parcial: nenhum teste aqui verificava o CONTEÚDO do resumo
@@ -96,8 +98,7 @@ def _falha_em(fase_cls, mensagem: str):
     """
     def _run(self, data, context):
         coletor = context.config.get("_metrics_collector")
-        medicao = coletor.fase(self.name) if coletor is not None else nullcontext()
-        with medicao:
+        with pipeline_mod._fase_medida(coletor, self.name):
             raise RuntimeError(mensagem)
 
     with pytest.MonkeyPatch.context() as mp:
@@ -128,11 +129,13 @@ def _contar_execucoes(mp, contador: dict[str, int]) -> None:
 # ---------------------------------------------------------------------------
 
 def test_retomada_reproduz_o_resumo_de_uma_execucao_limpa(ambiente):
-    """Falha na fase 3 -> retomada -> resumo idêntico ao de uma execução limpa.
+    """Falha na fase 3 -> retomada -> resumo cobre a execução inteira.
 
     Antes da correção, o resumo da retomada só continha as fases 3 e 4: o
     coletor de métricas nascia vazio a cada chamada e as fases restauradas não
-    emitiam evento nenhum.
+    emitiam evento nenhum. Depois, um segundo defeito: mesmo com o resumo já
+    cobrindo tudo, `quantidade_falhas` e `alertas` não guardavam nenhum rastro
+    da interrupção da fase 3 uma vez que a retomada dava certo.
     """
     limpo = run_demo(mode="mock")
     resumo_limpo = limpo.data["resumo_execucao"]
@@ -152,10 +155,21 @@ def test_retomada_reproduz_o_resumo_de_uma_execucao_limpa(ambiente):
     assert resumo["quantidade_validacoes"] == resumo_limpo["quantidade_validacoes"]
     assert resumo["quantidade_tools_chamadas"] == resumo_limpo["quantidade_tools_chamadas"]
     assert resumo["decisao_final"] == resumo_limpo["decisao_final"]
-    assert resumo["status_final"] == "sucesso", (
-        "a falha já resolvida não pode contaminar o status da execução retomada"
+    # A falha já resolvida não pode voltar a marcar a execução como "falha" —
+    # mas também não pode ficar invisível: sucesso_com_alertas é o status
+    # correto para uma retomada que teve uma interrupção real na história.
+    assert resumo["status_final"] == "sucesso_com_alertas", (
+        "a interrupção resolvida tem que ficar visível, sem reacender status_final=falha"
     )
-    assert resumo["alertas"] == [], "nenhuma lacuna de métrica deve ser detectada"
+    assert resumo["quantidade_falhas"] == 1, (
+        "a interrupção da fase 3 tem que ser contada, mesmo com a retomada dando certo"
+    )
+    assert any("interrompida" in alerta for alerta in resumo["alertas"]), (
+        "a interrupção da fase 3 tem que deixar rastro em alertas"
+    )
+    assert not any("não aparecem neste resumo" in alerta for alerta in resumo["alertas"]), (
+        "nenhuma lacuna de métrica de verdade deve ser detectada"
+    )
     # A duração total acumula as duas tentativas; a soma das fases inclui as
     # restauradas. Total < soma seria aritmeticamente impossível.
     assert resumo["duracao_total_s"] >= resumo["duracao_soma_fases_s"]
@@ -255,7 +269,14 @@ def test_retomada_nao_reextrai_o_pdf(ambiente, tmp_path):
     assert documento["text_chars"] == len(TEXTO_EXTRAIDO)
     # A fase 0 também é uma fase: a duração dela precisa continuar no resumo.
     assert EXTRACTION_PHASE in retomado.data["resumo_execucao"]["duracao_por_fase_s"]
-    assert retomado.data["resumo_execucao"]["alertas"] == []
+    # A falha simulada na fase 2 deixa uma nota permanente em alertas (ver
+    # test_retomada_reproduz_o_resumo_de_uma_execucao_limpa) — o que este
+    # teste garante é que não há LACUNA de métrica de verdade, não que
+    # alertas está vazio.
+    assert not any(
+        "não aparecem neste resumo" in alerta
+        for alerta in retomado.data["resumo_execucao"]["alertas"]
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -496,6 +517,39 @@ def test_tempo_da_tentativa_que_falhou_e_persistido_no_caminho_de_falha(ambiente
         "a duração final não pode ser menor que o que já tinha sido "
         "persistido antes da retomada sequer começar"
     )
+
+
+def test_quantidade_falhas_registra_interrupcao_e_sobrevive_a_retomada(ambiente):
+    """Reportado pelo coordenador: `quantidade_falhas` ficava em 0 mesmo com
+    uma fase interrompida de verdade — tanto no resumo parcial (na hora da
+    falha) quanto no resumo final, depois de uma retomada bem-sucedida.
+
+    Causa raiz: `quantidade_falhas` (metrics/resumo.py) só conta eventos
+    `tipo="falha"`, e nenhum caminho de código emitia esse tipo para uma fase
+    que falha (só `tipo="fase", status="falha"`, que decide `status_final`
+    mas é ignorado por `quantidade_falhas`). `_fase_medida()` agora registra
+    esse evento que faltava.
+    """
+    run_id = "run_quantidade_falhas"
+    with _falha_em(EditorVerdictPhase, "timeout simulado do modelo"):
+        with pytest.raises(RuntimeError):
+            run_demo(mode="mock", run_id=run_id)
+
+    resumo_parcial_path = ambiente.outputs / run_id / "resumo_execucao_parcial.json"
+    resumo_parcial = json.loads(resumo_parcial_path.read_text(encoding="utf-8"))
+    assert resumo_parcial["quantidade_falhas"] == 1, (
+        "a interrupção da fase 3 tem que contar já no resumo parcial"
+    )
+    assert any(FASE_3 in alerta for alerta in resumo_parcial["alertas"])
+
+    retomado = run_demo(mode="mock", run_id=run_id)
+    resumo_final = retomado.data["resumo_execucao"]
+
+    assert resumo_final["quantidade_falhas"] == 1, (
+        "a retomada bem-sucedida não pode apagar o histórico da interrupção"
+    )
+    assert any(FASE_3 in alerta for alerta in resumo_final["alertas"])
+    assert resumo_final["status_final"] == "sucesso_com_alertas"
 
 
 def test_coletor_restaurado_preserva_duracao_e_acumula_tempo():
