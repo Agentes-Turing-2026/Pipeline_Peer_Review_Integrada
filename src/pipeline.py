@@ -40,7 +40,6 @@ if str(HERE) not in sys.path:
 
 from pipeline_base import Pipeline, PipelineContext, PipelinePhase  # noqa: E402
 from review_schema import (  # noqa: E402
-    CRITERIOS_REVISAVEIS,
     ESCALA_VEREDITO,
     CrossReviewSchema,
     EditorVerdictSchema,
@@ -50,7 +49,7 @@ from review_schema import (  # noqa: E402
     validar_review,
 )
 from model_provider import descricao_modelo, resolver_config  # noqa: E402
-from validacao_retry import PipelineValidationError, validar_com_tentativas  # noqa: E402
+from validacao_retry import validar_com_tentativas  # noqa: E402
 from reviewer_agent import REVIEWERS, _require_api_key, _run_reviewers  # noqa: E402
 from cross_review import _run_cross_review  # noqa: E402
 from editor_agent import _run_editor  # noqa: E402
@@ -139,7 +138,7 @@ DEFAULT_MOCK_FILE = HERE / "mocks" / "peer_review_mock.json"
 
 
 import time
-from contextlib import contextmanager, nullcontext
+from contextlib import contextmanager
 
 # Métricas de execução do Grupo 2 (importação guardada: pipeline funciona sem elas).
 try:
