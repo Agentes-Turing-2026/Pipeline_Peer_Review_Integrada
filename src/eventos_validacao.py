@@ -49,7 +49,7 @@ import json
 import logging
 import uuid
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -69,7 +69,7 @@ EVENTOS_PATH = EVENTOS_DIR / "validacao_events.jsonl"
 try:
     from observability import emit_event as _emit_event_grupo3  # type: ignore[import]
 except Exception:  # noqa: BLE001 - pacote do Grupo 3 pode não estar presente
-    def _emit_event_grupo3(*_args: Any, **_kwargs: Any) -> None:
+    def _emit_event_grupo3(*_args: Any, **_kwargs: Any) -> None:  # type: ignore[misc]
         return None
 
 # ---------------------------------------------------------------------------
@@ -174,7 +174,7 @@ class EventoValidacao:
     correcao_aplicada: dict[str, Any] | None = None
     requer_revisao_humana: bool = False
     fase: str | None = None
-    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    timestamp: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
     def __post_init__(self) -> None:
         if self.categoria not in CATEGORIAS_VALIDAS:

@@ -37,8 +37,9 @@ from __future__ import annotations
 import copy
 import json
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
 from pydantic import ValidationError
 
@@ -116,7 +117,7 @@ class PipelineValidationError(RuntimeError):
 
 def _clampear_notas(dados: dict, chave_pai: str = "") -> dict:
     """Percorre o dict recursivamente e corrige campos 'nota' fora do range."""
-    resultado = {}
+    resultado: dict[str, Any] = {}
     for chave, valor in dados.items():
         if isinstance(valor, dict):
             resultado[chave] = _clampear_notas(valor, chave_pai=chave)
@@ -143,7 +144,7 @@ _SENTINEL = "[corrigido automaticamente — revisar]"
 def _corrigir_textos_vazios(dados: dict) -> dict:
     """Substitui strings vazias/só-espaços em campos obrigatórios por um sentinel
     e injeta 'justificativa' em blocos nota+justificativa onde ela está ausente."""
-    resultado = {}
+    resultado: dict[str, Any] = {}
     for chave, valor in dados.items():
         if isinstance(valor, dict):
             sub = _corrigir_textos_vazios(valor)
@@ -152,7 +153,7 @@ def _corrigir_textos_vazios(dados: dict) -> dict:
                 sub["justificativa"] = _SENTINEL
             resultado[chave] = sub
         elif isinstance(valor, list):
-            itens = []
+            itens: list[Any] = []
             for item in valor:
                 if isinstance(item, dict):
                     sub = _corrigir_textos_vazios(item)
@@ -191,7 +192,7 @@ def _corrigir_notas_por_revisor(dados: dict) -> dict:
     return dados
 
 
-def corrigir_saida_mock(dados: dict, erro: str) -> dict:  # noqa: ARG001
+def corrigir_saida_mock(dados: dict, _erro: str) -> dict:
     """Correção determinística offline — sem Gemini.
 
     Aplica reparos estruturais baseados nos tipos de erro mais comuns:
@@ -200,7 +201,7 @@ def corrigir_saida_mock(dados: dict, erro: str) -> dict:  # noqa: ARG001
       3. Incoerência mudou_posicao/mudancas (CrossReviewSchema) → corrige flag.
       4. notas_por_revisor vazio (EditorVerdictSchema) → insere placeholder.
 
-    O parâmetro ``erro`` é aceito por assinatura (interface consistente com
+    O parâmetro ``_erro`` é aceito por assinatura (interface consistente com
     ``corrigir_saida_api``) mas não é usado: os reparos são aplicados
     incondicionalmente em cada campo suspeito.
     """
@@ -247,7 +248,7 @@ def corrigir_saida_api(dados: dict, erro: str, schema_fn: Callable) -> dict:
         # Chama com dict vazio para capturar o tipo de retorno esperado pelo schema.
         # Na prática, usa __annotations__ ou o modelo Pydantic direto.
         schema_json = _extrair_json_schema(schema_fn)
-    except Exception:
+    except Exception:  # noqa: BLE001 - best-effort: schema no prompt é só um extra, nunca crítico
         schema_json = "{}"
 
     prompt = (
@@ -278,8 +279,8 @@ def _extrair_json_schema(schema_fn: Callable) -> str:
         ret = sig.return_annotation
         if hasattr(ret, "model_json_schema"):
             return json.dumps(ret.model_json_schema(), ensure_ascii=False, indent=2)
-    except Exception:
-        pass
+    except Exception as exc:  # noqa: BLE001 - best-effort: schema no prompt é só um extra, nunca crítico
+        logger.debug("Não foi possível extrair o schema JSON de %s: %s", schema_fn, exc)
 
     return json.dumps(hints, ensure_ascii=False)
 
@@ -378,7 +379,7 @@ def validar_com_tentativas(
         usar_mock = str(getattr(modo, "value", modo)).lower() in (
             "mock", "local", "offline", "json"
         )
-    except Exception:
+    except Exception:  # noqa: BLE001 - modo com formato inesperado: cai pro corrector mock (mais seguro)
         usar_mock = True
 
     for tentativa in range(1, max_tentativas + 1):
@@ -445,7 +446,7 @@ def validar_com_tentativas(
                     categoria=CATEGORIA_CORRIGIDO, status="correcao_aplicada",
                     correcao_aplicada=diff_correcao(dados_antes, dados_atuais) or None,
                 ))
-            except Exception as exc_correcao:
+            except Exception as exc_correcao:  # noqa: BLE001 - o corrector (mock ou API) pode falhar de vários jeitos; qualquer um bloqueia para revisão humana
                 logger.error(
                     "[validacao] '%s' — falha no corrector na tentativa %d: %s",
                     nome_agente, tentativa, exc_correcao,

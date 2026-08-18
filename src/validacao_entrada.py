@@ -53,10 +53,11 @@ Interface de integração (o pipeline chama uma destas):
 from __future__ import annotations
 
 import unicodedata
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from eventos_validacao import (
     CATEGORIA_ALERTA_ENTRADA,
@@ -552,7 +553,9 @@ def validar_entrada_com_retry(
             resultado, run_id=run_id, fase=fase, schema=SCHEMA_DOCUMENTO,
             categoria=CATEGORIA_FALHOU_RECUPERAVEL, tentativa=tentativa, max_tentativas=max_tentativas,
         )
-        novo_doc = reextrair(pdf_path)
+        # reextrair não-None é garantido por pode_retentar acima; mypy não
+        # consegue seguir essa checagem através da variável intermediária.
+        novo_doc = reextrair(pdf_path)  # type: ignore[misc]
 
         # Evita registrar "correção aplicada" quando os dados não mudaram de fato.
         texto_antes = (getattr(doc, "text", "") or "").strip()
