@@ -218,7 +218,7 @@ def registrar_usage_adk(event: Any, *, fase: str) -> ExecutionEvent | None:
         nome=nome,
         status=status,
         chave_dedup=chave_dedup_usage(usage),
-        **detalhes,
+        detalhes=detalhes,
     )
 
 
