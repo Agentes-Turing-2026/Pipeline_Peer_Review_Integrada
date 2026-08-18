@@ -2,6 +2,7 @@
 
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -9,18 +10,21 @@ SRC = Path(__file__).resolve().parents[2]  # .../src
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from metrics.eventos import ExecutionEvent  # noqa: E402
-from metrics.resumo import gerar_resumo  # noqa: E402
+from metrics.eventos import ExecutionEvent
+from metrics.resumo import gerar_resumo
 
 
-def _evento(**overrides) -> ExecutionEvent:
-    base = dict(
-        run_id="run-x",
-        fase="fase_1_revisao_independente",
-        tipo="fase",
-        nome="fase_1_revisao_independente",
-        status="sucesso",
-    )
+def _evento(**overrides: Any) -> ExecutionEvent:
+    # ``dict[str, Any]`` explícito: ``ExecutionEvent`` tipa ``tipo``/``status``
+    # como ``Literal[...]``, e um dict inferido como ``dict[str, str]`` não
+    # pode ser desempacotado neles (o valor genérico ``str`` é largo demais).
+    base: dict[str, Any] = {
+        "run_id": "run-x",
+        "fase": "fase_1_revisao_independente",
+        "tipo": "fase",
+        "nome": "fase_1_revisao_independente",
+        "status": "sucesso",
+    }
     base.update(overrides)
     return ExecutionEvent(**base)
 

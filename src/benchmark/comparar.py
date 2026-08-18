@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent  # .../src/benchmark
@@ -67,7 +67,7 @@ def gerar_comparativo(execucoes: dict) -> dict:
         if registro.get("resultado") != "sucesso"
     )
     return {
-        "gerado_em": datetime.now(timezone.utc).isoformat(),
+        "gerado_em": datetime.now(UTC).isoformat(),
         "atencao": atencao,
         "tabela": dict(execucoes),
     }

@@ -27,13 +27,13 @@ import io
 import json
 import re
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent  # .../src/benchmark
 SRC = HERE.parent  # .../src
 
-from .corpus import DocumentoCorpus, carregar_corpus, resolver_pdf_local  # noqa: E402
+from .corpus import DocumentoCorpus, carregar_corpus, resolver_pdf_local
 
 # Import guardado (mesmo padrão de main.py): src/ precisa entrar no sys.path
 # ANTES de importar pipeline/validacao_entrada, porque esses módulos fazem
@@ -45,10 +45,10 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 try:
+    from model_provider import resolver_config
     from pipeline import run_demo
     from validacao_entrada import EntradaInvalidaError
-    from model_provider import resolver_config
-except Exception as exc:  # noqa: BLE001
+except Exception as exc:
     raise RuntimeError(
         "Não foi possível importar 'pipeline'/'validacao_entrada'/'model_provider' "
         "de src/. Rode a partir da raiz do repositório com as dependências do "
@@ -118,7 +118,7 @@ def _registro_base(doc: DocumentoCorpus, *, mode: str, cross_review: bool) -> di
         "mode": mode,
         **_config_llm(mode),
         "cross_review_enabled": cross_review,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
     }
 
 

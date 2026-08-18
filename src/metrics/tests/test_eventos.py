@@ -7,7 +7,7 @@ SRC = Path(__file__).resolve().parents[2]  # .../src
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from metrics.eventos import ExecutionEvent  # noqa: E402
+from metrics.eventos import ExecutionEvent
 
 
 def _evento_basico() -> ExecutionEvent:
@@ -90,13 +90,13 @@ def test_duracao_s_aceita_float_quando_fornecido():
 
 
 def _payload_legado(**overrides) -> dict:
-    base = dict(
-        run_id="run-legado",
-        fase="fase_1_revisao_independente",
-        tipo="tool",
-        nome="completude",
-        status="sucesso",
-    )
+    base = {
+        "run_id": "run-legado",
+        "fase": "fase_1_revisao_independente",
+        "tipo": "tool",
+        "nome": "completude",
+        "status": "sucesso",
+    }
     base.update(overrides)
     return base
 

@@ -35,11 +35,12 @@ from __future__ import annotations
 
 import contextvars
 import os
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any
 
 from .coletor import ExecutionCollector
-from .eventos import ExecutionEvent
+from .eventos import ExecutionEvent, StatusEvento
 
 # Nome do campo no UsageChamada -> nome do campo no usage_metadata do ADK.
 CAMPOS_USAGE: dict[str, str] = {
@@ -202,6 +203,7 @@ def registrar_usage_adk(event: Any, *, fase: str) -> ExecutionEvent | None:
 
     nome = usage.agente or "chamada_llm"
     detalhes = usage.to_detalhes()
+    status: StatusEvento
     if usage.usage_disponivel:
         status = "sucesso"
     else:

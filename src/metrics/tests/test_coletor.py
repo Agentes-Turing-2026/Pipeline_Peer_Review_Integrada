@@ -9,8 +9,8 @@ SRC = Path(__file__).resolve().parents[2]  # .../src
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from metrics.coletor import ExecutionCollector  # noqa: E402
-from metrics.eventos import ExecutionEvent  # noqa: E402
+from metrics.coletor import ExecutionCollector
+from metrics.eventos import ExecutionEvent
 
 
 def test_run_id_automatico_gera_ids_diferentes_e_nao_vazios():
@@ -78,9 +78,11 @@ def test_fase_sucesso_registra_um_evento_com_duracao():
 
 def test_fase_falha_relevanta_excecao_e_registra_evento_de_falha():
     coletor = ExecutionCollector(run_id="run-5")
-    with pytest.raises(ValueError, match="algo quebrou"):
-        with coletor.fase("fase_1_revisao_independente"):
-            raise ValueError("algo quebrou")
+    with (
+        pytest.raises(ValueError, match="algo quebrou"),
+        coletor.fase("fase_1_revisao_independente"),
+    ):
+        raise ValueError("algo quebrou")
     assert len(coletor.eventos) == 1
     evento = coletor.eventos[0]
     assert evento.tipo == "fase"
@@ -105,9 +107,11 @@ def test_tool_sucesso_registra_um_evento_com_fase_e_duracao():
 
 def test_tool_falha_relevanta_excecao_e_registra_evento_de_falha_com_fase():
     coletor = ExecutionCollector(run_id="run-7")
-    with pytest.raises(RuntimeError, match="tool quebrou"):
-        with coletor.tool("auditar_decisao_final", fase="fase_3_editor_chefe"):
-            raise RuntimeError("tool quebrou")
+    with (
+        pytest.raises(RuntimeError, match="tool quebrou"),
+        coletor.tool("auditar_decisao_final", fase="fase_3_editor_chefe"),
+    ):
+        raise RuntimeError("tool quebrou")
     assert len(coletor.eventos) == 1
     evento = coletor.eventos[0]
     assert evento.tipo == "tool"

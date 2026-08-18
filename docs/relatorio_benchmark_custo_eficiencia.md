@@ -85,15 +85,34 @@ Sem preço configurado e sem entrada reconhecida em nenhuma das três fontes,
 `custo_estimado` permanece `null` — nunca `0` (ausência de preço não é preço
 zero).
 
-**Conectado em `pipeline.py`:** `run_demo()` chama `resolver_precos(config)`
-uma vez por execução e passa `precos=` para as duas chamadas de
-`gerar_resumo()` (sucesso e falha parcial).
+**Custo por chamada (atualização do PR #18).** A versão original desta
+entrega resolvia **um** preço por execução, em `pipeline.run_demo()`, e o
+aplicava ao total agregado de tokens. Isso erra sempre que mais de um modelo
+responde na mesma execução — o editor configurado com um modelo diferente do
+resto do pipeline, ou o fallback do Grupo 3 assumindo no meio da execução.
+O problema foi apontado e corrigido:
+
+- `resolver_precos_por_modelo()` resolve o preço a partir do **modelo que
+  efetivamente respondeu** (campo `detalhes.modelo` do evento, vindo de
+  `event.model_version` do ADK), sem depender do provedor/papel configurado.
+- `gerar_resumo()` precifica **cada evento `tipo="chamada_llm"`
+  individualmente** e soma os custos; quando algum modelo não tem preço
+  resolvido, a soma é sinalizada como **parcial** nos alertas, em vez de
+  fingir um total completo.
+- `pipeline.py` deixou de resolver um preço único para a execução inteira.
+
+Reprodução manual do cenário (dois modelos na mesma execução), sem precisar
+de API: [`scripts/validar_custo_por_chamada.py`](../scripts/validar_custo_por_chamada.py).
 
 ### 3.3. Descobertas ao longo do trabalho
 
-- **A tabela precifica pelo modelo CONFIGURADO, não pelo devolvido pelo
-  ADK** — decisão de design que continua valendo para o caso genérico de um
-  gateway/proxy real que reescreva o nome do modelo na resposta.
+- **A tabela precificava pelo modelo CONFIGURADO, não pelo devolvido pelo
+  ADK.** Era uma proteção contra um gateway/proxy que reescrevesse o nome do
+  modelo na resposta. **Esta decisão foi revertida no PR #18**: o custo agora
+  é resolvido pelo modelo que realmente respondeu, porque o caso comum
+  (editor com modelo próprio, fallback trocando de modelo) é mais frequente e
+  mais caro de errar do que o caso hipotético do proxy — e, para o proxy,
+  continua existindo o override por variável de ambiente, que vence tudo.
 - **`litellm.model_cost` não cobre a Maritaca.** Verificado manualmente:
   nenhuma entrada `"sabia*"` nem `"openai/sabia*"` na tabela do `litellm`.
   Para esse provedor, a camada 3 (tabela estática própria) é a única fonte
@@ -232,37 +251,102 @@ incluindo um teste de integração que roda o par completo em modo mock.
 
 ### 7.1. Suíte de testes
 
-**283 testes passando, 0 pulados** (suíte completa, com todas as
-dependências opcionais instaladas — `liteparse`, `litellm`, `google-adk`,
-`google-genai`). Eram 259 passando / 5 pulados antes de instalar as
-dependências opcionais.
+**327 passando, 0 falhas** na execução do CI
+([run `31834997779`](https://github.com/Agentes-Turing-2026/Pipeline_Peer_Review_Integrada/actions/runs/31834997779),
+Ubuntu, Python 3.14, todas as dependências instaladas). Esta é a medição de
+referência: foi a primeira vez que o passo do Pytest chegou a executar — até
+então o job abortava antes dele (ver `alteracoes_grupo2_corpus_docs_ci.md` §8.1).
 
-### 7.2. Execução real (PDF real, LLM em modo mock)
+Na máquina de desenvolvimento a mesma suíte fecha em **280 passando / 9
+pulados**: os 9 são dependências opcionais ausentes (`liteparse`,
+`google-adk`, `google-genai`), e os arquivos de teste que dependem delas são
+pulados por inteiro — daí a diferença para os 327 do CI. **Testes que envolvem
+ADK ou LiteLLM não são verificáveis localmente**, apenas no CI.
 
-`ablacao_cross_review.py` foi rodado contra um documento real do corpus
-(`icd_hallucinations_2312_15710`) — download real do PDF no arXiv, extração
-real via `liteparse` (15 páginas), com as duas variantes (com/sem leitura
-cruzada) completando a Fase 0 normalmente antes de entrar nas fases mock.
-Isso corrigiu uma lacuna inicial: as primeiras validações tinham usado só o
-artigo de exemplo embutido (sem PDF real), o que teria deixado a Fase 0
-inteiramente sem cobertura nesta entrega.
+> **Intermitência conhecida, de ambiente.** Rodando com o repositório dentro
+> de uma pasta sincronizada pelo **OneDrive** no Windows, ~1 execução em 5
+> falha com `PermissionError: [WinError 5]` no `os.replace()` de
+> `src/persistencia.py:67` (escrita atômica do checkpoint): o OneDrive trava
+> o `.tmp` no instante da troca. **Não é regressão desta branch** — foi
+> reproduzido igual na `origin/dev` limpa — e não afeta o CI, que roda em
+> `ubuntu-latest`. Quem for depurar isso no Windows, mova o clone para fora
+> do OneDrive.
 
-### 7.3. Atualização — uma chamada real foi feita
+### 7.2. Comparação pareada com dados reais — EXECUTADA
 
-Depois da redação original desta seção, o usuário forneceu uma chave real da
-OpenAI para um teste pontual. Foi feita **uma única chamada mínima**
-(`model_provider.completar_texto()`, fora do pipeline completo, para não
-gastar em Fases 1-3 antes de confirmar que a chave/modelo funcionavam) —
-confirmou que o provedor `openai` com `LLM_MODEL=gpt-5.6-luna` responde de
-verdade, e essa investigação foi o que revelou que `"gpt-5.6-luna"` é um
-modelo real da OpenAI, não um gateway/proxy (correção registrada em §3.3).
+**Situação atual: a comparação real foi feita.** São **5 PDFs reais**, cada
+um rodado nas duas variantes (com e sem leitura cruzada) = **10 execuções
+reais do pipeline**, provedor `openai`, modelo `gpt-5.6-luna`, com chamadas
+LLM de verdade e tokens medidos pelo `usage_metadata` do ADK:
 
-**O que continua não validado:** uma execução completa do pipeline (7
-chamadas LLM reais: 3 revisores + 3 leituras cruzadas + 1 editor) com tokens/
-custo/qualidade de ponta a ponta, e a comparação pareada
-(`ablacao_cross_review.py`) com dados reais dos dois lados. Isso depende de
-quanto orçamento o usuário quer gastar — os comandos exatos estão na
-seção 8.
+| Documento | Chamadas (com/sem) | Tokens (com/sem) | Custo estimado US$ (com/sem) |
+|---|---|---|---|
+| `icd_hallucinations_2312_15710` | 7/4 | 156.062/85.153 | 0,0416/0,0241 |
+| `acl_emnlp2024_116` | 7/4 | 115.533/61.612 | 0,0336/0,0192 |
+| `arxiv_2606_00819` | 7/4 | 93.294/49.201 | 0,0292/0,0171 |
+| `comdem_17665` | 7/4 | 123.708/66.156 | 0,0361/0,0206 |
+| `psicologia_slides_ciclo_sono` | 7/4 | 36.713/17.445 | 0,0166/0,0099 |
+
+Total estimado das 10 execuções: **US$ 0,248**. Tabela completa, deltas e
+conclusão calculada em
+[`src/benchmark/resultados/ablacao_cross_review.md`](../src/benchmark/resultados/ablacao_cross_review.md);
+leitura interpretada em
+[`docs/entrega_grupo2_custo_eficiencia.md`](entrega_grupo2_custo_eficiencia.md).
+
+Esta seção antes dizia que a comparação real "continua não validada" — estava
+desatualizada: descrevia o estado do trabalho antes das execuções pagas.
+
+### 7.3. Execuções reais x smoke test em modo mock — separados
+
+O artefato `ablacao_cross_review.{json,md}` também guarda um par
+`exemplo_mock`, em **modo mock**: pareceres lidos de um JSON pré-salvo,
+**nenhuma chamada LLM**, sem tokens e sem custo. Ele existe só para provar
+que a ferramenta roda de ponta a ponta sem gastar API.
+
+Até 13/08/2026 esse par entrava no MESMO agregado das execuções reais, o que
+produzia números errados no `.md` gerado: "6 documentos comparáveis" (eram 5
+reais + 1 mock) e uma média de duração de -17,5% diluída pelo par mock, cuja
+duração é ~0,01 s de I/O. `separar_por_modo()` corrigiu isso — agregados e
+tabelas agora são calculados **só sobre `mode == "api"`**, e o mock aparece
+numa seção própria marcada como smoke test. Com a separação, a duração real é
+**-20,9%** e a decisão mudou em **1/5** documentos, que é exatamente o que a
+tabela conferida à mão no README do grupo já dizia.
+
+### 7.4. O que a avaliação de qualidade NÃO cobre
+
+"Qualidade", em todos os números desta entrega, é medida por **indicadores
+automáticos** extraídos do veredito do editor: quantidade de críticas,
+quantas são bloqueantes, se a decisão final mudou e se as notas por revisor
+mudaram.
+
+**Não houve avaliação humana do conteúdo das críticas** — ninguém leu os
+pareceres para julgar se são pertinentes, corretos ou bem argumentados — e
+também não foi usado um LLM-juiz. A consequência é direta e vale registrar
+sem rodeio: está medido **quanto a leitura cruzada custa** e **se ela muda o
+resultado**; **não** está medido **se ela melhora a revisão**. A pergunta
+original da atividade ("quanto a leitura cruzada melhora a resposta?") só é
+respondida de verdade com leitura humana dos textos de `resposta_aos_pares`
+em cada `final_report.md`, ou com um avaliador automático validado — nenhum
+dos dois está nesta entrega.
+
+Essa ressalva é emitida automaticamente na conclusão gerada
+(`LIMITE_QUALIDADE` em `ablacao_cross_review.py`), com teste que garante que
+ela nunca some do relatório.
+
+### 7.5. Corpus 100% público (13/08/2026)
+
+Todos os documentos do corpus passaram a ter `fonte_url` pública e
+verificada. Os 4 PDFs de psicologia que só existiam em disco
+(`caminho_local` em `cache_pdfs/`, que é gitignored) foram substituídos por
+equivalentes públicos que preservam o papel de cada um no corpus, e o corpus
+cresceu de 10 para **15 documentos** com a inclusão de química e arquitetura
+— ver [`docs/benchmark_reference.md`](benchmark_reference.md).
+
+Impacto nesta seção: dos 5 documentos da comparação real,
+`psicologia_slides_ciclo_sono` era um dos locais e foi aposentado do
+manifesto. O registro da execução **permanece** no
+`ablacao_cross_review.json` (resultado de execução paga não se apaga), mas
+esse documento não é reprodutível por terceiros; os outros 4 são.
 
 ---
 

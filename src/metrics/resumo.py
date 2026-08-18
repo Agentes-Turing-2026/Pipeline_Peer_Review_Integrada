@@ -167,10 +167,14 @@ def _somar_categoria(chamadas: list[ExecutionEvent], categoria: str) -> int | No
     chamadas sem o dado) é permitida e fica auditável pelos alertas dos
     próprios eventos status="aviso".
     """
-    valores = [
-        chamada.detalhes.get(categoria)
+    # ``detalhes`` é ``dict[str, Any]``, então o ``.get`` devolve ``Any | None``
+    # e o filtro por ``is not None`` não estreita o tipo para o mypy. O walrus
+    # com anotação explícita resolve sem mudar o comportamento (e sem chamar
+    # ``.get`` duas vezes por chamada).
+    valores: list[Any] = [
+        valor
         for chamada in chamadas
-        if chamada.detalhes.get(categoria) is not None
+        if (valor := chamada.detalhes.get(categoria)) is not None
     ]
     return sum(valores) if valores else None
 

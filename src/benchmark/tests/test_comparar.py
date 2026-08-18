@@ -11,7 +11,11 @@ SRC = Path(__file__).resolve().parents[2]  # .../src
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from benchmark.comparar import gerar_comparativo, imprimir_comparativo, salvar_comparativo  # noqa: E402
+from benchmark.comparar import (
+    gerar_comparativo,
+    imprimir_comparativo,
+    salvar_comparativo,
+)
 
 
 def _registro(**overrides) -> dict:

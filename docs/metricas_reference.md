@@ -24,10 +24,28 @@ interpreta cada um de um jeito específico:
 | `"tool"` | Uma chamada de tool determinística do Grupo 2 (`validar_completude`, `auditar_decisao_final`). | `nome` identifica a tool; cada evento incrementa `quantidade_tools_chamadas[nome]` em 1. |
 | `"validacao"` | Uma verificação de schema (`validar_com_tentativas`) foi realizada — independente de ter passado de primeira ou não. | Incrementa `quantidade_validacoes`. |
 | `"retry"` | Uma tentativa de retry ocorreu após falha recuperável. | Incrementa `quantidade_retries`. |
-| `"falha"` | Todas as tentativas se esgotaram e a saída foi bloqueada (falha definitiva, não recuperável). | Incrementa `quantidade_falhas`; também marca `status_final = "falha"` se `evento.status == "falha"`. |
+| `"falha"` | Duas situações distintas, separadas pelo `status` do evento: (a) `status="falha"` — todas as tentativas se esgotaram e a saída foi bloqueada (falha definitiva); (b) `status="aviso"` — uma FASE foi interrompida por exceção, registrado por `_fase_medida()` em `pipeline.py`. O caso (b) pode ser recuperado por uma retomada e ainda assim permanece no histórico. Ver a nota abaixo da tabela. | Incrementa `quantidade_falhas` nos dois casos; só marca `status_final = "falha"` quando `evento.status == "falha"`. Com `status="aviso"`, vira uma linha em `alertas` e leva `status_final` a `"sucesso_com_alertas"`. |
 | `"decisao_final"` | A decisão editorial foi consolidada (Fase 4). | Lê `detalhes["decisao"]` e preenche `resumo.decisao_final`. |
 | `"chamada_llm"` | Uma chamada LLM real, registrada por `metrics/adk_usage.py` a partir do `usage_metadata` dos `Event` do ADK (Fases 1-3). | Conta em `chamadas_llm` e agrega os tokens de `detalhes` em `tokens_execucao`, `tokens_totais`, `tokens_por_agente[agente]` e `tokens_por_fase[fase]`; `detalhes["modelo"]` alimenta `modelo_usado`. Ver §5. |
 | `"fallback_llm"` | O modelo principal falhou por motivo TEMPORÁRIO e o pipeline trocou para a opção reserva (`llm_fallback.py`, `LLM_FALLBACK_*`). | `detalhes["evento"]` (`"acionado"`\|`"respondeu"`\|`"esgotado"`) incrementa o contador `quantidade_fallbacks_*` correspondente e vira uma linha em `fallbacks_llm`. Ver §6. |
+
+> [!NOTE]
+> **Por que `tipo="falha"` deixou de significar só "falha definitiva".**
+> `coletor.fase(nome)` já registrava, sozinho, um evento `tipo="fase",
+> status="falha"` no instante da exceção — é o que faz o resumo IMEDIATO
+> mostrar `status_final="falha"`. Mas esse evento é filtrado do estado
+> persistido no `except` de `run_demo()`, para que uma retomada bem-sucedida
+> não herde `status_final="falha"` de um problema já resolvido; e
+> `quantidade_falhas` conta apenas `tipo="falha"`, não `tipo="fase"`.
+> Resultado: uma fase interrompida nunca incrementava `quantidade_falhas` —
+> o "falhas: 0" que o gerente do projeto apontou na demo de persistência.
+> `_fase_medida()` passou a emitir um SEGUNDO evento, `tipo="falha"` com
+> `status="aviso"`, escolhido de propósito: atravessa o filtro do `except`
+> (que só remove `status="falha"`) e por isso volta na retomada, sem
+> reacender `houve_falha`. A interrupção fica no histórico mesmo quando a
+> retomada termina bem. Quem lê `quantidade_falhas` precisa, portanto,
+> olhar o `status` dos eventos para separar falha definitiva de fase
+> interrompida e depois recuperada.
 
 Duas convenções cruzam **qualquer** tipo de evento, não só um:
 
@@ -99,7 +117,7 @@ Snapshot agregado de uma lista de `ExecutionEvent`, produzido por
 | `status_final` | `str` | `"sucesso"` \| `"sucesso_com_alertas"` \| `"falha"` (ver regra de prioridade em §1). |
 | `alertas` | `list[str]` | Uma entrada por evento com `status="aviso"`, no formato `"[fase] mensagem"`. |
 | `tokens_totais` | `int \| None` | Soma de `tokens_total` das chamadas LLM onde o ADK informou consumo. `None` = nenhuma medição disponível (ex.: modo mock) — **nunca 0 no lugar de "não medido"** (ver §5). |
-| `custo_estimado` | `float \| None` | Preenchido apenas quando `gerar_resumo()` recebe preço configurado (`precos=...`); consumo real e preço nunca se misturam (ver §5.3). |
+| `custo_estimado` | `float \| None` | **Estimativa**, nunca valor faturado: soma do custo de CADA chamada LLM, cada uma precificada pelo modelo que respondeu nela (`detalhes.modelo`). `None` quando nenhum preço foi resolvido — nunca `0`. Consumo real (tokens) e preço (configuração) nunca se misturam (ver §5.3). |
 | `modelo_usado` | `str \| None` | Modelo(s) informado(s) pelo ADK (`model_version`). Um modelo → o nome dele; vários → nomes únicos ordenados, separados por `", "`. |
 | `chamadas_llm` | `int \| None` | Total de eventos `tipo="chamada_llm"`. `None` quando não houve nenhum. |
 | `tokens_execucao` | `dict[str, int \| None] \| None` | Totais da execução por categoria: `tokens_entrada`, `tokens_resposta`, `tokens_pensamento`, `tokens_cache`, `tokens_total`. Valor `None` numa categoria = nenhuma chamada informou aquela categoria. `None` no campo inteiro = nenhuma chamada LLM. |
@@ -241,14 +259,36 @@ resposta é gravado nas métricas.
 
 ### 5.3. Custo (ativado)
 
-`custo_estimado` é preenchido quando `gerar_resumo()` recebe `precos=` — em
-`pipeline.py`, `run_demo()` sempre passa `precos=resolver_precos(config)`
-(`metrics/precos_modelos.py`), resolvido UMA vez por execução, antes de rodar
-o pipeline. Consumo real (tokens, do ADK) e preço (configurado) continuam
-vindo de fontes diferentes por construção — só se combinam na multiplicação
-final (`estimar_custo_usd`).
+> **`custo_estimado` é ESTIMATIVA, não valor faturado.** Ele é
+> `tokens medidos × preço de tabela`. Nenhuma API de billing do provedor é
+> consultada. Divergências com a cobrança real são esperadas quando o preço
+> de tabela estiver desatualizado, quando a conta tiver desconto/crédito, ou
+> quando o provedor cobrar itens que a contagem de tokens não captura. O
+> consumo é **medido**; o preço é **configuração**.
 
-`resolver_precos(config, papel=None)` decide o preço nesta ordem:
+**Precificação por chamada.** `gerar_resumo()` percorre os eventos
+`tipo="chamada_llm"` e precifica **cada um** pelo modelo que respondeu
+naquela chamada (`detalhes["modelo"]`, vindo do `model_version` do ADK), via
+`resolver_precos_por_modelo()`; o total é a soma dessas parcelas. Um preço
+único aplicado ao total agregado de tokens erra sempre que mais de um modelo
+participa da mesma execução — o editor configurado com modelo próprio, ou o
+fallback do Grupo 3 trocando de modelo no meio. Quando algum modelo não tem
+preço resolvido, a soma vira **parcial** e isso é sinalizado nos `alertas`,
+em vez de o resumo apresentar um total incompleto como se fosse completo.
+
+`precos_override` (o parâmetro `precos=` de `gerar_resumo()`) continua
+existindo: ele força um preço FIXO em TODAS as chamadas, para uso explícito
+do chamador (testes, ou um contrato de preço que nenhuma fonte automática
+conhece).
+
+Consumo real (tokens, do ADK) e preço (configurado) continuam vindo de
+fontes diferentes por construção — só se combinam na multiplicação final
+(`estimar_custo_usd`).
+
+`resolver_precos(config, papel=None)` — usado quando se quer o preço do
+provedor/modelo CONFIGURADO — decide nesta ordem (a mesma precedência vale
+para `resolver_precos_por_modelo()`, que parte do nome do modelo em vez da
+config):
 
 1. **Variável de ambiente** (`precos_de_ambiente()`): `GRUPO2_PRECO_USD_MILHAO_TOKENS_ENTRADA`
    e `GRUPO2_PRECO_USD_MILHAO_TOKENS_SAIDA` — as DUAS precisam estar
@@ -278,15 +318,17 @@ final (`estimar_custo_usd`).
 4. **`None`**: nem variável de ambiente, nem litellm, nem entrada na tabela
    oficial — `custo_estimado` permanece `None` (custo desconhecido, nunca 0).
 
-**A tabela precifica pelo modelo CONFIGURADO, não pelo `model_version` cru
-que o ADK devolve.** Os dois PODEM divergir — em geral, se o provedor da
-execução for um gateway/proxy que reescreve o nome do modelo na resposta.
-Precificar pelo nome CONFIGURADO (o que a chave de API de fato contratou) é
-robusto a essa divergência; precificar pelo nome devolvido não seria — por
-isso `resolver_precos` nunca olha para `detalhes["modelo"]` dos eventos
-`chamada_llm`. Se o provedor da sua execução for um gateway com tabela de
-preço própria (diferente da pública), configure o preço real via ambiente
-(prioridade 1) em vez de confiar no fallback da tabela.
+**Mudança de decisão (PR #18): passou-se a precificar pelo modelo que
+RESPONDEU, não pelo CONFIGURADO.** A versão original desta seção precificava
+tudo pelo modelo configurado, para ser robusta a um gateway/proxy que
+reescrevesse o nome do modelo na resposta. O trade-off foi reavaliado: o caso
+de "mais de um modelo na mesma execução" (editor com modelo próprio, fallback
+assumindo no meio) é **frequente e caro de errar**, enquanto o do gateway é
+hipotético neste projeto — e, para ele, o override por variável de ambiente
+(prioridade 1) continua vencendo tudo. Por isso `gerar_resumo()` agora usa
+`detalhes["modelo"]` de cada evento `chamada_llm`. Se o provedor da sua
+execução for um gateway com tabela de preço própria, configure o preço real
+via ambiente em vez de confiar na tabela.
 
 > **Nota de correção (2026-08-06):** uma versão anterior deste parágrafo
 > citava `model_version="gpt-5.6-luna"` (visto num registro real do

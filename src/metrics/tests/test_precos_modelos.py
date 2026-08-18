@@ -14,14 +14,6 @@ SRC = Path(__file__).resolve().parents[2]  # .../src
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from metrics.adk_usage import PrecosModelo, VAR_PRECO_ENTRADA, VAR_PRECO_SAIDA  # noqa: E402
-from metrics.precos_modelos import (  # noqa: E402
-    _preco_via_litellm,
-    fonte_oficial,
-    preco_oficial,
-    resolver_precos,
-)
-
 # ``resolver_precos`` importa ``model_provider`` (e ``_preco_via_litellm``
 # importa ``litellm``) de forma PREGUIÇOSA — só na primeira chamada. Os dois
 # módulos chamam ``load_dotenv()`` na própria importação. Se essa primeira
@@ -33,9 +25,21 @@ from metrics.precos_modelos import (  # noqa: E402
 # hitaria isso. Importar aqui, na coleta (antes de qualquer fixture rodar),
 # garante que o ``load_dotenv()`` de cada módulo dispare só uma vez, cedo,
 # e que o ``monkeypatch.delenv`` de cada teste realmente valha depois.
-import model_provider  # noqa: E402,F401
+import model_provider  # noqa: F401
+from metrics.adk_usage import (
+    VAR_PRECO_ENTRADA,
+    VAR_PRECO_SAIDA,
+    PrecosModelo,
+)
+from metrics.precos_modelos import (
+    _preco_via_litellm,
+    fonte_oficial,
+    preco_oficial,
+    resolver_precos,
+)
+
 try:
-    import litellm  # noqa: E402,F401
+    import litellm  # noqa: F401
 except ImportError:
     pass
 
@@ -197,7 +201,7 @@ def test_resolver_precos_maritaca_cai_para_tabela_oficial_mesmo_com_litellm_inst
 
 def test_resolver_precos_cai_para_tabela_oficial_quando_litellm_nao_acha_o_modelo(monkeypatch):
     """Modelo reconhecido pela tabela oficial, mas ausente do litellm."""
-    import metrics.precos_modelos as precos_modelos
+    from metrics import precos_modelos
 
     monkeypatch.setattr(precos_modelos, "_preco_via_litellm", lambda provider, modelo: None)
     precos = precos_modelos.resolver_precos({"provider": "gemini", "model": "gemini-2.5-flash"})
@@ -206,7 +210,7 @@ def test_resolver_precos_cai_para_tabela_oficial_quando_litellm_nao_acha_o_model
 
 def test_resolver_precos_prefere_litellm_quando_diverge_da_tabela_oficial(monkeypatch):
     """Se litellm e a tabela oficial divergissem, litellm venceria (é a fonte mais viva)."""
-    import metrics.precos_modelos as precos_modelos
+    from metrics import precos_modelos
 
     preco_falso = PrecosModelo(usd_por_milhao_tokens_entrada=123.0, usd_por_milhao_tokens_saida=456.0)
     monkeypatch.setattr(precos_modelos, "_preco_via_litellm", lambda provider, modelo: preco_falso)

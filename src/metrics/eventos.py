@@ -10,7 +10,7 @@ diretamente para conceitos de span/trace no futuro (ver docs/metricas_reference.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Literal
 
 TipoEvento = Literal[
@@ -28,7 +28,7 @@ class ExecutionEvent:
     tipo: TipoEvento
     nome: str
     status: StatusEvento
-    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    timestamp: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     duracao_s: float | None = None
     """Duração medida do que o evento representa, em segundos (float, precisão total)."""
     detalhes: dict[str, Any] = field(default_factory=dict)
@@ -47,7 +47,7 @@ class ExecutionEvent:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "ExecutionEvent":
+    def from_dict(cls, data: dict[str, Any]) -> ExecutionEvent:
         """Reconstrói um ExecutionEvent a partir de um dict (ex.: lido de JSON).
 
         Compatibilidade transitória: antes da migração do contrato de duração

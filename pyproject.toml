@@ -1,0 +1,91 @@
+[project]
+name = "pipeline-peer-review-integrada"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Marcelo Soares",email = "160295912+marcelonosoaresprogram@users.noreply.github.com"}
+]
+readme = "README.md"
+requires-python = ">=3.14,<4.0"
+dependencies = [
+    "pydantic (==2.13.4)",
+    "python-dotenv (==1.2.2)",
+    "google-adk (==1.27.5)",
+    "google-genai (==1.67.0)",
+    "liteparse (==2.6.0)",
+    "litellm (==1.82.6)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[dependency-groups]
+dev = [
+    "pytest (==9.1.1)",
+    "ruff (>=0.16.2,<0.17.0)",
+    "mypy (>=2.3.0,<3.0.0)",
+    "bandit (>=1.9.4,<2.0.0)"
+]
+
+# O CI rodava `ruff check src/` sem NENHUMA secao [tool.ruff] no repositorio, ou
+# seja, na regua padrao da versao do ruff que estivesse instalada. Isso torna o
+# resultado do lint dependente da versao da ferramenta, e nao do codigo: o
+# padrao do ruff 0.16 acusa 167 apontamentos, e o padrao classico documentado
+# (E4, E7, E9, F) acusa 37 — na MESMA arvore, sem uma linha de diferenca.
+#
+# Dos 167, 85 eram RUF100 ("unused noqa"): sao os `# noqa: E402` espalhados
+# pelo codigo. Eles foram escritos porque o time programava contra uma regua com
+# E402 ligado; como o padrao do 0.16 nao liga E402, cada comentario virou
+# "diretiva inutil". Nao e divida de codigo, e efeito de nao haver configuracao
+# fixada. Outros ~34 sao regras opinativas (SIM117, BLE001, RUF059, S110) que o
+# projeto nunca escolheu adotar.
+#
+# Fixar `select` aqui e o que impede o CI de mudar de veredito sozinho quando o
+# ruff lancar uma versao nova. O conjunto adotado e o padrao DOCUMENTADO da
+# ferramenta, nao um recorte conveniente para ficar verde.
+#
+# E402 fica em `ignore` por um motivo estrutural: praticamente todo modulo deste
+# repositorio faz `sys.path.insert(...)` antes de importar os irmaos, entao o
+# import fora do topo e o padrao do projeto, nao um deslize pontual. O codigo ja
+# reconhece isso em 85 `# noqa: E402` — desligar a regra em um lugar so e mais
+# honesto que mante-los espalhados. Os noqa ficam inertes e podem ser removidos
+# por cada dono quando passar pelo arquivo.
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+ignore = ["E402"]
+
+# Mesma logica do Bandit abaixo: os diretorios de teste ficam fora do type
+# check. `assert`, monkeypatch e stubs de teste disparam erros de tipo que nao
+# indicam defeito em codigo de producao.
+[tool.mypy]
+exclude = ["tests"]
+
+# O Bandit sai com codigo 1 se encontrar QUALQUER issue, e a suite de testes
+# gera 835 alertas B101 (assert_used) — 100% deles dentro de tests/, nenhum em
+# codigo de producao. Isso deixava o passo de seguranca vermelho em todo PR,
+# independente do que o PR mexesse, e um check que sempre falha e um check que
+# ninguem le.
+#
+# A escolha aqui e EXCLUIR os diretorios de teste, e nao desligar a regra com
+# skips = ["B101"]. O motivo: `assert` em codigo de producao continua sendo um
+# problema real (o interpretador roda com -O em varios deploys e remove os
+# asserts, junto com a verificacao que eles faziam). Desligar B101 global
+# perderia isso; excluir tests/ mantem a regra ativa exatamente onde ela
+# importa.
+#
+# ATENCAO: o Bandit NAO le este arquivo sozinho. O passo do CI precisa passar
+# `-c pyproject.toml` explicitamente — sem a flag esta secao e ignorada em
+# silencio e os 835 asserts voltam. Nao e preciso o extra `bandit[toml]`: o
+# Bandit usa `tomllib` da stdlib, presente desde o Python 3.11 (o CI roda
+# 3.14). Manter a dependencia como `bandit` puro tambem evita invalidar o
+# content-hash do poetry.lock.
+#
+# Os padroes usam glob com curinga em vez de caminhos literais
+# ("src/metrics/tests"): o Bandit casa o padrao contra o caminho como o SO o
+# escreve, e no Windows o separador e "\", entao um padrao com "/" so pega o
+# primeiro nivel e deixa passar src/metrics/tests, src/tools/tests etc.
+# "*tests*" casa nos dois sistemas.
+[tool.bandit]
+exclude_dirs = ["*tests*"]

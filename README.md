@@ -38,13 +38,25 @@ orquestração.
 
 ```
 .
-├── README.md                    # este arquivo
+├── README.md                    # este arquivo — ÚNICO README na raiz
 ├── main.py                      # ponto de entrada: roda TODO o pipeline
 ├── requirements.txt             # dependências Python
+├── pyproject.toml               # config das ferramentas do CI (ruff, mypy, bandit) + poetry
 ├── .env.example                 # template das variáveis de ambiente (modo API)
-├── docs/
+├── .github/
+│   └── workflows/ci.yml         # CI: lint, tipagem, segurança e testes a cada push/PR
+├── scripts/
+│   └── validar_custo_por_chamada.py # reproduz custo com 2 modelos na mesma execução, sem API
+├── docs/                        # toda a documentação longa vive aqui, nada de .md solto na raiz
 │   ├── schema_reference.md       # documentação técnica detalhada dos schemas
-│   └── persistencia_e_retomada.md # Grupo 1 — relatório técnico de checkpoint/retomada
+│   ├── persistencia_e_retomada.md # Grupo 1 — relatório técnico de checkpoint/retomada
+│   ├── metricas_reference.md     # Grupo 2 — schema de métricas e precedência de custo
+│   ├── benchmark_reference.md    # Grupo 2 — schema do benchmark, achados e limitações
+│   ├── entrega_grupo2_custo_eficiencia.md      # Grupo 2 — resumo de entrada da entrega
+│   ├── relatorio_benchmark_custo_eficiencia.md # Grupo 2 — relatório técnico completo
+│   ├── alteracoes_grupo2_corpus_docs_ci.md     # Grupo 2 — antes/depois da última rodada de revisão
+│   ├── tools_reference.md        # Grupo 2 — tools determinísticas e tabela de conversão
+│   └── apresentacao_*.md         # material de apresentação (registro histórico, não normativo)
 └── src/
     ├── pipeline_base.py          # Orquestração GENÉRICA (Pipeline, PipelinePhase, PipelineContext)
     ├── pipeline.py               # As 4 fases concretas + modos (API/Mock) + demo
@@ -858,17 +870,28 @@ Regras importantes (detalhes e schema em
 - **Agregação:** `tokens_execucao` (categorias da execução completa),
   `tokens_por_agente` e `tokens_por_fase` (soma de `tokens_total`), além de
   `chamadas_llm` e `modelo_usado`.
-- **Custo ativado.** `custo_estimado` é calculado sempre que há tokens
-  medidos E um preço resolvido para a execução. O preço vem, em ordem: (1)
+- **Custo ativado — e ESTIMADO, não faturado.** `custo_estimado` é
+  `tokens medidos × preço de tabela`. **Não** vem de nenhuma API de billing do
+  provedor: pode divergir da fatura se o preço de tabela estiver
+  desatualizado, se a conta tiver desconto/crédito, ou se o provedor cobrar
+  algo que os tokens não capturam. O consumo é medido; o preço é
+  configuração — e os dois nunca se misturam no código.
+- **Somado chamada a chamada.** Cada evento `tipo="chamada_llm"` é
+  precificado pelo **modelo que respondeu naquela chamada** (`detalhes.modelo`,
+  vindo do `model_version` do ADK) e os custos são somados. Um preço único
+  aplicado ao total agregado erraria sempre que mais de um modelo participa da
+  execução — editor com modelo próprio, ou fallback trocando de modelo no meio.
+  Se algum modelo ficar sem preço resolvido, a soma é sinalizada como
+  **parcial** nos alertas em vez de se passar por total.
+- O preço de cada chamada vem, em ordem: (1)
   `GRUPO2_PRECO_USD_MILHAO_TOKENS_ENTRADA`/`_SAIDA`, se as DUAS estiverem
   configuradas — override manual, sempre vence; (2) `litellm.model_cost`, se
   o pacote `litellm` estiver instalado (já é dependência do projeto para
   Maritaca/OpenAI — aqui só reaproveitamos a tabela de preços que ele já
   mantém, sem dependência nova; não cobre a Maritaca); (3) senão, a tabela de
-  preços OFICIAIS de `metrics/precos_modelos.py`, indexada pelo
-  provedor/modelo que a execução já resolveu via `model_provider`. Sem preço
-  configurado e sem entrada reconhecida em nenhuma fonte, `custo_estimado`
-  permanece `null` — nunca `0`. Ver
+  preços OFICIAIS de `metrics/precos_modelos.py`. Sem preço configurado e sem
+  entrada reconhecida em nenhuma fonte, `custo_estimado` permanece `null` —
+  nunca `0`. Ver
   [`docs/metricas_reference.md §5.3`](docs/metricas_reference.md).
 - No modo **mock** não há chamada LLM — a seção de tokens indica isso
   explicitamente, e todos os campos ficam `null`/`n/d`.
@@ -1223,14 +1246,26 @@ de críticas):
 # Cada doc_id roda DUAS vezes — em modo api, o dobro do custo de executar.py
 .venv/bin/python -m src.benchmark.ablacao_cross_review --mode mock --docs exemplo_mock
 .venv/bin/python -m src.benchmark.ablacao_cross_review --mode api --docs icd_hallucinations_2312_15710
+
+# Recalcula a conclusão e reescreve o .json/.md a partir dos pares JÁ gravados,
+# sem executar nada (use depois de mudar a lógica de relatório — não paga API):
+.venv/bin/python -m src.benchmark.ablacao_cross_review --regerar
 ```
 
 Resultado em [`src/benchmark/resultados/ablacao_cross_review.md`](src/benchmark/resultados/ablacao_cross_review.md)
 (tabela) e `.json` (dados completos, inclusive os dois registros brutos de
-cada lado). A "qualidade" comparada é um proxy OBJETIVO (críticas, notas,
-decisão) — o texto das críticas em si (`final_report.md` de cada execução)
-ainda precisa de leitura humana para uma conclusão qualitativa completa; a
-ferramenta prepara os números, não substitui essa leitura.
+cada lado). **Execuções reais (`--mode api`) e o smoke test em modo mock
+aparecem em seções separadas**, e os agregados são calculados só sobre as
+reais — o mock não faz chamada LLM nem mede tokens, então incluí-lo na média
+só distorce o número.
+
+> **O que "qualidade" significa aqui.** São **indicadores automáticos**:
+> quantidade de críticas, quantas são bloqueantes, se a decisão final mudou e
+> se as notas por revisor mudaram. **Nenhuma pessoa leu o conteúdo das
+> críticas** e não há LLM-juiz. Isso mede **quanto a leitura cruzada custa** e
+> **se ela muda** o resultado — **não** se ela o **melhora**. Para isso, é
+> preciso ler o texto de `resposta_aos_pares` em cada `final_report.md`; a
+> ferramenta prepara os números, não substitui essa leitura.
 
 ---
 
