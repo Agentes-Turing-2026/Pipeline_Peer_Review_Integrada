@@ -50,7 +50,7 @@ from review_schema import (  # noqa: E402
     validar_review,
 )
 from model_provider import descricao_modelo, resolver_config  # noqa: E402
-from validacao_retry import validar_com_tentativas  # noqa: E402
+from validacao_retry import dados_validados, validar_com_tentativas  # noqa: E402
 from reviewer_agent import REVIEWERS, _require_api_key, _run_reviewers  # noqa: E402
 from cross_review import _run_cross_review  # noqa: E402
 from editor_agent import _run_editor  # noqa: E402
@@ -351,7 +351,7 @@ class IndependentReviewPhase(PipelinePhase[str, IndependentReviews]):
                         payloads[rid], validar_review, mode, rid,
                         run_id=context.run_id, fase=self.name,
                     )
-                    reviews[rid] = resultado.dados
+                    reviews[rid] = dados_validados(resultado)
                     logger.info("Validação Fase 1 '%s': tentativas=%d", rid, resultado.tentativas_usadas)
                     _registrar_validacao(coletor, fase=self.name, agente=rid, resultado=resultado)
                     emit_event(
@@ -370,7 +370,7 @@ class IndependentReviewPhase(PipelinePhase[str, IndependentReviews]):
                         payload, validar_review, mode, rid,
                         run_id=context.run_id, fase=self.name,
                     )
-                    reviews[rid] = resultado.dados
+                    reviews[rid] = dados_validados(resultado)
                     logger.info("Validação Fase 1 '%s': tentativas=%d", rid, resultado.tentativas_usadas)
                     _registrar_validacao(coletor, fase=self.name, agente=rid, resultado=resultado)
                     emit_event(
@@ -458,7 +458,7 @@ class CrossReviewPhase(PipelinePhase[IndependentReviews, CrossReviews]):
                         payload, validar_cross_review, mode, rid,
                         run_id=context.run_id, fase=self.name,
                     )
-                    cross[rid] = resultado.dados
+                    cross[rid] = dados_validados(resultado)
                     logger.info("Fase 2 '%s': leitura cruzada desativada, parecer mantido.", rid)
                     _registrar_validacao(coletor, fase=self.name, agente=rid, resultado=resultado)
                     emit_event(
@@ -474,7 +474,7 @@ class CrossReviewPhase(PipelinePhase[IndependentReviews, CrossReviews]):
                         payloads[rid], validar_cross_review, mode, rid,
                         run_id=context.run_id, fase=self.name,
                     )
-                    cross[rid] = resultado.dados
+                    cross[rid] = dados_validados(resultado)
                     logger.info("Validação Fase 2 '%s': tentativas=%d", rid, resultado.tentativas_usadas)
                     _registrar_validacao(coletor, fase=self.name, agente=rid, resultado=resultado)
                     emit_event(
@@ -498,7 +498,7 @@ class CrossReviewPhase(PipelinePhase[IndependentReviews, CrossReviews]):
                         payload, validar_cross_review, mode, rid,
                         run_id=context.run_id, fase=self.name,
                     )
-                    cross[rid] = resultado.dados
+                    cross[rid] = dados_validados(resultado)
                     logger.info("Validação Fase 2 '%s': tentativas=%d", rid, resultado.tentativas_usadas)
                     _registrar_validacao(coletor, fase=self.name, agente=rid, resultado=resultado)
                     emit_event(
@@ -545,7 +545,7 @@ class EditorVerdictPhase(PipelinePhase[CrossReviews, EditorVerdictSchema]):
                     payload, validar_editor_verdict, mode, "editor",
                     run_id=context.run_id, fase=self.name,
                 )
-                verdict = resultado.dados
+                verdict = dados_validados(resultado)
                 logger.info("Validação Fase 3 'editor': tentativas=%d", resultado.tentativas_usadas)
                 _registrar_validacao(coletor, fase=self.name, agente="editor", resultado=resultado)
                 emit_event(
@@ -559,7 +559,7 @@ class EditorVerdictPhase(PipelinePhase[CrossReviews, EditorVerdictSchema]):
                     verdict_payload, validar_editor_verdict, mode, "editor",
                     run_id=context.run_id, fase=self.name,
                 )
-                verdict = resultado.dados
+                verdict = dados_validados(resultado)
                 logger.info("Validação Fase 3 'editor': tentativas=%d", resultado.tentativas_usadas)
                 _registrar_validacao(coletor, fase=self.name, agente="editor", resultado=resultado)
                 emit_event(
