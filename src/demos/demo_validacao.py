@@ -32,6 +32,7 @@ from validacao_retry import (  # noqa: E402
     PipelineValidationError,
     ResultadoValidacao,
     corrigir_saida_mock,
+    dados_validados,
     validar_com_tentativas,
 )
 
@@ -105,8 +106,8 @@ def caso_1() -> None:
     dados = _carregar("example_valid_output.json")
     resultado = validar_com_tentativas(dados, validar_review, MODO_MOCK, "statistician")
     _passou(resultado)
-    print(f"  revisor  : {resultado.dados.revisor}")
-    print(f"  nota_geral: {resultado.dados.nota_geral.nota}")
+    print(f"  revisor  : {dados_validados(resultado).revisor}")
+    print(f"  nota_geral: {dados_validados(resultado).nota_geral.nota}")
 
 
 def caso_2() -> None:
@@ -178,8 +179,8 @@ def caso_5() -> None:
     entrada = dados_completos["statistician_cross_review"]
     resultado = validar_com_tentativas(entrada, validar_cross_review, MODO_MOCK, "statistician")
     _passou(resultado)
-    print(f"  mudou_posicao: {resultado.dados.mudou_posicao}")
-    print(f"  mudancas     : {len(resultado.dados.mudancas)} entrada(s)")
+    print(f"  mudou_posicao: {dados_validados(resultado).mudou_posicao}")
+    print(f"  mudancas     : {len(dados_validados(resultado).mudancas)} entrada(s)")
 
 
 def caso_6() -> None:
@@ -204,9 +205,9 @@ def caso_7() -> None:
     dados = _carregar("example_editor_verdict_output.json")
     resultado = validar_com_tentativas(dados, validar_editor_verdict, MODO_MOCK, "editor")
     _passou(resultado)
-    print(f"  decisao      : {resultado.dados.decisao}")
-    print(f"  criticas     : {len(resultado.dados.criticas)}")
-    print(f"  recomendacoes: {len(resultado.dados.recomendacoes_aos_autores)}")
+    print(f"  decisao      : {dados_validados(resultado).decisao}")
+    print(f"  criticas     : {len(dados_validados(resultado).criticas)}")
+    print(f"  recomendacoes: {len(dados_validados(resultado).recomendacoes_aos_autores)}")
 
 
 def caso_8() -> None:
