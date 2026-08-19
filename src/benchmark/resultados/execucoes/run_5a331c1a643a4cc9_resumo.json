@@ -1,0 +1,53 @@
+{
+  "run_id": "run_5a331c1a643a4cc9",
+  "duracao_total_s": 54.540281643974595,
+  "duracao_soma_fases_s": 54.480940814944915,
+  "duracao_por_fase_s": {
+    "fase_0_extracao_pdf": 0.32764322095317766,
+    "fase_1_revisao_independente": 13.981878669001162,
+    "fase_2_leitura_cruzada": 13.876715889025945,
+    "fase_3_editor_chefe": 26.293822194973473,
+    "fase_4_relatorio_final": 0.0008808409911580384
+  },
+  "quantidade_validacoes": 7,
+  "quantidade_retries": 0,
+  "quantidade_falhas": 0,
+  "quantidade_tools_chamadas": {
+    "validar_completude": 3,
+    "auditar_decisao_final": 1,
+    "checar_coerencia": 1
+  },
+  "requer_revisao_humana": false,
+  "decisao_final": 2,
+  "status_final": "sucesso",
+  "alertas": [],
+  "tokens_totais": 168983,
+  "custo_estimado": 0.0458436,
+  "modelo_usado": "gpt-5.6-luna",
+  "chamadas_llm": 7,
+  "tokens_execucao": {
+    "tokens_entrada": 156936,
+    "tokens_resposta": 12047,
+    "tokens_pensamento": 766,
+    "tokens_cache": 0,
+    "tokens_total": 168983
+  },
+  "tokens_por_agente": {
+    "domain_expert_reviewer": 21310,
+    "statistician_reviewer": 21426,
+    "copyeditor_reviewer": 21385,
+    "statistician_reviewer_cross": 25895,
+    "copyeditor_reviewer_cross": 25740,
+    "domain_expert_reviewer_cross": 26128,
+    "editor_in_chief": 27099
+  },
+  "tokens_por_fase": {
+    "fase_1_revisao_independente": 64121,
+    "fase_2_leitura_cruzada": 77763,
+    "fase_3_editor_chefe": 27099
+  },
+  "quantidade_fallbacks_acionados": 0,
+  "quantidade_fallbacks_respondidos": 0,
+  "quantidade_fallbacks_esgotados": 0,
+  "fallbacks_llm": []
+}
