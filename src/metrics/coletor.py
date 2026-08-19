@@ -29,6 +29,18 @@ from uuid import uuid4
 
 from .eventos import ExecutionEvent, StatusEvento, TipoEvento
 
+# Chaves que ``detalhes`` (registrar()) nunca pode usar: são os campos
+# estruturais do evento (mais chave_dedup, parâmetro de controle de
+# registrar()). Sem essa checagem, um detalhe chamado por acidente
+# "duracao_s" ou "chave_dedup" — ex.: um dict externo espalhado via
+# ``**detalhes`` que ganhou esse campo depois — se encaixaria no parâmetro
+# nomeado de mesmo nome (a prioridade de binding do Python é do parâmetro
+# explícito, não do catch-all) e substituiria o valor real em silêncio, sem
+# TypeError e sem warning: a métrica sairia errada e ninguém saberia.
+_CHAVES_RESERVADAS_DETALHES: frozenset[str] = frozenset(
+    {"run_id", "fase", "tipo", "nome", "status", "timestamp", "duracao_s", "detalhes", "chave_dedup"}
+)
+
 # Fase da execução em curso, válida durante um `with coletor.fase(nome): ...`.
 # Mesmo padrão de contexto global do tracer (Grupo 3): permite que código que
 # não recebe `fase` por parâmetro (ex.: llm_fallback.py, chamado de dentro do
@@ -120,7 +132,7 @@ class ExecutionCollector:
         status: StatusEvento,
         duracao_s: float | None = None,
         chave_dedup: str | None = None,
-        **detalhes: Any,
+        detalhes: dict[str, Any] | None = None,
     ) -> ExecutionEvent | None:
         """Registra um evento genérico e devolve o ExecutionEvent criado.
 
@@ -131,7 +143,21 @@ class ExecutionCollector:
         ``invocation_id + author`` (o mesmo evento pode reaparecer no streaming;
         parciais têm usage cumulativo e só o final deve contar). Eventos sem
         chave seguem o comportamento de sempre: todo registro entra.
+
+        ``detalhes`` é um dict explícito, não kwargs soltos — quem quiser anexar
+        campos livres ao evento (``erro``, ``agente``, ``tokens_entrada`` etc.)
+        passa ``detalhes={...}``. Isso existe para que nenhuma chave arbitrária
+        possa colidir com os parâmetros estruturais (``duracao_s``,
+        ``chave_dedup`` etc.): levanta ``ValueError`` se ``detalhes`` usar uma
+        das chaves reservadas, em vez de deixar o valor real ser sobrescrito
+        sem aviso.
         """
+        detalhes_dict = dict(detalhes or {})
+        colisoes = _CHAVES_RESERVADAS_DETALHES & detalhes_dict.keys()
+        if colisoes:
+            raise ValueError(
+                f"detalhes não pode usar chave(s) reservada(s) do evento: {sorted(colisoes)}"
+            )
         if chave_dedup is not None:
             if chave_dedup in self._chaves_dedup:
                 return None
@@ -143,7 +169,7 @@ class ExecutionCollector:
             nome=nome,
             status=status,
             duracao_s=duracao_s,
-            detalhes=dict(detalhes),
+            detalhes=detalhes_dict,
         )
         self._eventos.append(evento)
         return evento
@@ -164,7 +190,8 @@ class ExecutionCollector:
             duracao_s = time.perf_counter() - inicio
             self.registrar(
                 fase=nome, tipo="fase", nome=nome, status="falha",
-                duracao_s=duracao_s, erro=str(exc), erro_tipo=type(exc).__name__,
+                duracao_s=duracao_s,
+                detalhes={"erro": str(exc), "erro_tipo": type(exc).__name__},
             )
             raise
         else:
@@ -187,7 +214,8 @@ class ExecutionCollector:
             duracao_s = time.perf_counter() - inicio
             self.registrar(
                 fase=fase, tipo="tool", nome=nome, status="falha",
-                duracao_s=duracao_s, erro=str(exc), erro_tipo=type(exc).__name__,
+                duracao_s=duracao_s,
+                detalhes={"erro": str(exc), "erro_tipo": type(exc).__name__},
             )
             raise
         else:

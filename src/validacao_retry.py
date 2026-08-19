@@ -39,7 +39,7 @@ import json
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Generic, TypeVar
 
 from pydantic import ValidationError
 
@@ -67,10 +67,16 @@ MAX_TENTATIVAS: int = 3
 # Tipos de resultado
 # ---------------------------------------------------------------------------
 
+T = TypeVar("T")
+
 
 @dataclass
-class ResultadoValidacao:
+class ResultadoValidacao(Generic[T]):
     """Resultado completo de uma rodada de validação com retry.
+
+    Genérica em ``T`` — o schema Pydantic validado (``ReviewSchema``,
+    ``CrossReviewSchema``, ``EditorVerdictSchema``, ...) — para que o Mypy
+    saiba o tipo real de ``dados`` em cada call site, em vez de ``Any``.
 
     Attributes
     ----------
@@ -87,10 +93,26 @@ class ResultadoValidacao:
     """
 
     sucesso: bool
-    dados: Any | None
+    dados: T | None
     tentativas_usadas: int
     historico: list[dict] = field(default_factory=list)
     erro_final: str | None = None
+
+
+def dados_validados(resultado: ResultadoValidacao[T]) -> T:
+    """Extrai ``resultado.dados`` já estreitado para ``T`` (não-``None``).
+
+    ``validar_com_tentativas`` nunca retorna com ``dados=None``: o único
+    lugar que constrói ``ResultadoValidacao(sucesso=False, dados=None, ...)``
+    (linha ~463 abaixo) é imediatamente seguido por
+    ``raise PipelineValidationError`` — o caminho de falha nunca chega a
+    retornar para o chamador. Ou seja, se o chamador tem um ``resultado`` em
+    mãos (a exceção não foi levantada), ``dados`` já é garantidamente não-nulo.
+    Esse helper documenta essa invariante para o Mypy em vez de espalhar
+    ``assert``/``# type: ignore`` em cada call site.
+    """
+    assert resultado.dados is not None, "invariante violada: dados=None sem PipelineValidationError"
+    return resultado.dados
 
 
 # ---------------------------------------------------------------------------
@@ -105,7 +127,7 @@ class PipelineValidationError(RuntimeError):
     necessidade de re-parsear a mensagem de erro.
     """
 
-    def __init__(self, mensagem: str, resultado: ResultadoValidacao) -> None:
+    def __init__(self, mensagem: str, resultado: ResultadoValidacao[Any]) -> None:
         super().__init__(mensagem)
         self.resultado = resultado
 
@@ -322,13 +344,13 @@ def _extrair_json_da_resposta(texto: str) -> dict:
 
 def validar_com_tentativas(
     dados_brutos: dict,
-    schema_fn: Callable[[dict], Any],
+    schema_fn: Callable[[dict], T],
     modo: Any,
     nome_agente: str,
     max_tentativas: int = MAX_TENTATIVAS,
     run_id: str | None = None,
     fase: str | None = None,
-) -> ResultadoValidacao:
+) -> ResultadoValidacao[T]:
     """Valida dados_brutos contra schema_fn, com retry e correção automática.
 
     Parameters
@@ -460,7 +482,7 @@ def validar_com_tentativas(
                 ))
                 break
 
-    resultado = ResultadoValidacao(
+    resultado: ResultadoValidacao[T] = ResultadoValidacao(
         sucesso=False,
         dados=None,
         tentativas_usadas=len(historico),

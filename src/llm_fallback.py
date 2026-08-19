@@ -205,8 +205,7 @@ def _registrar_metrica(
         tipo="fallback_llm",
         nome=papel or "llm",
         status=status,
-        evento=evento,
-        **detalhes,
+        detalhes={"evento": evento, **detalhes},
     )
 
 

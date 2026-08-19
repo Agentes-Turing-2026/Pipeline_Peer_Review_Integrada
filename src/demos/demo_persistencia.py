@@ -92,7 +92,10 @@ def main() -> None:
         with _fase_medida(coletor, self.name):
             raise RuntimeError("falha simulada pela demo (ex.: timeout do modelo)")
 
-    EditorVerdictPhase.run = _falha_simulada
+    # Monkey-patch temporário e proposital (restaurado no finally abaixo) —
+    # não é descuido: é como a demo simula uma falha real passando pelo
+    # caminho de execução de verdade.
+    EditorVerdictPhase.run = _falha_simulada  # type: ignore[method-assign]
     try:
         run_demo(mode="mock", run_id=DEMO_RUN_ID)
     except RuntimeError as exc:
@@ -102,7 +105,7 @@ def main() -> None:
     finally:
         # Restaura o comportamento normal da fase 3 antes do PASSO 2 —
         # simula o problema real (ex.: o timeout) ter sido resolvido.
-        EditorVerdictPhase.run = original_run
+        EditorVerdictPhase.run = original_run  # type: ignore[method-assign]
 
     # -------------------------------------------------------------------
     _sep("PASSO 2 — Retomando a MESMA execução (mesmo run_id)")

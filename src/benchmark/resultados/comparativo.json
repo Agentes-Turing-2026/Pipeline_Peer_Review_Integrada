@@ -1,7 +1,8 @@
 {
-  "gerado_em": "2026-08-06T16:18:43.302894+00:00",
+  "gerado_em": "2026-08-19T19:06:14.771112+00:00",
   "atencao": [
-    "psicologia_neuropsi_escaneado"
+    "psicologia_lacan_cinema_pepsic",
+    "quimica_phase_space_arxiv_2608_11448"
   ],
   "tabela": {
     "exemplo_mock": {
@@ -183,117 +184,6 @@
       "alertas": [],
       "erro": null
     },
-    "psicologia_neuropsi_escaneado": {
-      "doc_id": "psicologia_neuropsi_escaneado",
-      "titulo": "Avaliação Neuropsicológica e Funções Cognitivas (trecho digitalizado)",
-      "area": "psicologia",
-      "caracteristicas": [
-        "escaneado",
-        "baixa_qualidade",
-        "curto",
-        "sem_camada_de_texto"
-      ],
-      "mode": "mock",
-      "timestamp": "2026-08-01T19:12:43.212821+00:00",
-      "run_id": null,
-      "resultado": "entrada_bloqueada",
-      "decisao_final": null,
-      "requer_revisao_humana": null,
-      "duracao_total_s": null,
-      "tokens_totais": null,
-      "custo_estimado": null,
-      "quantidade_tools_chamadas": null,
-      "quantidade_retries": null,
-      "quantidade_falhas": null,
-      "alertas": [],
-      "erro": {
-        "tipo": "EntradaInvalidaError",
-        "mensagem": "a extração não produziu texto utilizável (possível PDF escaneado ou protegido); uma nova tentativa com OCR pode recuperar o conteúdo"
-      }
-    },
-    "psicologia_respiracao_monografia": {
-      "doc_id": "psicologia_respiracao_monografia",
-      "titulo": "Técnicas de respiração diafragmática (monografia)",
-      "area": "psicologia",
-      "caracteristicas": [
-        "longo",
-        "monografia_tcc",
-        "nao_e_artigo_de_periodico"
-      ],
-      "mode": "api",
-      "timestamp": "2026-08-01T19:21:05.384010+00:00",
-      "run_id": "run_d0ef77a1aec04366",
-      "resultado": "sucesso",
-      "decisao_final": 1,
-      "requer_revisao_humana": false,
-      "duracao_total_s": 56.71400036900013,
-      "tokens_totais": 168648,
-      "custo_estimado": null,
-      "quantidade_tools_chamadas": {
-        "validar_completude": 3,
-        "auditar_decisao_final": 1,
-        "checar_coerencia": 1
-      },
-      "quantidade_retries": 0,
-      "quantidade_falhas": 0,
-      "alertas": [],
-      "erro": null
-    },
-    "psicologia_slides_modalidades_grupais": {
-      "doc_id": "psicologia_slides_modalidades_grupais",
-      "titulo": "Modalidades grupais (slide de aula)",
-      "area": "psicologia",
-      "caracteristicas": [
-        "slide",
-        "nao_e_artigo_academico"
-      ],
-      "mode": "api",
-      "timestamp": "2026-08-01T19:18:52.384801+00:00",
-      "run_id": "run_75997f23d7ff4d09",
-      "resultado": "sucesso",
-      "decisao_final": 2,
-      "requer_revisao_humana": false,
-      "duracao_total_s": 46.0323577010131,
-      "tokens_totais": 38643,
-      "custo_estimado": null,
-      "quantidade_tools_chamadas": {
-        "validar_completude": 3,
-        "auditar_decisao_final": 1,
-        "checar_coerencia": 1
-      },
-      "quantidade_retries": 0,
-      "quantidade_falhas": 0,
-      "alertas": [],
-      "erro": null
-    },
-    "psicologia_slides_ciclo_sono": {
-      "doc_id": "psicologia_slides_ciclo_sono",
-      "titulo": "Ciclo sono-vigília — Parte 06 (material de curso)",
-      "area": "psicologia",
-      "caracteristicas": [
-        "slide",
-        "nao_e_artigo_academico",
-        "apresentacao_curso"
-      ],
-      "mode": "api",
-      "timestamp": "2026-08-01T19:19:38.426909+00:00",
-      "run_id": "run_3e82229954624753",
-      "resultado": "sucesso",
-      "decisao_final": 2,
-      "requer_revisao_humana": false,
-      "duracao_total_s": 42.02710155500972,
-      "tokens_totais": 50278,
-      "custo_estimado": null,
-      "quantidade_tools_chamadas": {
-        "validar_completude": 3,
-        "auditar_decisao_final": 1,
-        "checar_coerencia": 1
-      },
-      "quantidade_retries": 0,
-      "quantidade_falhas": 0,
-      "alertas": [],
-      "erro": null
-    },
     "exemplo_mock__sem_cross_review": {
       "doc_id": "exemplo_mock",
       "titulo": "Artigo de exemplo (smoke test sem PDF real)",
@@ -333,6 +223,384 @@
       "quantidade_criticas": 5,
       "quantidade_criticas_bloqueantes": 1,
       "erro": null
+    },
+    "psicologia_lacan_cinema_pepsic": {
+      "doc_id": "psicologia_lacan_cinema_pepsic",
+      "titulo": "Tudo Que Você Gostaria de Saber Sobre Lacan e Ousou Perguntar a Slavoj Žižek: Psicanálise e Cinema",
+      "area": "psicologia",
+      "caracteristicas": [
+        "camada_de_texto_ilegivel",
+        "encoding_sem_tounicode",
+        "medio"
+      ],
+      "mode": "api",
+      "provider": "openai",
+      "model": "gpt-5.6-luna",
+      "structured_output": true,
+      "cross_review_enabled": true,
+      "timestamp": "2026-08-19T19:05:39.119125+00:00",
+      "run_id": "run_3990e5aefda747b1",
+      "resultado": "sucesso_com_alertas",
+      "decisao_final": 1,
+      "requer_revisao_humana": true,
+      "duracao_total_s": 48.641833816014696,
+      "tokens_totais": 337273,
+      "custo_estimado": 0.0753596,
+      "chamadas_llm": 7,
+      "modelo_usado": "gpt-5.6-luna",
+      "quantidade_tools_chamadas": {
+        "validar_completude": 3,
+        "auditar_decisao_final": 1,
+        "checar_coerencia": 1
+      },
+      "quantidade_retries": 0,
+      "quantidade_falhas": 0,
+      "alertas": [
+        "[fase_0_extracao_pdf] alta proporção de caracteres ilegíveis (54%): a extração pode estar corrompida — recomenda-se revisão humana"
+      ],
+      "notas_por_revisor": {
+        "statistician": 1,
+        "domain_expert": 1,
+        "copyeditor": 1
+      },
+      "quantidade_criticas": 40,
+      "quantidade_criticas_bloqueantes": 39,
+      "erro": null
+    },
+    "psicologia_historia_livro_scielo": {
+      "doc_id": "psicologia_historia_livro_scielo",
+      "titulo": "História da Psicologia: pesquisa, formação, ensino (livro completo)",
+      "area": "psicologia",
+      "caracteristicas": [
+        "muito_longo",
+        "livro_completo",
+        "nao_e_artigo_de_periodico"
+      ],
+      "mode": "api",
+      "provider": "openai",
+      "model": "gpt-5.6-luna",
+      "structured_output": true,
+      "cross_review_enabled": true,
+      "timestamp": "2026-08-19T19:05:39.120231+00:00",
+      "run_id": "run_c7efd72be3e544f5",
+      "resultado": "sucesso",
+      "decisao_final": 2,
+      "requer_revisao_humana": false,
+      "duracao_total_s": 54.268606440979056,
+      "tokens_totais": 586280,
+      "custo_estimado": 0.12773199999999998,
+      "chamadas_llm": 7,
+      "modelo_usado": "gpt-5.6-luna",
+      "quantidade_tools_chamadas": {
+        "validar_completude": 3,
+        "auditar_decisao_final": 1,
+        "checar_coerencia": 1
+      },
+      "quantidade_retries": 0,
+      "quantidade_falhas": 0,
+      "alertas": [],
+      "notas_por_revisor": {
+        "statistician": 3,
+        "domain_expert": 2,
+        "copyeditor": 2
+      },
+      "quantidade_criticas": 50,
+      "quantidade_criticas_bloqueantes": 21,
+      "erro": null
+    },
+    "psicologia_slides_psiquismo_trt6": {
+      "doc_id": "psicologia_slides_psiquismo_trt6",
+      "titulo": "Contemporaneidade: repercussões no psiquismo (slides de palestra)",
+      "area": "psicologia",
+      "caracteristicas": [
+        "slide",
+        "nao_e_artigo_academico",
+        "pouco_texto_por_pagina"
+      ],
+      "mode": "api",
+      "provider": "openai",
+      "model": "gpt-5.6-luna",
+      "structured_output": true,
+      "cross_review_enabled": true,
+      "timestamp": "2026-08-19T19:05:39.121467+00:00",
+      "run_id": "run_51681c71c6cd4982",
+      "resultado": "sucesso",
+      "decisao_final": 1,
+      "requer_revisao_humana": false,
+      "duracao_total_s": 39.82269682100741,
+      "tokens_totais": 47437,
+      "custo_estimado": 0.018948399999999997,
+      "chamadas_llm": 7,
+      "modelo_usado": "gpt-5.6-luna",
+      "quantidade_tools_chamadas": {
+        "validar_completude": 3,
+        "auditar_decisao_final": 1,
+        "checar_coerencia": 1
+      },
+      "quantidade_retries": 0,
+      "quantidade_falhas": 0,
+      "alertas": [],
+      "notas_por_revisor": {
+        "statistician": 1,
+        "domain_expert": 1,
+        "copyeditor": 1
+      },
+      "quantidade_criticas": 52,
+      "quantidade_criticas_bloqueantes": 42,
+      "erro": null
+    },
+    "psicologia_slides_autocuidado_tcerj": {
+      "doc_id": "psicologia_slides_autocuidado_tcerj",
+      "titulo": "Ciclo de Palestras Saúde Mental — Autocuidado Emocional (slides)",
+      "area": "psicologia",
+      "caracteristicas": [
+        "slide",
+        "nao_e_artigo_academico",
+        "apresentacao_curso",
+        "pouco_texto_por_pagina"
+      ],
+      "mode": "api",
+      "provider": "openai",
+      "model": "gpt-5.6-luna",
+      "structured_output": true,
+      "cross_review_enabled": true,
+      "timestamp": "2026-08-19T19:05:39.122567+00:00",
+      "run_id": "run_ee342efc9c0f4789",
+      "resultado": "sucesso",
+      "decisao_final": 2,
+      "requer_revisao_humana": false,
+      "duracao_total_s": 38.73495027498575,
+      "tokens_totais": 42460,
+      "custo_estimado": 0.017820999999999997,
+      "chamadas_llm": 7,
+      "modelo_usado": "gpt-5.6-luna",
+      "quantidade_tools_chamadas": {
+        "validar_completude": 3,
+        "auditar_decisao_final": 1,
+        "checar_coerencia": 1
+      },
+      "quantidade_retries": 0,
+      "quantidade_falhas": 0,
+      "alertas": [],
+      "notas_por_revisor": {
+        "statistician": 2,
+        "domain_expert": 2,
+        "copyeditor": 2
+      },
+      "quantidade_criticas": 47,
+      "quantidade_criticas_bloqueantes": 36,
+      "erro": null
+    },
+    "quimica_solvente_eutetico_qn": {
+      "doc_id": "quimica_solvente_eutetico_qn",
+      "titulo": "Solvente eutético profundo para extração de cobre em amostras de chás e determinação por GF AAS",
+      "area": "quimica",
+      "caracteristicas": [
+        "tabelas",
+        "formulas_quimicas",
+        "curto",
+        "idioma_portugues"
+      ],
+      "mode": "api",
+      "provider": "openai",
+      "model": "gpt-5.6-luna",
+      "structured_output": true,
+      "cross_review_enabled": true,
+      "timestamp": "2026-08-19T19:05:39.123722+00:00",
+      "run_id": "run_c8bfbc1d137d48f5",
+      "resultado": "sucesso",
+      "decisao_final": 2,
+      "requer_revisao_humana": false,
+      "duracao_total_s": 52.9396058699931,
+      "tokens_totais": 148023,
+      "custo_estimado": 0.0413796,
+      "chamadas_llm": 7,
+      "modelo_usado": "gpt-5.6-luna",
+      "quantidade_tools_chamadas": {
+        "validar_completude": 3,
+        "auditar_decisao_final": 1,
+        "checar_coerencia": 1
+      },
+      "quantidade_retries": 0,
+      "quantidade_falhas": 0,
+      "alertas": [],
+      "notas_por_revisor": {
+        "statistician": 2,
+        "domain_expert": 2,
+        "copyeditor": 2
+      },
+      "quantidade_criticas": 45,
+      "quantidade_criticas_bloqueantes": 24,
+      "erro": null
+    },
+    "quimica_nanoparticulas_magnetita_qn": {
+      "doc_id": "quimica_nanoparticulas_magnetita_qn",
+      "titulo": "Tannic acid supported by magnetite nanoparticles for the removal of Cd(II) and Pb(II) from water",
+      "area": "quimica",
+      "caracteristicas": [
+        "tabelas",
+        "graficos",
+        "formulas_quimicas",
+        "medio"
+      ],
+      "mode": "api",
+      "provider": "openai",
+      "model": "gpt-5.6-luna",
+      "structured_output": true,
+      "cross_review_enabled": true,
+      "timestamp": "2026-08-19T19:05:39.124954+00:00",
+      "run_id": "run_3ed5696051bc4bb6",
+      "resultado": "sucesso",
+      "decisao_final": 2,
+      "requer_revisao_humana": false,
+      "duracao_total_s": 59.04292544396594,
+      "tokens_totais": 131974,
+      "custo_estimado": 0.0389408,
+      "chamadas_llm": 7,
+      "modelo_usado": "gpt-5.6-luna",
+      "quantidade_tools_chamadas": {
+        "validar_completude": 3,
+        "auditar_decisao_final": 1,
+        "checar_coerencia": 1
+      },
+      "quantidade_retries": 0,
+      "quantidade_falhas": 0,
+      "alertas": [],
+      "notas_por_revisor": {
+        "statistician": 2,
+        "domain_expert": 2,
+        "copyeditor": 2
+      },
+      "quantidade_criticas": 65,
+      "quantidade_criticas_bloqueantes": 36,
+      "erro": null
+    },
+    "arquitetura_iluminacao_consultorios_ac": {
+      "doc_id": "arquitetura_iluminacao_consultorios_ac",
+      "titulo": "Propuesta metodológica para analizar la iluminación en consultorios ginecológico-obstétricos de emergencia: caso de estudio",
+      "area": "arquitetura",
+      "caracteristicas": [
+        "idioma_espanhol",
+        "tabelas",
+        "plantas_e_diagramas",
+        "medio"
+      ],
+      "mode": "api",
+      "provider": "openai",
+      "model": "gpt-5.6-luna",
+      "structured_output": true,
+      "cross_review_enabled": true,
+      "timestamp": "2026-08-19T19:05:39.126263+00:00",
+      "run_id": "run_c3d108a822754278",
+      "resultado": "sucesso",
+      "decisao_final": 2,
+      "requer_revisao_humana": false,
+      "duracao_total_s": 55.666638277005404,
+      "tokens_totais": 178988,
+      "custo_estimado": 0.0481516,
+      "chamadas_llm": 7,
+      "modelo_usado": "gpt-5.6-luna",
+      "quantidade_tools_chamadas": {
+        "validar_completude": 3,
+        "auditar_decisao_final": 1,
+        "checar_coerencia": 1
+      },
+      "quantidade_retries": 0,
+      "quantidade_falhas": 0,
+      "alertas": [],
+      "notas_por_revisor": {
+        "statistician": 2,
+        "domain_expert": 2,
+        "copyeditor": 2
+      },
+      "quantidade_criticas": 50,
+      "quantidade_criticas_bloqueantes": 23,
+      "erro": null
+    },
+    "arquitetura_parques_urbanos_ac": {
+      "doc_id": "arquitetura_parques_urbanos_ac",
+      "titulo": "Configuração espacial e qualidade física de parques urbanos lineares: o caso do Parque Parahyba I, João Pessoa - PB",
+      "area": "arquitetura",
+      "caracteristicas": [
+        "mapas_e_fotos",
+        "tabelas",
+        "estudo_de_caso",
+        "medio",
+        "idioma_portugues"
+      ],
+      "mode": "api",
+      "provider": "openai",
+      "model": "gpt-5.6-luna",
+      "structured_output": true,
+      "cross_review_enabled": true,
+      "timestamp": "2026-08-19T19:05:39.127972+00:00",
+      "run_id": "run_5a331c1a643a4cc9",
+      "resultado": "sucesso",
+      "decisao_final": 2,
+      "requer_revisao_humana": false,
+      "duracao_total_s": 54.540281643974595,
+      "tokens_totais": 168983,
+      "custo_estimado": 0.0458436,
+      "chamadas_llm": 7,
+      "modelo_usado": "gpt-5.6-luna",
+      "quantidade_tools_chamadas": {
+        "validar_completude": 3,
+        "auditar_decisao_final": 1,
+        "checar_coerencia": 1
+      },
+      "quantidade_retries": 0,
+      "quantidade_falhas": 0,
+      "alertas": [],
+      "notas_por_revisor": {
+        "statistician": 2,
+        "domain_expert": 3,
+        "copyeditor": 2
+      },
+      "quantidade_criticas": 57,
+      "quantidade_criticas_bloqueantes": 45,
+      "erro": null
+    },
+    "quimica_phase_space_arxiv_2608_11448": {
+      "doc_id": "quimica_phase_space_arxiv_2608_11448",
+      "titulo": "A Perspective on Phase Space Electronic Structure Theory: from its surface hopping origins through to its future promise",
+      "area": "quimica",
+      "caracteristicas": [
+        "longo",
+        "formulas_matematicas",
+        "citacoes_extensas",
+        "muitos_autores",
+        "artigo_de_revisao"
+      ],
+      "mode": "api",
+      "provider": "openai",
+      "model": "gpt-5.6-luna",
+      "structured_output": true,
+      "cross_review_enabled": true,
+      "timestamp": "2026-08-19T19:05:39.130126+00:00",
+      "run_id": "run_1eaec596a57d439f",
+      "resultado": "falha_execucao",
+      "decisao_final": null,
+      "requer_revisao_humana": false,
+      "duracao_total_s": 58.13124150899239,
+      "tokens_totais": 230469,
+      "custo_estimado": 0.058240799999999995,
+      "chamadas_llm": 7,
+      "modelo_usado": "gpt-5.6-luna",
+      "quantidade_tools_chamadas": {
+        "validar_completude": 3
+      },
+      "quantidade_retries": 0,
+      "quantidade_falhas": 1,
+      "alertas": [
+        "[fase_3_editor_chefe] fase 'fase_3_editor_chefe' interrompida: Expecting ',' delimiter: line 147 column 24 (char 6954)"
+      ],
+      "notas_por_revisor": null,
+      "quantidade_criticas": null,
+      "quantidade_criticas_bloqueantes": null,
+      "erro": {
+        "tipo": "JSONDecodeError",
+        "mensagem": "Expecting ',' delimiter: line 147 column 24 (char 6954)"
+      }
     }
   }
 }

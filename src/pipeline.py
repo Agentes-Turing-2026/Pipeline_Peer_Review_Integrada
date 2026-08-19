@@ -33,6 +33,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 HERE = Path(__file__).resolve().parent
 if str(HERE) not in sys.path:
@@ -40,7 +41,6 @@ if str(HERE) not in sys.path:
 
 from pipeline_base import Pipeline, PipelineContext, PipelinePhase  # noqa: E402
 from review_schema import (  # noqa: E402
-    CRITERIOS_REVISAVEIS,
     ESCALA_VEREDITO,
     CrossReviewSchema,
     EditorVerdictSchema,
@@ -50,7 +50,7 @@ from review_schema import (  # noqa: E402
     validar_review,
 )
 from model_provider import descricao_modelo, resolver_config  # noqa: E402
-from validacao_retry import PipelineValidationError, validar_com_tentativas  # noqa: E402
+from validacao_retry import dados_validados, validar_com_tentativas  # noqa: E402
 from reviewer_agent import REVIEWERS, _require_api_key, _run_reviewers  # noqa: E402
 from cross_review import _run_cross_review  # noqa: E402
 from editor_agent import _run_editor  # noqa: E402
@@ -139,20 +139,28 @@ DEFAULT_MOCK_FILE = HERE / "mocks" / "peer_review_mock.json"
 
 
 import time
-from contextlib import contextmanager, nullcontext
+from contextlib import contextmanager
 
 # Métricas de execução do Grupo 2 (importação guardada: pipeline funciona sem elas).
-try:
+# TYPE_CHECKING: para o Mypy, os nomes vêm sempre do import real (ele nunca
+# executa o except); em runtime o try/except normal decide, com fallback None.
+if TYPE_CHECKING:
     from metrics.coletor import ExecutionCollector
     from metrics.resumo import gerar_resumo
     from metrics.exportar import imprimir_resumo, salvar_resumo_json
     from metrics.adk_usage import definir_coletor_adk
-except ImportError:
-    ExecutionCollector = None
-    gerar_resumo = None
-    imprimir_resumo = None
-    salvar_resumo_json = None
-    definir_coletor_adk = None
+else:
+    try:
+        from metrics.coletor import ExecutionCollector
+        from metrics.resumo import gerar_resumo
+        from metrics.exportar import imprimir_resumo, salvar_resumo_json
+        from metrics.adk_usage import definir_coletor_adk
+    except ImportError:
+        ExecutionCollector = None
+        gerar_resumo = None
+        imprimir_resumo = None
+        salvar_resumo_json = None
+        definir_coletor_adk = None
 
 
 @contextmanager
@@ -191,8 +199,10 @@ def _fase_medida(coletor: ExecutionCollector | None, nome: str):
     except Exception as exc:
         coletor.registrar(
             fase=nome, tipo="falha", nome=nome, status="aviso",
-            erro=str(exc), erro_tipo=type(exc).__name__,
-            mensagem=f"fase '{nome}' interrompida: {exc}",
+            detalhes={
+                "erro": str(exc), "erro_tipo": type(exc).__name__,
+                "mensagem": f"fase '{nome}' interrompida: {exc}",
+            },
         )
         raise
 
@@ -211,14 +221,16 @@ def _registrar_validacao(coletor: ExecutionCollector | None, *, fase: str, agent
     coletor.registrar(
         fase=fase, tipo="validacao", nome=agente,
         status="sucesso" if resultado.sucesso else "falha",
-        agente=agente, tentativas_usadas=resultado.tentativas_usadas,
+        detalhes={"agente": agente, "tentativas_usadas": resultado.tentativas_usadas},
     )
     for _ in range(resultado.tentativas_usadas - 1):
-        coletor.registrar(fase=fase, tipo="retry", nome=agente, status="sucesso", agente=agente)
+        coletor.registrar(
+            fase=fase, tipo="retry", nome=agente, status="sucesso", detalhes={"agente": agente}
+        )
     if not resultado.sucesso:
         coletor.registrar(
             fase=fase, tipo="falha", nome=agente, status="falha",
-            agente=agente, erro_final=resultado.erro_final,
+            detalhes={"agente": agente, "erro_final": resultado.erro_final},
         )
 
 
@@ -339,7 +351,7 @@ class IndependentReviewPhase(PipelinePhase[str, IndependentReviews]):
                         payloads[rid], validar_review, mode, rid,
                         run_id=context.run_id, fase=self.name,
                     )
-                    reviews[rid] = resultado.dados
+                    reviews[rid] = dados_validados(resultado)
                     logger.info("Validação Fase 1 '%s': tentativas=%d", rid, resultado.tentativas_usadas)
                     _registrar_validacao(coletor, fase=self.name, agente=rid, resultado=resultado)
                     emit_event(
@@ -358,7 +370,7 @@ class IndependentReviewPhase(PipelinePhase[str, IndependentReviews]):
                         payload, validar_review, mode, rid,
                         run_id=context.run_id, fase=self.name,
                     )
-                    reviews[rid] = resultado.dados
+                    reviews[rid] = dados_validados(resultado)
                     logger.info("Validação Fase 1 '%s': tentativas=%d", rid, resultado.tentativas_usadas)
                     _registrar_validacao(coletor, fase=self.name, agente=rid, resultado=resultado)
                     emit_event(
@@ -379,8 +391,10 @@ class IndependentReviewPhase(PipelinePhase[str, IndependentReviews]):
                         coletor.registrar(
                             fase=self.name, tipo="tool", nome="validar_completude",
                             status="sucesso", duracao_s=duracao_s,
-                            agente=rid, score_completude=audit["score_completude"],
-                            completo=audit["completo"],
+                            detalhes={
+                                "agente": rid, "score_completude": audit["score_completude"],
+                                "completo": audit["completo"],
+                            },
                         )
                     emit_event(
                         "completude", author="grupo2", phase=self.name, kind="tool",
@@ -444,7 +458,7 @@ class CrossReviewPhase(PipelinePhase[IndependentReviews, CrossReviews]):
                         payload, validar_cross_review, mode, rid,
                         run_id=context.run_id, fase=self.name,
                     )
-                    cross[rid] = resultado.dados
+                    cross[rid] = dados_validados(resultado)
                     logger.info("Fase 2 '%s': leitura cruzada desativada, parecer mantido.", rid)
                     _registrar_validacao(coletor, fase=self.name, agente=rid, resultado=resultado)
                     emit_event(
@@ -460,7 +474,7 @@ class CrossReviewPhase(PipelinePhase[IndependentReviews, CrossReviews]):
                         payloads[rid], validar_cross_review, mode, rid,
                         run_id=context.run_id, fase=self.name,
                     )
-                    cross[rid] = resultado.dados
+                    cross[rid] = dados_validados(resultado)
                     logger.info("Validação Fase 2 '%s': tentativas=%d", rid, resultado.tentativas_usadas)
                     _registrar_validacao(coletor, fase=self.name, agente=rid, resultado=resultado)
                     emit_event(
@@ -484,7 +498,7 @@ class CrossReviewPhase(PipelinePhase[IndependentReviews, CrossReviews]):
                         payload, validar_cross_review, mode, rid,
                         run_id=context.run_id, fase=self.name,
                     )
-                    cross[rid] = resultado.dados
+                    cross[rid] = dados_validados(resultado)
                     logger.info("Validação Fase 2 '%s': tentativas=%d", rid, resultado.tentativas_usadas)
                     _registrar_validacao(coletor, fase=self.name, agente=rid, resultado=resultado)
                     emit_event(
@@ -531,7 +545,7 @@ class EditorVerdictPhase(PipelinePhase[CrossReviews, EditorVerdictSchema]):
                     payload, validar_editor_verdict, mode, "editor",
                     run_id=context.run_id, fase=self.name,
                 )
-                verdict = resultado.dados
+                verdict = dados_validados(resultado)
                 logger.info("Validação Fase 3 'editor': tentativas=%d", resultado.tentativas_usadas)
                 _registrar_validacao(coletor, fase=self.name, agente="editor", resultado=resultado)
                 emit_event(
@@ -545,7 +559,7 @@ class EditorVerdictPhase(PipelinePhase[CrossReviews, EditorVerdictSchema]):
                     verdict_payload, validar_editor_verdict, mode, "editor",
                     run_id=context.run_id, fase=self.name,
                 )
-                verdict = resultado.dados
+                verdict = dados_validados(resultado)
                 logger.info("Validação Fase 3 'editor': tentativas=%d", resultado.tentativas_usadas)
                 _registrar_validacao(coletor, fase=self.name, agente="editor", resultado=resultado)
                 emit_event(
@@ -572,7 +586,7 @@ class EditorVerdictPhase(PipelinePhase[CrossReviews, EditorVerdictSchema]):
                     coletor.registrar(
                         fase=self.name, tipo="tool", nome="auditar_decisao_final",
                         status="sucesso", duracao_s=duracao_s,
-                        requer_revisao_humana=auditoria["requer_revisao_humana"],
+                        detalhes={"requer_revisao_humana": auditoria["requer_revisao_humana"]},
                     )
                     # A checagem de coerência roda por DENTRO da auditoria, mas
                     # precisa aparecer no resumo como verificação própria (task
@@ -586,27 +600,31 @@ class EditorVerdictPhase(PipelinePhase[CrossReviews, EditorVerdictSchema]):
                         coletor.registrar(
                             fase=self.name, tipo="tool", nome="checar_coerencia",
                             status="aviso" if inconsistencias else "sucesso",
-                            quantidade_inconsistencias=len(inconsistencias),
-                            tipos_inconsistencias=tipos_inconsistencias,
-                            **(
-                                {
-                                    "mensagem": (
-                                        f"checar_coerencia: {len(inconsistencias)} "
-                                        f"inconsistência(s) no veredito "
-                                        f"({', '.join(tipos_inconsistencias)})"
-                                    )
-                                }
-                                if inconsistencias
-                                else {}
-                            ),
+                            detalhes={
+                                "quantidade_inconsistencias": len(inconsistencias),
+                                "tipos_inconsistencias": tipos_inconsistencias,
+                                **(
+                                    {
+                                        "mensagem": (
+                                            f"checar_coerencia: {len(inconsistencias)} "
+                                            f"inconsistência(s) no veredito "
+                                            f"({', '.join(tipos_inconsistencias)})"
+                                        )
+                                    }
+                                    if inconsistencias
+                                    else {}
+                                ),
+                            },
                         )
                     else:
                         coletor.registrar(
                             fase=self.name, tipo="tool", nome="checar_coerencia",
                             status="aviso",
-                            quantidade_inconsistencias=0,
-                            mensagem=auditoria.get("aviso_coerencia")
-                            or "checar_coerencia não executada",
+                            detalhes={
+                                "quantidade_inconsistencias": 0,
+                                "mensagem": auditoria.get("aviso_coerencia")
+                                or "checar_coerencia não executada",
+                            },
                         )
                 emit_event(
                     "auditoria_veredito", author="grupo2", phase=self.name, kind="tool",
@@ -752,10 +770,13 @@ class FinalReportPhase(PipelinePhase[EditorVerdictSchema, FinalReport]):
             if coletor is not None:
                 coletor.registrar(
                     fase=self.name, tipo="decisao_final", nome="veredito_final",
-                    status="sucesso", decisao=verdict.decisao,
-                    requer_revisao_humana=bool(
-                        auditoria_veredito and auditoria_veredito.get("requer_revisao_humana")
-                    ),
+                    status="sucesso",
+                    detalhes={
+                        "decisao": verdict.decisao,
+                        "requer_revisao_humana": bool(
+                            auditoria_veredito and auditoria_veredito.get("requer_revisao_humana")
+                        ),
+                    },
                 )
 
             logger.info("Fase 4 concluída: relatório final gerado.")
@@ -849,7 +870,7 @@ def extract_pdf_input(
             if coletor is not None:
                 coletor.registrar(
                     fase=EXTRACTION_PHASE, tipo="falha", nome="entrada_pdf",
-                    status="falha", erro_final=str(exc),
+                    status="falha", detalhes={"erro_final": str(exc)},
                 )
             raise erro_extracao from exc
         logger.info(
@@ -870,8 +891,10 @@ def extract_pdf_input(
             coletor.registrar(
                 fase=EXTRACTION_PHASE, tipo="fase", nome=EXTRACTION_PHASE,
                 status="sucesso", duracao_s=doc.extraction_duration_s,
-                extrator=f"{doc.extractor} {doc.extractor_version}",
-                paginas=doc.num_pages, avisos_extracao=len(doc.warnings),
+                detalhes={
+                    "extrator": f"{doc.extractor} {doc.extractor_version}",
+                    "paginas": doc.num_pages, "avisos_extracao": len(doc.warnings),
+                },
             )
         for aviso in doc.warnings:
             logger.warning("[extracao] %s", aviso)
@@ -889,15 +912,17 @@ def extract_pdf_input(
             if coletor is not None:
                 coletor.registrar(
                     fase=EXTRACTION_PHASE, tipo="falha", nome="entrada_pdf",
-                    status="falha", erro_final=str(exc),
+                    status="falha", detalhes={"erro_final": str(exc)},
                 )
             raise
         if coletor is not None and resultado_validacao.decisao is DecisaoEntrada.ALERTA:
             coletor.registrar(
                 fase=EXTRACTION_PHASE, tipo="validacao", nome="entrada_pdf",
                 status="aviso",
-                mensagem="; ".join(resultado_validacao.motivos),
-                requer_revisao_humana=resultado_validacao.requer_revisao_humana,
+                detalhes={
+                    "mensagem": "; ".join(resultado_validacao.motivos),
+                    "requer_revisao_humana": resultado_validacao.requer_revisao_humana,
+                },
             )
     return doc
 
