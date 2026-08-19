@@ -54,7 +54,7 @@ def _sep(titulo: str = "") -> None:
 
 
 def _passou(resultado: ResultadoValidacao) -> None:
-    print(f"  STATUS   : PASSOU")
+    print("  STATUS   : PASSOU")
     print(f"  tentativas: {resultado.tentativas_usadas}/{MAX_TENTATIVAS}")
     if resultado.dados is not None:
         tipo = type(resultado.dados).__name__
@@ -62,7 +62,7 @@ def _passou(resultado: ResultadoValidacao) -> None:
 
 
 def _falhou(resultado: ResultadoValidacao) -> None:
-    print(f"  STATUS   : FALHOU")
+    print("  STATUS   : FALHOU")
     print(f"  tentativas: {resultado.tentativas_usadas}/{MAX_TENTATIVAS}")
     if resultado.erro_final:
         linhas = resultado.erro_final.splitlines()
@@ -162,7 +162,7 @@ def caso_4() -> None:
         validar_com_tentativas(dados_patologicos, validar_review, MODO_MOCK, "copyeditor")
     except PipelineValidationError as exc:
         resultado = exc.resultado
-        print(f"  PipelineValidationError capturada!")
+        print("  PipelineValidationError capturada!")
         print(f"  tentativas esgotadas: {resultado.tentativas_usadas}/{MAX_TENTATIVAS}")
         _historico(resultado)
         print()

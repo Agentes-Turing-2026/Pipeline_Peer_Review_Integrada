@@ -32,7 +32,6 @@ if str(HERE) not in sys.path:
 from review_schema import (  # noqa: E402
     CRITERIOS_REVISAVEIS,
     CrossReviewSchema,
-    EditorVerdictSchema,
 )
 from model_provider import build_model, resolver_config  # noqa: E402
 from reviewer_agent import REVIEWERS  # noqa: E402
