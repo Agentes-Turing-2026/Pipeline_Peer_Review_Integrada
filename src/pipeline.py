@@ -33,6 +33,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 HERE = Path(__file__).resolve().parent
 if str(HERE) not in sys.path:
@@ -141,17 +142,25 @@ import time
 from contextlib import contextmanager
 
 # Métricas de execução do Grupo 2 (importação guardada: pipeline funciona sem elas).
-try:
+# TYPE_CHECKING: para o Mypy, os nomes vêm sempre do import real (ele nunca
+# executa o except); em runtime o try/except normal decide, com fallback None.
+if TYPE_CHECKING:
     from metrics.coletor import ExecutionCollector
     from metrics.resumo import gerar_resumo
     from metrics.exportar import imprimir_resumo, salvar_resumo_json
     from metrics.adk_usage import definir_coletor_adk
-except ImportError:
-    ExecutionCollector = None
-    gerar_resumo = None
-    imprimir_resumo = None
-    salvar_resumo_json = None
-    definir_coletor_adk = None
+else:
+    try:
+        from metrics.coletor import ExecutionCollector
+        from metrics.resumo import gerar_resumo
+        from metrics.exportar import imprimir_resumo, salvar_resumo_json
+        from metrics.adk_usage import definir_coletor_adk
+    except ImportError:
+        ExecutionCollector = None
+        gerar_resumo = None
+        imprimir_resumo = None
+        salvar_resumo_json = None
+        definir_coletor_adk = None
 
 
 @contextmanager
