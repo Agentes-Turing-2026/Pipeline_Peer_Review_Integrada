@@ -1,6 +1,6 @@
 {
-  "gerado_em": "2026-09-17T18:45:23.415668+00:00",
-  "conclusao": "Nenhuma execução REAL (modo api) com sucesso nas duas topologias — sem base para uma conclusão numérica.\nSMOKE TEST (modo mock, sem chamada LLM e sem custo): 1 documento(s) — exemplo_mock. Serve só para provar que a ferramenta roda de ponta a ponta de graça; não entra em nenhuma média acima.",
+  "gerado_em": "2026-09-17T19:34:57.098278+00:00",
+  "conclusao": "EXECUÇÕES REAIS (modo api): 1 documento(s) comparável(is) (sucesso nas duas topologias) de 1 rodado(s) — 2 execuções reais de pipeline no total.\nChamadas LLM: -85.7% em média no agente único (esperado -86% estrutural: 1 chamada em vez de 7).\nDuração total: -74.4% em média no agente único.\nTokens totais: -86.6% em média no agente único.\nCusto estimado: sem dado (sem preço configurado/tokens medidos).\nDecisão final MUDOU em 1/1 documento(s): icd_hallucinations_2312_15710.\nQuantidade de críticas: variação média de +1.0 crítica(s) no agente único frente ao multiagente.\nSMOKE TEST (modo mock, sem chamada LLM e sem custo): 1 documento(s) — exemplo_mock. Serve só para provar que a ferramenta roda de ponta a ponta de graça; não entra em nenhuma média acima.\nLeitura sugerida: se a decisão final e a quantidade de críticas NÃO mudam entre as duas topologias, a estrutura multiagente está pagando custo/tempo adicionais sem alterar o resultado nestes documentos — o valor dela, se houver, está na qualidade argumentativa e na especialização das críticas (texto de cada crítica em cada final_report.md), não capturada numericamente aqui.\nLIMITE DESTA AVALIAÇÃO: 'qualidade' aqui é medida por indicadores automáticos (decisão final na escala 1-4, quantidade de críticas, quantas são bloqueantes). NÃO houve avaliação humana do conteúdo das críticas — nenhuma pessoa leu os pareceres para julgar se são pertinentes ou bem argumentados, nem se a topologia multiagente produz críticas mais específicas ou melhor fundamentadas que o agente único. 'notas_por_revisor' não é comparável entre as topologias (formatos diferentes) e não entra no comparativo. Os números abaixo dizem quanto a topologia multiagente CUSTA a mais e se ela MUDA o resultado, não se ela o MELHORA.",
   "pares": {
     "exemplo_mock": {
       "doc_id": "exemplo_mock",
@@ -96,6 +96,109 @@
         "decisao_mudou": false,
         "quantidade_criticas_delta": -2,
         "quantidade_criticas_bloqueantes_delta": -1,
+        "requer_revisao_humana_mudou": false
+      }
+    },
+    "icd_hallucinations_2312_15710": {
+      "doc_id": "icd_hallucinations_2312_15710",
+      "titulo": "Alleviating Hallucinations of Large Language Models through Induced Hallucinations",
+      "mode": "api",
+      "provider": "gemini",
+      "model": "gemini-3-flash-preview",
+      "timestamp": "2026-09-17T19:34:57.097767+00:00",
+      "multiagente": {
+        "doc_id": "icd_hallucinations_2312_15710",
+        "titulo": "Alleviating Hallucinations of Large Language Models through Induced Hallucinations",
+        "area": "inteligencia_artificial",
+        "caracteristicas": [
+          "duas_colunas",
+          "tabelas",
+          "formulas_matematicas",
+          "citacoes_extensas",
+          "medio"
+        ],
+        "mode": "api",
+        "provider": "gemini",
+        "model": "gemini-3-flash-preview",
+        "structured_output": true,
+        "cross_review_enabled": true,
+        "single_agent_enabled": false,
+        "timestamp": "2026-09-17T19:33:48.544328+00:00",
+        "run_id": "run_55e3bc4f8a4e4144",
+        "resultado": "sucesso",
+        "decisao_final": 4,
+        "requer_revisao_humana": false,
+        "duracao_total_s": 53.4603902999952,
+        "tokens_totais": 153937,
+        "custo_estimado": null,
+        "chamadas_llm": 7,
+        "modelo_usado": "gemini-3-flash-preview",
+        "quantidade_tools_chamadas": {
+          "validar_completude": 3,
+          "auditar_decisao_final": 1,
+          "checar_coerencia": 1
+        },
+        "quantidade_retries": 0,
+        "quantidade_falhas": 0,
+        "alertas": [],
+        "notas_por_revisor": {
+          "statistician": 4,
+          "domain_expert": 4,
+          "copyeditor": 4
+        },
+        "quantidade_criticas": 3,
+        "quantidade_criticas_bloqueantes": 0,
+        "erro": null
+      },
+      "agente_unico": {
+        "doc_id": "icd_hallucinations_2312_15710",
+        "titulo": "Alleviating Hallucinations of Large Language Models through Induced Hallucinations",
+        "area": "inteligencia_artificial",
+        "caracteristicas": [
+          "duas_colunas",
+          "tabelas",
+          "formulas_matematicas",
+          "citacoes_extensas",
+          "medio"
+        ],
+        "mode": "api",
+        "provider": "gemini",
+        "model": "gemini-3-flash-preview",
+        "structured_output": true,
+        "cross_review_enabled": true,
+        "single_agent_enabled": true,
+        "timestamp": "2026-09-17T19:34:43.378678+00:00",
+        "run_id": "run_02a08d3967eb4e17",
+        "resultado": "sucesso",
+        "decisao_final": 3,
+        "requer_revisao_humana": false,
+        "duracao_total_s": 13.701055999990785,
+        "tokens_totais": 20643,
+        "custo_estimado": null,
+        "chamadas_llm": 1,
+        "modelo_usado": "gemini-3-flash-preview",
+        "quantidade_tools_chamadas": {
+          "auditar_decisao_final": 1
+        },
+        "quantidade_retries": 0,
+        "quantidade_falhas": 0,
+        "alertas": [],
+        "notas_por_revisor": {
+          "agente_unico": 3
+        },
+        "quantidade_criticas": 4,
+        "quantidade_criticas_bloqueantes": 0,
+        "erro": null
+      },
+      "delta": {
+        "duracao_total_s_variacao_pct": -74.37157506126172,
+        "tokens_totais_variacao_pct": -86.5899686235278,
+        "custo_estimado_variacao_pct": null,
+        "chamadas_llm_variacao_pct": -85.71428571428571,
+        "comparavel": true,
+        "decisao_mudou": true,
+        "quantidade_criticas_delta": 1,
+        "quantidade_criticas_bloqueantes_delta": 0,
         "requer_revisao_humana_mudou": false
       }
     }
