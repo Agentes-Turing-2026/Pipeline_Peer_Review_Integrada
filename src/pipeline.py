@@ -19,6 +19,12 @@ As fases 1-3 chamam o provedor de LLM escolhido em ``model_provider.py``
 (Gemini, Maritaca ou OpenAI — a decisão é única e vale para todo o pipeline). A
 fase 4 é pura formatação (sem LLM). Sem a chave do provedor selecionado, a demo
 falha com mensagem clara; para rodar offline, use o modo mock.
+
+``run_demo(single_agent=True)`` troca a topologia inteira pela baseline
+EXPERIMENTAL de agente único (``SingleAgentVerdictPhase`` + ``SingleAgentReportPhase``,
+``build_single_agent_pipeline``): um só agente lê o artigo e produz o veredito
+final diretamente, sem revisores especializados nem leitura cruzada — ver
+``src/single_agent_baseline.py`` e ``docs/protocolo_experimento_topologia.md``.
 """
 
 from __future__ import annotations
@@ -54,6 +60,10 @@ from validacao_retry import dados_validados, validar_com_tentativas  # noqa: E40
 from reviewer_agent import REVIEWERS, _require_api_key, _run_reviewers  # noqa: E402
 from cross_review import _run_cross_review  # noqa: E402
 from editor_agent import _run_editor  # noqa: E402
+
+# Baseline EXPERIMENTAL de topologia (Grupo 3): agente único, sem revisores
+# especializados nem leitura cruzada — ver src/single_agent_baseline.py.
+from single_agent_baseline import AGENTE_UNICO_ID, _run_single_agent  # noqa: E402
 from extraction import ExtractedDocument, PdfExtractor, get_default_extractor  # noqa: E402
 
 # Validação e resiliência da entrada por PDF (Grupo 1). Decide se o arquivo e o
@@ -639,6 +649,89 @@ class EditorVerdictPhase(PipelinePhase[CrossReviews, EditorVerdictSchema]):
 
 
 # ---------------------------------------------------------------------------
+# Fase única (baseline experimental) — Agente Único
+# ---------------------------------------------------------------------------
+
+class SingleAgentVerdictPhase(PipelinePhase[str, EditorVerdictSchema]):
+    """Baseline EXPERIMENTAL: um único agente lê o artigo e já devolve o veredito.
+
+    Substitui as três fases de LLM do peer review (revisão independente,
+    leitura cruzada, editor-chefe) por UMA chamada, para comparar a topologia
+    multiagente com uma topologia mais simples — ver
+    ``src/single_agent_baseline.py`` e ``docs/protocolo_experimento_topologia.md``.
+    A saída usa o MESMO ``EditorVerdictSchema`` das demais topologias, para que
+    relatório final e métricas não precisem de um caminho especial.
+    """
+
+    name = "fase_unica_agente_unico"
+
+    def deserialize_output(self, raw: dict) -> EditorVerdictSchema:
+        return EditorVerdictSchema(**raw)
+
+    def run(self, data: str, context: PipelineContext) -> EditorVerdictSchema:
+        coletor: ExecutionCollector | None = context.config.get("_metrics_collector")
+        with _fase_medida(coletor, self.name):
+            mode = resolve_mode(context.config)
+
+            if mode is RunMode.MOCK:
+                payload = _load_mock(context).get("single_agent_verdict")
+                if payload is None:
+                    raise RuntimeError(
+                        "Mock sem veredito do agente único ('single_agent_verdict')."
+                    )
+                resultado = validar_com_tentativas(
+                    payload, validar_editor_verdict, mode, AGENTE_UNICO_ID,
+                    run_id=context.run_id, fase=self.name,
+                )
+            else:
+                article_text: str = data
+                verdict_payload = asyncio.run(_run_single_agent(article_text))
+                resultado = validar_com_tentativas(
+                    verdict_payload, validar_editor_verdict, mode, AGENTE_UNICO_ID,
+                    run_id=context.run_id, fase=self.name,
+                )
+
+            verdict = dados_validados(resultado)
+            logger.info(
+                "Validação fase única '%s': tentativas=%d", AGENTE_UNICO_ID, resultado.tentativas_usadas,
+            )
+            _registrar_validacao(coletor, fase=self.name, agente=AGENTE_UNICO_ID, resultado=resultado)
+            emit_event(
+                "veredito_validado", author=AGENTE_UNICO_ID, phase=self.name, kind="agent",
+                attributes={"tentativas": resultado.tentativas_usadas, "validado_por": "grupo1"},
+            )
+            logger.info(
+                "Fase única (%s) concluída. Decisão: %s (%s).",
+                mode.value, verdict.decisao, ESCALA_VEREDITO[verdict.decisao],
+            )
+
+            if _tool_auditoria is not None:
+                inicio = time.perf_counter()
+                auditoria = _tool_auditoria(verdict.model_dump())
+                duracao_s = time.perf_counter() - inicio
+                logger.info("[auditoria] %s", auditoria["resumo_auditoria"])
+                if auditoria["requer_revisao_humana"]:
+                    logger.warning("[auditoria] Veredito requer revisão humana.")
+                context.config["_auditoria_veredito"] = auditoria
+                if coletor is not None:
+                    coletor.registrar(
+                        fase=self.name, tipo="tool", nome="auditar_decisao_final",
+                        status="sucesso", duracao_s=duracao_s,
+                        detalhes={"requer_revisao_humana": auditoria["requer_revisao_humana"]},
+                    )
+                emit_event(
+                    "auditoria_veredito", author="grupo2", phase=self.name, kind="tool",
+                    status="alerta" if auditoria["requer_revisao_humana"] else "ok",
+                    attributes={
+                        "requer_revisao_humana": auditoria["requer_revisao_humana"],
+                        "resumo": auditoria["resumo_auditoria"],
+                    },
+                )
+
+            return verdict
+
+
+# ---------------------------------------------------------------------------
 # Fase 4 — Relatório Final (pura formatação, sem LLM)
 # ---------------------------------------------------------------------------
 
@@ -805,6 +898,153 @@ def build_peer_review_pipeline(tracer=None) -> Pipeline:
             FinalReportPhase(),
         ],
         name="peer_review",
+        logger=logger,
+        tracer=tracer,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Relatório final da baseline de agente único (sem revisores/leitura cruzada)
+# ---------------------------------------------------------------------------
+
+def _render_single_agent_report_md(
+    article_ref: str,
+    modelo_ref: str,
+    verdict: EditorVerdictSchema,
+    run_id: str | None = None,
+    document_meta: dict | None = None,
+) -> str:
+    """Monta o relatório em Markdown da baseline de agente único.
+
+    Sem seções de revisores/leitura cruzada — não existem nesta topologia
+    (ver ``docs/protocolo_experimento_topologia.md``).
+    """
+    linhas: list[str] = []
+    linhas.append("# Relatório Final do Peer Review — baseline de agente único")
+    linhas.append("")
+    linhas.append(f"- **Artigo:** {article_ref}")
+    if run_id:
+        linhas.append(f"- **Execução (run_id):** {run_id}")
+    if document_meta:
+        linhas.append(
+            f"- **Documento:** {document_meta.get('document_id')} "
+            f"({document_meta.get('filename')}, {document_meta.get('num_pages')} página(s), "
+            f"extraído por {document_meta.get('extractor')} "
+            f"{document_meta.get('extractor_version')} em "
+            f"{document_meta.get('extraction_duration_s', 0):.2f} s)"
+        )
+        if document_meta.get("warnings"):
+            linhas.append(f"- **Avisos da extração:** {'; '.join(document_meta['warnings'])}")
+    linhas.append(f"- **Modelo:** {modelo_ref}")
+    linhas.append("- **Topologia:** agente único (baseline experimental — ver protocolo)")
+    linhas.append(
+        f"- **Decisão editorial:** {verdict.decisao} — {ESCALA_VEREDITO[verdict.decisao]}"
+    )
+    linhas.append("")
+
+    linhas.append("## Síntese")
+    linhas.append(verdict.sintese)
+    linhas.append("")
+    linhas.append("## Justificativa da decisão")
+    linhas.append(verdict.justificativa)
+    linhas.append("")
+
+    linhas.append("## Nota do agente único (1-4)")
+    linhas.append(str(verdict.notas_por_revisor.get(AGENTE_UNICO_ID, "—")))
+    linhas.append("")
+
+    linhas.append("## Críticas levantadas")
+    if verdict.criticas:
+        for crit in verdict.criticas:
+            linhas.append(f"- **[{crit.tipo}]** {crit.texto}")
+    else:
+        linhas.append("- Nenhuma crítica registrada.")
+    linhas.append("")
+
+    linhas.append("## Recomendações aos autores")
+    if verdict.recomendacoes_aos_autores:
+        for rec in verdict.recomendacoes_aos_autores:
+            linhas.append(f"- {rec}")
+    else:
+        linhas.append("- Nenhuma recomendação registrada.")
+    linhas.append("")
+
+    return "\n".join(linhas)
+
+
+class SingleAgentReportPhase(PipelinePhase[EditorVerdictSchema, FinalReport]):
+    """Consolida o veredito do agente único num relatório final (sem LLM).
+
+    Equivalente de ``FinalReportPhase`` para a topologia de agente único: não
+    lê ``fase_1_revisao_independente``/``fase_2_leitura_cruzada`` no
+    ``context`` porque essas fases não existem nesta topologia.
+    """
+
+    name = "fase_4_relatorio_final"
+
+    def deserialize_output(self, raw: dict) -> FinalReport:
+        return FinalReport(markdown=raw["markdown"], data=raw["data"])
+
+    def run(self, data: EditorVerdictSchema, context: PipelineContext) -> FinalReport:
+        coletor: ExecutionCollector | None = context.config.get("_metrics_collector")
+        with _fase_medida(coletor, self.name):
+            verdict = data
+            article_ref: str = context.config.get("article_ref", "entrada")
+            document_meta: dict | None = context.config.get("document_meta")
+            modelo_ref = descrever_execucao(context.config)
+
+            _tracer_atual = get_current_tracer()
+            run_id = _tracer_atual.run_id if _tracer_atual is not None else context.run_id
+            markdown = _render_single_agent_report_md(
+                article_ref=article_ref, modelo_ref=modelo_ref, verdict=verdict,
+                run_id=run_id, document_meta=document_meta,
+            )
+            auditoria_veredito = context.config.get("_auditoria_veredito")
+            structured = {
+                "run_id": run_id,
+                "article_ref": article_ref,
+                "document": document_meta,
+                "model": modelo_ref,
+                "topology": "single_agent",
+                "decisao": verdict.decisao,
+                "decisao_rotulo": ESCALA_VEREDITO[verdict.decisao],
+                "phase3_verdict": verdict.model_dump(),
+                "auditoria_veredito": auditoria_veredito,
+            }
+
+            if coletor is not None:
+                coletor.registrar(
+                    fase=self.name, tipo="decisao_final", nome="veredito_final",
+                    status="sucesso",
+                    detalhes={
+                        "decisao": verdict.decisao,
+                        "requer_revisao_humana": bool(
+                            auditoria_veredito and auditoria_veredito.get("requer_revisao_humana")
+                        ),
+                    },
+                )
+
+            logger.info("Fase 4 (agente único) concluída: relatório final gerado.")
+            emit_event(
+                "relatorio_final_gerado", author="sistema", phase=self.name, kind="report",
+                attributes={"decisao": verdict.decisao, "rotulo": ESCALA_VEREDITO[verdict.decisao]},
+            )
+            return FinalReport(markdown=markdown, data=structured)
+
+
+def build_single_agent_pipeline(tracer=None) -> Pipeline:
+    """Monta a baseline de agente único: 1 fase de LLM + relatório final.
+
+    Mesma orquestração genérica de ``build_peer_review_pipeline`` (ver
+    ``pipeline_base.py``), só com fases diferentes — ver
+    ``docs/protocolo_experimento_topologia.md``.
+    """
+    return Pipeline(
+        phases=[
+            SingleAgentVerdictPhase(),
+            SingleAgentReportPhase(),
+        ],
+        name="single_agent_baseline",
         logger=logger,
         tracer=tracer,
     )
@@ -1016,6 +1256,7 @@ def run_demo(
     extractor: PdfExtractor | None = None,
     run_id: str | None = None,
     cross_review: bool | None = None,
+    single_agent: bool | None = None,
     forcar: bool = False,
 ) -> FinalReport:
     """Roda o pipeline completo (PDF real ou artigo de exemplo) e salva os resultados.
@@ -1058,6 +1299,15 @@ def run_demo(
         só que preenchido deterministicamente. Existe para medir o benefício
         (ou não) da leitura cruzada frente ao custo/tempo adicional dela —
         ver ``src/benchmark/ablacao_cross_review.py``.
+    single_agent:
+        ``False`` (padrão/``None``) roda o pipeline de peer review multiagente
+        (revisão independente + leitura cruzada + editor-chefe). ``True`` troca
+        a TOPOLOGIA inteira pela baseline experimental de agente único: um só
+        agente lê o artigo e produz o veredito final diretamente, substituindo
+        as três fases de LLM por uma. Não se combina com ``cross_review``
+        (que só existe dentro da topologia multiagente) — ver
+        ``src/single_agent_baseline.py`` e
+        ``docs/protocolo_experimento_topologia.md``.
     forcar:
         Só faz sentido junto com ``run_id``. Descarta os checkpoints e as
         métricas da execução e roda TUDO de novo sob o mesmo ``run_id``,
@@ -1094,6 +1344,8 @@ def run_demo(
             mode = meta_salva["mode"]
         if cross_review is None and "cross_review" in meta_salva:
             cross_review = meta_salva["cross_review"]
+        if single_agent is None and "single_agent" in meta_salva:
+            single_agent = meta_salva["single_agent"]
 
         if meta_salva.get("status") == "concluida" and not forcar:
             # Execução já terminou: não há nada a retomar. Re-executar aqui
@@ -1132,8 +1384,10 @@ def run_demo(
 
     if cross_review is None:
         cross_review = True
+    if single_agent is None:
+        single_agent = False
 
-    config: dict = {"cross_review_enabled": cross_review}
+    config: dict = {"cross_review_enabled": cross_review, "single_agent_enabled": single_agent}
     if mode is not None:
         config["mode"] = mode
     if pdf_path is not None:
@@ -1186,6 +1440,7 @@ def run_demo(
     meta.setdefault("pdf_path", str(pdf_path) if pdf_path else None)
     meta.setdefault("mode", resolved.value)
     meta.setdefault("cross_review", cross_review)
+    meta.setdefault("single_agent", single_agent)
     meta["status"] = "em_andamento"
     ckpt.salvar_estado("meta", meta)
 
@@ -1279,11 +1534,20 @@ def run_demo(
             },
         )
 
-    pipeline = build_peer_review_pipeline(tracer=tracer)
+    pipeline = (
+        build_single_agent_pipeline(tracer=tracer)
+        if single_agent
+        else build_peer_review_pipeline(tracer=tracer)
+    )
+    topologia_desc = (
+        "agente_unico (baseline experimental)"
+        if single_agent
+        else f"multiagente [leitura_cruzada={'ativa' if cross_review else 'DESATIVADA (experimental)'}]"
+    )
     print(
         f"Pipeline '{pipeline.name}' [modo={resolved.value} · "
         f"modelo={descrever_execucao(config)} · "
-        f"leitura_cruzada={'ativa' if cross_review else 'DESATIVADA (experimental)'}] — "
+        f"topologia={topologia_desc}] — "
         f"fases: {pipeline.phase_names}"
     )
 
@@ -1435,6 +1699,7 @@ def run_demo(
                     "artigo": config["article_ref"],
                     "modelo": descrever_execucao(config),
                     "cross_review_enabled": cross_review,
+                    "single_agent_enabled": single_agent,
                 },
             ):
                 report = _run_and_save()

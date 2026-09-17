@@ -1,5 +1,5 @@
 {
-  "_comment": "Mock OFFLINE para o pipeline de peer review. Dados FICTÍCIOS, porém válidos contra os schemas oficiais (ReviewSchema, CrossReviewSchema, EditorVerdictSchema). Permite rodar `python pipeline.py mock` de ponta a ponta sem internet nem GOOGLE_API_KEY. Cada slice (phase1_reviews / phase2_cross_reviews / phase3_verdict) é lido pela fase correspondente e revalidado.",
+  "_comment": "Mock OFFLINE para o pipeline de peer review. Dados FICTÍCIOS, porém válidos contra os schemas oficiais (ReviewSchema, CrossReviewSchema, EditorVerdictSchema). Permite rodar `python pipeline.py mock` de ponta a ponta sem internet nem GOOGLE_API_KEY. Cada slice (phase1_reviews / phase2_cross_reviews / phase3_verdict) é lido pela fase correspondente e revalidado. 'single_agent_verdict' é o veredito (EditorVerdictSchema) da baseline experimental de agente único (run_demo(single_agent=True)), independente das três fases acima.",
   "phase1_reviews": {
     "statistician": {
       "revisor": "statistician",
@@ -104,6 +104,24 @@
       "Ampliar a amostra ou justificar formalmente o poder estatístico adotado.",
       "Padronizar a nomenclatura de variáveis em todas as seções.",
       "Destacar explicitamente a contribuição no resumo e reforçar a discussão frente ao estado da arte.",
+      "Incluir validação externa em uma coorte de outro centro."
+    ]
+  },
+  "single_agent_verdict": {
+    "decisao": 3,
+    "justificativa": "O método é sólido e o texto é claro, mas a amostra reduzida e a originalidade limitada frente à literatura recente impedem uma aceitação sem ressalvas. Nenhum dos problemas encontrados é, isoladamente, bloqueante.",
+    "sintese": "O artigo propõe uma rede leve para triagem de retinopatia diabética, com método sólido e boa clareza, porém originalidade limitada e amostra reduzida.",
+    "notas_por_revisor": {
+      "agente_unico": 3
+    },
+    "criticas": [
+      { "revisor": "agente_unico", "tipo": "fraqueza", "texto": "Tamanho amostral (n=24) limita o poder estatístico dos efeitos de interação relatados." },
+      { "revisor": "agente_unico", "tipo": "fraqueza", "texto": "Originalidade limitada: a abordagem combina técnicas já consolidadas sem diferencial metodológico claro." },
+      { "revisor": "agente_unico", "tipo": "fraqueza", "texto": "A discussão dos resultados frente ao estado da arte poderia ser mais aprofundada." }
+    ],
+    "recomendacoes_aos_autores": [
+      "Ampliar a amostra ou justificar formalmente o poder estatístico adotado.",
+      "Reforçar a discussão frente ao estado da arte.",
       "Incluir validação externa em uma coorte de outro centro."
     ]
   }

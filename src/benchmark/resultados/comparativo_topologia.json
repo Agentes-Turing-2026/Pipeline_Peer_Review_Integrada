@@ -1,0 +1,103 @@
+{
+  "gerado_em": "2026-09-17T18:45:23.415668+00:00",
+  "conclusao": "Nenhuma execução REAL (modo api) com sucesso nas duas topologias — sem base para uma conclusão numérica.\nSMOKE TEST (modo mock, sem chamada LLM e sem custo): 1 documento(s) — exemplo_mock. Serve só para provar que a ferramenta roda de ponta a ponta de graça; não entra em nenhuma média acima.",
+  "pares": {
+    "exemplo_mock": {
+      "doc_id": "exemplo_mock",
+      "titulo": "Artigo de exemplo (smoke test sem PDF real)",
+      "mode": "mock",
+      "provider": null,
+      "model": null,
+      "timestamp": "2026-09-17T18:45:23.415484+00:00",
+      "multiagente": {
+        "doc_id": "exemplo_mock",
+        "titulo": "Artigo de exemplo (smoke test sem PDF real)",
+        "area": "smoke_test",
+        "caracteristicas": [
+          "smoke_test",
+          "sem_pdf_real"
+        ],
+        "mode": "mock",
+        "provider": null,
+        "model": null,
+        "structured_output": null,
+        "cross_review_enabled": true,
+        "single_agent_enabled": false,
+        "timestamp": "2026-09-17T18:45:23.367493+00:00",
+        "run_id": "run_615cbe33e0bd4977",
+        "resultado": "sucesso",
+        "decisao_final": 3,
+        "requer_revisao_humana": false,
+        "duracao_total_s": 0.023471900000004098,
+        "tokens_totais": null,
+        "custo_estimado": null,
+        "chamadas_llm": null,
+        "modelo_usado": null,
+        "quantidade_tools_chamadas": {
+          "validar_completude": 3,
+          "auditar_decisao_final": 1,
+          "checar_coerencia": 1
+        },
+        "quantidade_retries": 0,
+        "quantidade_falhas": 0,
+        "alertas": [],
+        "notas_por_revisor": {
+          "statistician": 3,
+          "domain_expert": 3,
+          "copyeditor": 2
+        },
+        "quantidade_criticas": 5,
+        "quantidade_criticas_bloqueantes": 1,
+        "erro": null
+      },
+      "agente_unico": {
+        "doc_id": "exemplo_mock",
+        "titulo": "Artigo de exemplo (smoke test sem PDF real)",
+        "area": "smoke_test",
+        "caracteristicas": [
+          "smoke_test",
+          "sem_pdf_real"
+        ],
+        "mode": "mock",
+        "provider": null,
+        "model": null,
+        "structured_output": null,
+        "cross_review_enabled": true,
+        "single_agent_enabled": true,
+        "timestamp": "2026-09-17T18:45:23.398478+00:00",
+        "run_id": "run_13132afdb43e464f",
+        "resultado": "sucesso",
+        "decisao_final": 3,
+        "requer_revisao_humana": false,
+        "duracao_total_s": 0.00838129999465309,
+        "tokens_totais": null,
+        "custo_estimado": null,
+        "chamadas_llm": null,
+        "modelo_usado": null,
+        "quantidade_tools_chamadas": {
+          "auditar_decisao_final": 1
+        },
+        "quantidade_retries": 0,
+        "quantidade_falhas": 0,
+        "alertas": [],
+        "notas_por_revisor": {
+          "agente_unico": 3
+        },
+        "quantidade_criticas": 3,
+        "quantidade_criticas_bloqueantes": 0,
+        "erro": null
+      },
+      "delta": {
+        "duracao_total_s_variacao_pct": -64.2921962233495,
+        "tokens_totais_variacao_pct": null,
+        "custo_estimado_variacao_pct": null,
+        "chamadas_llm_variacao_pct": null,
+        "comparavel": true,
+        "decisao_mudou": false,
+        "quantidade_criticas_delta": -2,
+        "quantidade_criticas_bloqueantes_delta": -1,
+        "requer_revisao_humana_mudou": false
+      }
+    }
+  }
+}

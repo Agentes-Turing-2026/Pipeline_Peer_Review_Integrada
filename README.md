@@ -56,6 +56,7 @@ orquestração.
 │   ├── relatorio_benchmark_custo_eficiencia.md # Grupo 2 — relatório técnico completo
 │   ├── alteracoes_grupo2_corpus_docs_ci.md     # Grupo 2 — antes/depois da última rodada de revisão
 │   ├── tools_reference.md        # Grupo 2 — tools determinísticas e tabela de conversão
+│   ├── protocolo_experimento_topologia.md      # Grupo 3 — protocolo: multiagente vs. agente único (baseline)
 │   └── apresentacao_*.md         # material de apresentação (registro histórico, não normativo)
 └── src/
     ├── pipeline_base.py          # Orquestração GENÉRICA (Pipeline, PipelinePhase, PipelineContext)
@@ -65,6 +66,7 @@ orquestração.
     ├── reviewer_agent.py         # Fase 1 — agentes revisores
     ├── cross_review.py           # Fase 2 — leitura cruzada
     ├── editor_agent.py           # Fase 3 — editor-chefe
+    ├── single_agent_baseline.py  # Grupo 3 — baseline EXPERIMENTAL: 1 agente único, sem revisores/leitura cruzada
     ├── validacao_retry.py        # Grupo 1 — camada de validação, retry e confiabilidade (saída dos agentes)
     ├── eventos_validacao.py      # Grupo 1 — eventos estruturados (JSONL) de validação/retry
     ├── validacao_entrada.py      # Grupo 1 — validação e resiliência da ENTRADA por PDF (arquivo + texto extraído)
@@ -1266,6 +1268,33 @@ só distorce o número.
 > **se ela muda** o resultado — **não** se ela o **melhora**. Para isso, é
 > preciso ler o texto de `resposta_aos_pares` em cada `final_report.md`; a
 > ferramenta prepara os números, não substitui essa leitura.
+
+### Baseline experimental: agente único vs. topologia multiagente
+
+`run_demo(single_agent=True)` (ou `python main.py --single-agent`) troca a
+TOPOLOGIA inteira: em vez das três fases de LLM do peer review (revisão
+independente + leitura cruzada + editor-chefe, 7 chamadas), um único agente
+lê o artigo e produz o veredito final diretamente, em 1 chamada
+(`src/single_agent_baseline.py`). A saída usa o mesmo `EditorVerdictSchema`,
+então relatório final e métricas funcionam sem caminho especial.
+
+```bash
+python main.py mock --single-agent   # baseline offline, sem chave de API
+python main.py api --single-agent    # baseline real (mesmo provedor/modelo do LLM_PROVIDER)
+```
+
+`comparar_topologia.py` roda o par (multiagente + agente único) para os
+mesmos documentos, no mesmo padrão de `ablacao_cross_review.py`:
+
+```bash
+.venv/bin/python -m src.benchmark.comparar_topologia --mode mock --docs exemplo_mock
+.venv/bin/python -m src.benchmark.comparar_topologia --mode api --docs icd_hallucinations_2312_15710
+.venv/bin/python -m src.benchmark.comparar_topologia --regerar
+```
+
+Resultado em [`src/benchmark/resultados/comparativo_topologia.md`](src/benchmark/resultados/comparativo_topologia.md).
+Hipótese, variáveis, métricas e limitações completas do experimento estão
+registradas em [`docs/protocolo_experimento_topologia.md`](docs/protocolo_experimento_topologia.md).
 
 ---
 
