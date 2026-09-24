@@ -1,0 +1,206 @@
+{
+  "aviso": "Pares no formato PAREADO antigo (multiagente/agente_unico/delta), de antes deste comparativo virar três vias. Preservado aqui só pra não perder dado de execução real já pago em API — não é lido nem agregado pelo comparativo de três vias.",
+  "atualizado_em": "2026-09-24T18:03:23.503538+00:00",
+  "pares": {
+    "exemplo_mock": {
+      "doc_id": "exemplo_mock",
+      "titulo": "Artigo de exemplo (smoke test sem PDF real)",
+      "mode": "mock",
+      "provider": null,
+      "model": null,
+      "timestamp": "2026-09-17T18:45:23.415484+00:00",
+      "multiagente": {
+        "doc_id": "exemplo_mock",
+        "titulo": "Artigo de exemplo (smoke test sem PDF real)",
+        "area": "smoke_test",
+        "caracteristicas": [
+          "smoke_test",
+          "sem_pdf_real"
+        ],
+        "mode": "mock",
+        "provider": null,
+        "model": null,
+        "structured_output": null,
+        "cross_review_enabled": true,
+        "single_agent_enabled": false,
+        "timestamp": "2026-09-17T18:45:23.367493+00:00",
+        "run_id": "run_615cbe33e0bd4977",
+        "resultado": "sucesso",
+        "decisao_final": 3,
+        "requer_revisao_humana": false,
+        "duracao_total_s": 0.023471900000004098,
+        "tokens_totais": null,
+        "custo_estimado": null,
+        "chamadas_llm": null,
+        "modelo_usado": null,
+        "quantidade_tools_chamadas": {
+          "validar_completude": 3,
+          "auditar_decisao_final": 1,
+          "checar_coerencia": 1
+        },
+        "quantidade_retries": 0,
+        "quantidade_falhas": 0,
+        "alertas": [],
+        "notas_por_revisor": {
+          "statistician": 3,
+          "domain_expert": 3,
+          "copyeditor": 2
+        },
+        "quantidade_criticas": 5,
+        "quantidade_criticas_bloqueantes": 1,
+        "erro": null
+      },
+      "agente_unico": {
+        "doc_id": "exemplo_mock",
+        "titulo": "Artigo de exemplo (smoke test sem PDF real)",
+        "area": "smoke_test",
+        "caracteristicas": [
+          "smoke_test",
+          "sem_pdf_real"
+        ],
+        "mode": "mock",
+        "provider": null,
+        "model": null,
+        "structured_output": null,
+        "cross_review_enabled": true,
+        "single_agent_enabled": true,
+        "timestamp": "2026-09-17T18:45:23.398478+00:00",
+        "run_id": "run_13132afdb43e464f",
+        "resultado": "sucesso",
+        "decisao_final": 3,
+        "requer_revisao_humana": false,
+        "duracao_total_s": 0.00838129999465309,
+        "tokens_totais": null,
+        "custo_estimado": null,
+        "chamadas_llm": null,
+        "modelo_usado": null,
+        "quantidade_tools_chamadas": {
+          "auditar_decisao_final": 1
+        },
+        "quantidade_retries": 0,
+        "quantidade_falhas": 0,
+        "alertas": [],
+        "notas_por_revisor": {
+          "agente_unico": 3
+        },
+        "quantidade_criticas": 3,
+        "quantidade_criticas_bloqueantes": 0,
+        "erro": null
+      },
+      "delta": {
+        "duracao_total_s_variacao_pct": -64.2921962233495,
+        "tokens_totais_variacao_pct": null,
+        "custo_estimado_variacao_pct": null,
+        "chamadas_llm_variacao_pct": null,
+        "comparavel": true,
+        "decisao_mudou": false,
+        "quantidade_criticas_delta": -2,
+        "quantidade_criticas_bloqueantes_delta": -1,
+        "requer_revisao_humana_mudou": false
+      }
+    },
+    "icd_hallucinations_2312_15710": {
+      "doc_id": "icd_hallucinations_2312_15710",
+      "titulo": "Alleviating Hallucinations of Large Language Models through Induced Hallucinations",
+      "mode": "api",
+      "provider": "gemini",
+      "model": "gemini-3-flash-preview",
+      "timestamp": "2026-09-17T19:34:57.097767+00:00",
+      "multiagente": {
+        "doc_id": "icd_hallucinations_2312_15710",
+        "titulo": "Alleviating Hallucinations of Large Language Models through Induced Hallucinations",
+        "area": "inteligencia_artificial",
+        "caracteristicas": [
+          "duas_colunas",
+          "tabelas",
+          "formulas_matematicas",
+          "citacoes_extensas",
+          "medio"
+        ],
+        "mode": "api",
+        "provider": "gemini",
+        "model": "gemini-3-flash-preview",
+        "structured_output": true,
+        "cross_review_enabled": true,
+        "single_agent_enabled": false,
+        "timestamp": "2026-09-17T19:33:48.544328+00:00",
+        "run_id": "run_55e3bc4f8a4e4144",
+        "resultado": "sucesso",
+        "decisao_final": 4,
+        "requer_revisao_humana": false,
+        "duracao_total_s": 53.4603902999952,
+        "tokens_totais": 153937,
+        "custo_estimado": null,
+        "chamadas_llm": 7,
+        "modelo_usado": "gemini-3-flash-preview",
+        "quantidade_tools_chamadas": {
+          "validar_completude": 3,
+          "auditar_decisao_final": 1,
+          "checar_coerencia": 1
+        },
+        "quantidade_retries": 0,
+        "quantidade_falhas": 0,
+        "alertas": [],
+        "notas_por_revisor": {
+          "statistician": 4,
+          "domain_expert": 4,
+          "copyeditor": 4
+        },
+        "quantidade_criticas": 3,
+        "quantidade_criticas_bloqueantes": 0,
+        "erro": null
+      },
+      "agente_unico": {
+        "doc_id": "icd_hallucinations_2312_15710",
+        "titulo": "Alleviating Hallucinations of Large Language Models through Induced Hallucinations",
+        "area": "inteligencia_artificial",
+        "caracteristicas": [
+          "duas_colunas",
+          "tabelas",
+          "formulas_matematicas",
+          "citacoes_extensas",
+          "medio"
+        ],
+        "mode": "api",
+        "provider": "gemini",
+        "model": "gemini-3-flash-preview",
+        "structured_output": true,
+        "cross_review_enabled": true,
+        "single_agent_enabled": true,
+        "timestamp": "2026-09-17T19:34:43.378678+00:00",
+        "run_id": "run_02a08d3967eb4e17",
+        "resultado": "sucesso",
+        "decisao_final": 3,
+        "requer_revisao_humana": false,
+        "duracao_total_s": 13.701055999990785,
+        "tokens_totais": 20643,
+        "custo_estimado": null,
+        "chamadas_llm": 1,
+        "modelo_usado": "gemini-3-flash-preview",
+        "quantidade_tools_chamadas": {
+          "auditar_decisao_final": 1
+        },
+        "quantidade_retries": 0,
+        "quantidade_falhas": 0,
+        "alertas": [],
+        "notas_por_revisor": {
+          "agente_unico": 3
+        },
+        "quantidade_criticas": 4,
+        "quantidade_criticas_bloqueantes": 0,
+        "erro": null
+      },
+      "delta": {
+        "duracao_total_s_variacao_pct": -74.37157506126172,
+        "tokens_totais_variacao_pct": -86.5899686235278,
+        "custo_estimado_variacao_pct": null,
+        "chamadas_llm_variacao_pct": -85.71428571428571,
+        "comparavel": true,
+        "decisao_mudou": true,
+        "quantidade_criticas_delta": 1,
+        "quantidade_criticas_bloqueantes_delta": 0,
+        "requer_revisao_humana_mudou": false
+      }
+    }
+  }
+}

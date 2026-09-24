@@ -1,6 +1,6 @@
 {
-  "gerado_em": "2026-09-17T19:34:57.098278+00:00",
-  "conclusao": "EXECUÇÕES REAIS (modo api): 1 documento(s) comparável(is) (sucesso nas duas topologias) de 1 rodado(s) — 2 execuções reais de pipeline no total.\nChamadas LLM: -85.7% em média no agente único (esperado -86% estrutural: 1 chamada em vez de 7).\nDuração total: -74.4% em média no agente único.\nTokens totais: -86.6% em média no agente único.\nCusto estimado: sem dado (sem preço configurado/tokens medidos).\nDecisão final MUDOU em 1/1 documento(s): icd_hallucinations_2312_15710.\nQuantidade de críticas: variação média de +1.0 crítica(s) no agente único frente ao multiagente.\nSMOKE TEST (modo mock, sem chamada LLM e sem custo): 1 documento(s) — exemplo_mock. Serve só para provar que a ferramenta roda de ponta a ponta de graça; não entra em nenhuma média acima.\nLeitura sugerida: se a decisão final e a quantidade de críticas NÃO mudam entre as duas topologias, a estrutura multiagente está pagando custo/tempo adicionais sem alterar o resultado nestes documentos — o valor dela, se houver, está na qualidade argumentativa e na especialização das críticas (texto de cada crítica em cada final_report.md), não capturada numericamente aqui.\nLIMITE DESTA AVALIAÇÃO: 'qualidade' aqui é medida por indicadores automáticos (decisão final na escala 1-4, quantidade de críticas, quantas são bloqueantes). NÃO houve avaliação humana do conteúdo das críticas — nenhuma pessoa leu os pareceres para julgar se são pertinentes ou bem argumentados, nem se a topologia multiagente produz críticas mais específicas ou melhor fundamentadas que o agente único. 'notas_por_revisor' não é comparável entre as topologias (formatos diferentes) e não entra no comparativo. Os números abaixo dizem quanto a topologia multiagente CUSTA a mais e se ela MUDA o resultado, não se ela o MELHORA.",
+  "gerado_em": "2026-09-24T19:25:07.080811+00:00",
+  "conclusao": "EXECUÇÕES REAIS (modo api): 3 documento(s) comparável(is) (sucesso nas três topologias) de 4 rodado(s) — 9 execuções reais de pipeline no total.\n\n### Salto 1 — agente único → sem leitura cruzada (C0→C1)\nChamadas LLM: +300.0% em média.\nDuração total: +17.2% em média.\nTokens totais: +268.9% em média.\nCusto estimado: +276.3% em média.\nDecisão final mudou em 2/3 documento(s): psicologia_historia_livro_scielo, quimica_phase_space_arxiv_2608_11448.\nQuantidade de críticas: variação média de -5.3 crítica(s).\n\n### Salto 2 — sem leitura cruzada → completo (C1→C2)\nChamadas LLM: +75.0% em média.\nDuração total: +106.1% em média.\nTokens totais: +86.0% em média.\nCusto estimado: +88.9% em média.\nDecisão final mudou em 1/3 documento(s): quimica_phase_space_arxiv_2608_11448.\nQuantidade de críticas: variação média de +4.7 crítica(s).\nNotas por revisor mudaram em 2/3 documento(s): psicologia_historia_livro_scielo, quimica_phase_space_arxiv_2608_11448.\n\n### Total — agente único → completo (C0→C2)\nChamadas LLM: +600.0% em média. (esperado +600% estrutural: 7 chamadas em vez de 1.)\nDuração total: +135.7% em média.\nTokens totais: +585.8% em média.\nCusto estimado: +610.7% em média.\nDecisão final mudou em 1/3 documento(s): psicologia_historia_livro_scielo.\nQuantidade de críticas: variação média de -0.7 crítica(s).\n\nDocumentos não comparáveis (falha/bloqueio em alguma topologia): psicologia_lacan_cinema_pepsic.\nSMOKE TEST (modo mock, sem chamada LLM e sem custo): 1 documento(s) — exemplo_mock. Serve só para provar que a ferramenta roda de ponta a ponta de graça; não entra em nenhuma média acima.\nLeitura sugerida: compare o Δqualidade/Δcusto de cada salto (decisão mudou? quantidade de críticas mudou? a que custo em tempo/tokens?). Se um salto NÃO muda decisão nem críticas, aquela camada está pagando custo/tempo adicionais sem alterar o resultado nestes documentos — o valor dela, se houver, está na qualidade argumentativa e na especialização das críticas (texto de cada crítica em cada final_report.md), não capturada numericamente aqui. Note também que o Salto 1 tem base pequena (1 chamada LLM) — a variação percentual amplifica, então vale conferir os números absolutos na tabela.\nLIMITE DESTA AVALIAÇÃO: 'qualidade' aqui é medida por indicadores automáticos (decisão final na escala 1-4, quantidade de críticas, quantas são bloqueantes). NÃO houve avaliação humana do conteúdo das críticas — nenhuma pessoa leu os pareceres para julgar se são pertinentes ou bem argumentados, nem se uma topologia mais especializada produz críticas mais específicas ou melhor fundamentadas que uma mais simples. 'notas_por_revisor' só é comparável entre C1 e C2 (os mesmos três revisores) e por isso aparece só no Salto 2; com o agente único (C0) os formatos diferem e ela fica de fora. Os números abaixo dizem quanto cada salto de especialização CUSTA a mais e se ele MUDA o resultado, não se ele o MELHORA.",
   "pares": {
     "exemplo_mock": {
       "doc_id": "exemplo_mock",
@@ -8,95 +8,309 @@
       "mode": "mock",
       "provider": null,
       "model": null,
-      "timestamp": "2026-09-17T18:45:23.415484+00:00",
-      "multiagente": {
-        "doc_id": "exemplo_mock",
-        "titulo": "Artigo de exemplo (smoke test sem PDF real)",
-        "area": "smoke_test",
-        "caracteristicas": [
-          "smoke_test",
-          "sem_pdf_real"
-        ],
-        "mode": "mock",
-        "provider": null,
-        "model": null,
-        "structured_output": null,
-        "cross_review_enabled": true,
-        "single_agent_enabled": false,
-        "timestamp": "2026-09-17T18:45:23.367493+00:00",
-        "run_id": "run_615cbe33e0bd4977",
-        "resultado": "sucesso",
-        "decisao_final": 3,
-        "requer_revisao_humana": false,
-        "duracao_total_s": 0.023471900000004098,
-        "tokens_totais": null,
-        "custo_estimado": null,
-        "chamadas_llm": null,
-        "modelo_usado": null,
-        "quantidade_tools_chamadas": {
-          "validar_completude": 3,
-          "auditar_decisao_final": 1,
-          "checar_coerencia": 1
+      "timestamp": "2026-09-24T18:03:23.581909+00:00",
+      "execucoes": {
+        "agente_unico": {
+          "doc_id": "exemplo_mock",
+          "titulo": "Artigo de exemplo (smoke test sem PDF real)",
+          "area": "smoke_test",
+          "caracteristicas": [
+            "smoke_test",
+            "sem_pdf_real"
+          ],
+          "mode": "mock",
+          "provider": null,
+          "model": null,
+          "structured_output": null,
+          "cross_review_enabled": true,
+          "single_agent_enabled": true,
+          "timestamp": "2026-09-24T18:03:23.504583+00:00",
+          "run_id": "run_bd2ee30ba92146b7",
+          "resultado": "sucesso",
+          "decisao_final": 3,
+          "requer_revisao_humana": false,
+          "duracao_total_s": 0.006688699999358505,
+          "tokens_totais": null,
+          "custo_estimado": null,
+          "chamadas_llm": null,
+          "modelo_usado": null,
+          "quantidade_tools_chamadas": {
+            "auditar_decisao_final": 1
+          },
+          "quantidade_retries": 0,
+          "quantidade_falhas": 0,
+          "alertas": [],
+          "notas_por_revisor": {
+            "agente_unico": 3
+          },
+          "quantidade_criticas": 3,
+          "quantidade_criticas_bloqueantes": 0,
+          "erro": null
         },
-        "quantidade_retries": 0,
-        "quantidade_falhas": 0,
-        "alertas": [],
-        "notas_por_revisor": {
-          "statistician": 3,
-          "domain_expert": 3,
-          "copyeditor": 2
+        "sem_leitura_cruzada": {
+          "doc_id": "exemplo_mock",
+          "titulo": "Artigo de exemplo (smoke test sem PDF real)",
+          "area": "smoke_test",
+          "caracteristicas": [
+            "smoke_test",
+            "sem_pdf_real"
+          ],
+          "mode": "mock",
+          "provider": null,
+          "model": null,
+          "structured_output": null,
+          "cross_review_enabled": false,
+          "single_agent_enabled": false,
+          "timestamp": "2026-09-24T18:03:23.518892+00:00",
+          "run_id": "run_b0acd41147474633",
+          "resultado": "sucesso",
+          "decisao_final": 3,
+          "requer_revisao_humana": false,
+          "duracao_total_s": 0.025775000045541674,
+          "tokens_totais": null,
+          "custo_estimado": null,
+          "chamadas_llm": null,
+          "modelo_usado": null,
+          "quantidade_tools_chamadas": {
+            "validar_completude": 3,
+            "auditar_decisao_final": 1,
+            "checar_coerencia": 1
+          },
+          "quantidade_retries": 0,
+          "quantidade_falhas": 0,
+          "alertas": [],
+          "notas_por_revisor": {
+            "statistician": 3,
+            "domain_expert": 3,
+            "copyeditor": 2
+          },
+          "quantidade_criticas": 5,
+          "quantidade_criticas_bloqueantes": 1,
+          "erro": null
         },
-        "quantidade_criticas": 5,
-        "quantidade_criticas_bloqueantes": 1,
-        "erro": null
+        "completo": {
+          "doc_id": "exemplo_mock",
+          "titulo": "Artigo de exemplo (smoke test sem PDF real)",
+          "area": "smoke_test",
+          "caracteristicas": [
+            "smoke_test",
+            "sem_pdf_real"
+          ],
+          "mode": "mock",
+          "provider": null,
+          "model": null,
+          "structured_output": null,
+          "cross_review_enabled": true,
+          "single_agent_enabled": false,
+          "timestamp": "2026-09-24T18:03:23.554374+00:00",
+          "run_id": "run_3754fc03b2054f3f",
+          "resultado": "sucesso",
+          "decisao_final": 3,
+          "requer_revisao_humana": false,
+          "duracao_total_s": 0.018831800029147416,
+          "tokens_totais": null,
+          "custo_estimado": null,
+          "chamadas_llm": null,
+          "modelo_usado": null,
+          "quantidade_tools_chamadas": {
+            "validar_completude": 3,
+            "auditar_decisao_final": 1,
+            "checar_coerencia": 1
+          },
+          "quantidade_retries": 0,
+          "quantidade_falhas": 0,
+          "alertas": [],
+          "notas_por_revisor": {
+            "statistician": 3,
+            "domain_expert": 3,
+            "copyeditor": 2
+          },
+          "quantidade_criticas": 5,
+          "quantidade_criticas_bloqueantes": 1,
+          "erro": null
+        }
       },
-      "agente_unico": {
-        "doc_id": "exemplo_mock",
-        "titulo": "Artigo de exemplo (smoke test sem PDF real)",
-        "area": "smoke_test",
-        "caracteristicas": [
-          "smoke_test",
-          "sem_pdf_real"
-        ],
-        "mode": "mock",
-        "provider": null,
-        "model": null,
-        "structured_output": null,
-        "cross_review_enabled": true,
-        "single_agent_enabled": true,
-        "timestamp": "2026-09-17T18:45:23.398478+00:00",
-        "run_id": "run_13132afdb43e464f",
-        "resultado": "sucesso",
-        "decisao_final": 3,
-        "requer_revisao_humana": false,
-        "duracao_total_s": 0.00838129999465309,
-        "tokens_totais": null,
-        "custo_estimado": null,
-        "chamadas_llm": null,
-        "modelo_usado": null,
-        "quantidade_tools_chamadas": {
-          "auditar_decisao_final": 1
+      "comparavel": true,
+      "saltos": {
+        "agente_unico_para_sem_leitura_cruzada": {
+          "duracao_total_s_variacao_pct": 285.3514142959571,
+          "tokens_totais_variacao_pct": null,
+          "custo_estimado_variacao_pct": null,
+          "chamadas_llm_variacao_pct": null,
+          "comparavel": true,
+          "decisao_mudou": false,
+          "quantidade_criticas_delta": 2,
+          "quantidade_criticas_bloqueantes_delta": 1,
+          "requer_revisao_humana_mudou": false
         },
-        "quantidade_retries": 0,
-        "quantidade_falhas": 0,
-        "alertas": [],
-        "notas_por_revisor": {
-          "agente_unico": 3
-        },
-        "quantidade_criticas": 3,
-        "quantidade_criticas_bloqueantes": 0,
-        "erro": null
+        "sem_leitura_cruzada_para_completo": {
+          "duracao_total_s_variacao_pct": -26.93773037488405,
+          "tokens_totais_variacao_pct": null,
+          "custo_estimado_variacao_pct": null,
+          "chamadas_llm_variacao_pct": null,
+          "comparavel": true,
+          "decisao_mudou": false,
+          "quantidade_criticas_delta": 0,
+          "quantidade_criticas_bloqueantes_delta": 0,
+          "requer_revisao_humana_mudou": false,
+          "notas_por_revisor_mudaram": false
+        }
       },
-      "delta": {
-        "duracao_total_s_variacao_pct": -64.2921962233495,
+      "delta_total": {
+        "duracao_total_s_variacao_pct": 181.5464893171098,
         "tokens_totais_variacao_pct": null,
         "custo_estimado_variacao_pct": null,
         "chamadas_llm_variacao_pct": null,
         "comparavel": true,
         "decisao_mudou": false,
-        "quantidade_criticas_delta": -2,
-        "quantidade_criticas_bloqueantes_delta": -1,
+        "quantidade_criticas_delta": 2,
+        "quantidade_criticas_bloqueantes_delta": 1,
         "requer_revisao_humana_mudou": false
+      }
+    },
+    "psicologia_lacan_cinema_pepsic": {
+      "doc_id": "psicologia_lacan_cinema_pepsic",
+      "titulo": "Tudo Que Você Gostaria de Saber Sobre Lacan e Ousou Perguntar a Slavoj Žižek: Psicanálise e Cinema",
+      "mode": "api",
+      "provider": "gemini",
+      "model": "gemini-2.5-flash",
+      "timestamp": "2026-09-24T18:22:18.888873+00:00",
+      "execucoes": {
+        "agente_unico": {
+          "doc_id": "psicologia_lacan_cinema_pepsic",
+          "titulo": "Tudo Que Você Gostaria de Saber Sobre Lacan e Ousou Perguntar a Slavoj Žižek: Psicanálise e Cinema",
+          "area": "psicologia",
+          "caracteristicas": [
+            "camada_de_texto_ilegivel",
+            "encoding_sem_tounicode",
+            "medio"
+          ],
+          "mode": "api",
+          "provider": "gemini",
+          "model": "gemini-2.5-flash",
+          "structured_output": true,
+          "cross_review_enabled": true,
+          "single_agent_enabled": true,
+          "timestamp": "2026-09-24T18:22:18.836661+00:00",
+          "run_id": null,
+          "resultado": "entrada_bloqueada",
+          "decisao_final": null,
+          "requer_revisao_humana": null,
+          "duracao_total_s": null,
+          "tokens_totais": null,
+          "custo_estimado": null,
+          "chamadas_llm": null,
+          "modelo_usado": null,
+          "quantidade_tools_chamadas": null,
+          "quantidade_retries": null,
+          "quantidade_falhas": null,
+          "alertas": [],
+          "notas_por_revisor": null,
+          "quantidade_criticas": null,
+          "quantidade_criticas_bloqueantes": null,
+          "erro": {
+            "tipo": "EntradaInvalidaError",
+            "mensagem": "falha ao extrair 'n28a04.pdf': O pacote 'liteparse' não está instalado. Instale as dependências com `pip install -r requirements.txt` para usar entrada por PDF."
+          }
+        },
+        "sem_leitura_cruzada": {
+          "doc_id": "psicologia_lacan_cinema_pepsic",
+          "titulo": "Tudo Que Você Gostaria de Saber Sobre Lacan e Ousou Perguntar a Slavoj Žižek: Psicanálise e Cinema",
+          "area": "psicologia",
+          "caracteristicas": [
+            "camada_de_texto_ilegivel",
+            "encoding_sem_tounicode",
+            "medio"
+          ],
+          "mode": "api",
+          "provider": "gemini",
+          "model": "gemini-2.5-flash",
+          "structured_output": true,
+          "cross_review_enabled": false,
+          "single_agent_enabled": false,
+          "timestamp": "2026-09-24T18:22:18.879948+00:00",
+          "run_id": null,
+          "resultado": "entrada_bloqueada",
+          "decisao_final": null,
+          "requer_revisao_humana": null,
+          "duracao_total_s": null,
+          "tokens_totais": null,
+          "custo_estimado": null,
+          "chamadas_llm": null,
+          "modelo_usado": null,
+          "quantidade_tools_chamadas": null,
+          "quantidade_retries": null,
+          "quantidade_falhas": null,
+          "alertas": [],
+          "notas_por_revisor": null,
+          "quantidade_criticas": null,
+          "quantidade_criticas_bloqueantes": null,
+          "erro": {
+            "tipo": "EntradaInvalidaError",
+            "mensagem": "falha ao extrair 'n28a04.pdf': O pacote 'liteparse' não está instalado. Instale as dependências com `pip install -r requirements.txt` para usar entrada por PDF."
+          }
+        },
+        "completo": {
+          "doc_id": "psicologia_lacan_cinema_pepsic",
+          "titulo": "Tudo Que Você Gostaria de Saber Sobre Lacan e Ousou Perguntar a Slavoj Žižek: Psicanálise e Cinema",
+          "area": "psicologia",
+          "caracteristicas": [
+            "camada_de_texto_ilegivel",
+            "encoding_sem_tounicode",
+            "medio"
+          ],
+          "mode": "api",
+          "provider": "gemini",
+          "model": "gemini-2.5-flash",
+          "structured_output": true,
+          "cross_review_enabled": true,
+          "single_agent_enabled": false,
+          "timestamp": "2026-09-24T18:22:18.884980+00:00",
+          "run_id": null,
+          "resultado": "entrada_bloqueada",
+          "decisao_final": null,
+          "requer_revisao_humana": null,
+          "duracao_total_s": null,
+          "tokens_totais": null,
+          "custo_estimado": null,
+          "chamadas_llm": null,
+          "modelo_usado": null,
+          "quantidade_tools_chamadas": null,
+          "quantidade_retries": null,
+          "quantidade_falhas": null,
+          "alertas": [],
+          "notas_por_revisor": null,
+          "quantidade_criticas": null,
+          "quantidade_criticas_bloqueantes": null,
+          "erro": {
+            "tipo": "EntradaInvalidaError",
+            "mensagem": "falha ao extrair 'n28a04.pdf': O pacote 'liteparse' não está instalado. Instale as dependências com `pip install -r requirements.txt` para usar entrada por PDF."
+          }
+        }
+      },
+      "comparavel": false,
+      "saltos": {
+        "agente_unico_para_sem_leitura_cruzada": {
+          "duracao_total_s_variacao_pct": null,
+          "tokens_totais_variacao_pct": null,
+          "custo_estimado_variacao_pct": null,
+          "chamadas_llm_variacao_pct": null,
+          "comparavel": false
+        },
+        "sem_leitura_cruzada_para_completo": {
+          "duracao_total_s_variacao_pct": null,
+          "tokens_totais_variacao_pct": null,
+          "custo_estimado_variacao_pct": null,
+          "chamadas_llm_variacao_pct": null,
+          "comparavel": false
+        }
+      },
+      "delta_total": {
+        "duracao_total_s_variacao_pct": null,
+        "tokens_totais_variacao_pct": null,
+        "custo_estimado_variacao_pct": null,
+        "chamadas_llm_variacao_pct": null,
+        "comparavel": false
       }
     },
     "icd_hallucinations_2312_15710": {
@@ -104,101 +318,517 @@
       "titulo": "Alleviating Hallucinations of Large Language Models through Induced Hallucinations",
       "mode": "api",
       "provider": "gemini",
-      "model": "gemini-3-flash-preview",
-      "timestamp": "2026-09-17T19:34:57.097767+00:00",
-      "multiagente": {
-        "doc_id": "icd_hallucinations_2312_15710",
-        "titulo": "Alleviating Hallucinations of Large Language Models through Induced Hallucinations",
-        "area": "inteligencia_artificial",
-        "caracteristicas": [
-          "duas_colunas",
-          "tabelas",
-          "formulas_matematicas",
-          "citacoes_extensas",
-          "medio"
-        ],
-        "mode": "api",
-        "provider": "gemini",
-        "model": "gemini-3-flash-preview",
-        "structured_output": true,
-        "cross_review_enabled": true,
-        "single_agent_enabled": false,
-        "timestamp": "2026-09-17T19:33:48.544328+00:00",
-        "run_id": "run_55e3bc4f8a4e4144",
-        "resultado": "sucesso",
-        "decisao_final": 4,
-        "requer_revisao_humana": false,
-        "duracao_total_s": 53.4603902999952,
-        "tokens_totais": 153937,
-        "custo_estimado": null,
-        "chamadas_llm": 7,
-        "modelo_usado": "gemini-3-flash-preview",
-        "quantidade_tools_chamadas": {
-          "validar_completude": 3,
-          "auditar_decisao_final": 1,
-          "checar_coerencia": 1
+      "model": "gemini-2.5-flash",
+      "timestamp": "2026-09-24T18:34:47.711458+00:00",
+      "execucoes": {
+        "agente_unico": {
+          "doc_id": "icd_hallucinations_2312_15710",
+          "titulo": "Alleviating Hallucinations of Large Language Models through Induced Hallucinations",
+          "area": "inteligencia_artificial",
+          "caracteristicas": [
+            "duas_colunas",
+            "tabelas",
+            "formulas_matematicas",
+            "citacoes_extensas",
+            "medio"
+          ],
+          "mode": "api",
+          "provider": "gemini",
+          "model": "gemini-2.5-flash",
+          "structured_output": true,
+          "cross_review_enabled": true,
+          "single_agent_enabled": true,
+          "timestamp": "2026-09-24T18:32:26.787577+00:00",
+          "run_id": "run_f4620f7c81874451",
+          "resultado": "sucesso",
+          "decisao_final": 3,
+          "requer_revisao_humana": false,
+          "duracao_total_s": 30.318647999956738,
+          "tokens_totais": 23192,
+          "custo_estimado": 0.007924500000000001,
+          "chamadas_llm": 1,
+          "modelo_usado": "gemini-2.5-flash",
+          "quantidade_tools_chamadas": {
+            "auditar_decisao_final": 1
+          },
+          "quantidade_retries": 0,
+          "quantidade_falhas": 0,
+          "alertas": [],
+          "notas_por_revisor": {
+            "agente_unico": 3
+          },
+          "quantidade_criticas": 5,
+          "quantidade_criticas_bloqueantes": 0,
+          "erro": null
         },
-        "quantidade_retries": 0,
-        "quantidade_falhas": 0,
-        "alertas": [],
-        "notas_por_revisor": {
-          "statistician": 4,
-          "domain_expert": 4,
-          "copyeditor": 4
+        "sem_leitura_cruzada": {
+          "doc_id": "icd_hallucinations_2312_15710",
+          "titulo": "Alleviating Hallucinations of Large Language Models through Induced Hallucinations",
+          "area": "inteligencia_artificial",
+          "caracteristicas": [
+            "duas_colunas",
+            "tabelas",
+            "formulas_matematicas",
+            "citacoes_extensas",
+            "medio"
+          ],
+          "mode": "api",
+          "provider": "gemini",
+          "model": "gemini-2.5-flash",
+          "structured_output": true,
+          "cross_review_enabled": false,
+          "single_agent_enabled": false,
+          "timestamp": "2026-09-24T18:33:01.538759+00:00",
+          "run_id": "run_fdf2f2b6c0354cd2",
+          "resultado": "sucesso",
+          "decisao_final": 3,
+          "requer_revisao_humana": false,
+          "duracao_total_s": 44.34528589999536,
+          "tokens_totais": 88256,
+          "custo_estimado": 0.031458700000000006,
+          "chamadas_llm": 4,
+          "modelo_usado": "gemini-2.5-flash",
+          "quantidade_tools_chamadas": {
+            "validar_completude": 3,
+            "auditar_decisao_final": 1,
+            "checar_coerencia": 1
+          },
+          "quantidade_retries": 0,
+          "quantidade_falhas": 0,
+          "alertas": [],
+          "notas_por_revisor": {
+            "statistician": 3,
+            "domain_expert": 4,
+            "copyeditor": 4
+          },
+          "quantidade_criticas": 2,
+          "quantidade_criticas_bloqueantes": 0,
+          "erro": null
         },
-        "quantidade_criticas": 3,
-        "quantidade_criticas_bloqueantes": 0,
-        "erro": null
+        "completo": {
+          "doc_id": "icd_hallucinations_2312_15710",
+          "titulo": "Alleviating Hallucinations of Large Language Models through Induced Hallucinations",
+          "area": "inteligencia_artificial",
+          "caracteristicas": [
+            "duas_colunas",
+            "tabelas",
+            "formulas_matematicas",
+            "citacoes_extensas",
+            "medio"
+          ],
+          "mode": "api",
+          "provider": "gemini",
+          "model": "gemini-2.5-flash",
+          "structured_output": true,
+          "cross_review_enabled": true,
+          "single_agent_enabled": false,
+          "timestamp": "2026-09-24T18:33:45.931424+00:00",
+          "run_id": "run_a3cfa7c557f6477e",
+          "resultado": "sucesso",
+          "decisao_final": 3,
+          "requer_revisao_humana": false,
+          "duracao_total_s": 61.72438949998468,
+          "tokens_totais": 169299,
+          "custo_estimado": 0.0621163,
+          "chamadas_llm": 7,
+          "modelo_usado": "gemini-2.5-flash",
+          "quantidade_tools_chamadas": {
+            "validar_completude": 3,
+            "auditar_decisao_final": 1,
+            "checar_coerencia": 1
+          },
+          "quantidade_retries": 0,
+          "quantidade_falhas": 0,
+          "alertas": [],
+          "notas_por_revisor": {
+            "statistician": 3,
+            "domain_expert": 4,
+            "copyeditor": 4
+          },
+          "quantidade_criticas": 3,
+          "quantidade_criticas_bloqueantes": 0,
+          "erro": null
+        }
       },
-      "agente_unico": {
-        "doc_id": "icd_hallucinations_2312_15710",
-        "titulo": "Alleviating Hallucinations of Large Language Models through Induced Hallucinations",
-        "area": "inteligencia_artificial",
-        "caracteristicas": [
-          "duas_colunas",
-          "tabelas",
-          "formulas_matematicas",
-          "citacoes_extensas",
-          "medio"
-        ],
-        "mode": "api",
-        "provider": "gemini",
-        "model": "gemini-3-flash-preview",
-        "structured_output": true,
-        "cross_review_enabled": true,
-        "single_agent_enabled": true,
-        "timestamp": "2026-09-17T19:34:43.378678+00:00",
-        "run_id": "run_02a08d3967eb4e17",
-        "resultado": "sucesso",
-        "decisao_final": 3,
-        "requer_revisao_humana": false,
-        "duracao_total_s": 13.701055999990785,
-        "tokens_totais": 20643,
-        "custo_estimado": null,
-        "chamadas_llm": 1,
-        "modelo_usado": "gemini-3-flash-preview",
-        "quantidade_tools_chamadas": {
-          "auditar_decisao_final": 1
+      "comparavel": true,
+      "saltos": {
+        "agente_unico_para_sem_leitura_cruzada": {
+          "duracao_total_s_variacao_pct": 46.26406131321765,
+          "tokens_totais_variacao_pct": 280.545015522594,
+          "custo_estimado_variacao_pct": 296.9802511199445,
+          "chamadas_llm_variacao_pct": 300.0,
+          "comparavel": true,
+          "decisao_mudou": false,
+          "quantidade_criticas_delta": -3,
+          "quantidade_criticas_bloqueantes_delta": 0,
+          "requer_revisao_humana_mudou": false
         },
-        "quantidade_retries": 0,
-        "quantidade_falhas": 0,
-        "alertas": [],
-        "notas_por_revisor": {
-          "agente_unico": 3
-        },
-        "quantidade_criticas": 4,
-        "quantidade_criticas_bloqueantes": 0,
-        "erro": null
+        "sem_leitura_cruzada_para_completo": {
+          "duracao_total_s_variacao_pct": 39.19041956157766,
+          "tokens_totais_variacao_pct": 91.82718455402465,
+          "custo_estimado_variacao_pct": 97.45348663485773,
+          "chamadas_llm_variacao_pct": 75.0,
+          "comparavel": true,
+          "decisao_mudou": false,
+          "quantidade_criticas_delta": 1,
+          "quantidade_criticas_bloqueantes_delta": 0,
+          "requer_revisao_humana_mudou": false,
+          "notas_por_revisor_mudaram": false
+        }
       },
-      "delta": {
-        "duracao_total_s_variacao_pct": -74.37157506126172,
-        "tokens_totais_variacao_pct": -86.5899686235278,
-        "custo_estimado_variacao_pct": null,
-        "chamadas_llm_variacao_pct": -85.71428571428571,
+      "delta_total": {
+        "duracao_total_s_variacao_pct": 103.58556060967084,
+        "tokens_totais_variacao_pct": 629.9887892376682,
+        "custo_estimado_variacao_pct": 683.8513470881442,
+        "chamadas_llm_variacao_pct": 600.0,
+        "comparavel": true,
+        "decisao_mudou": false,
+        "quantidade_criticas_delta": -2,
+        "quantidade_criticas_bloqueantes_delta": 0,
+        "requer_revisao_humana_mudou": false
+      }
+    },
+    "psicologia_historia_livro_scielo": {
+      "doc_id": "psicologia_historia_livro_scielo",
+      "titulo": "História da Psicologia: pesquisa, formação, ensino (livro completo)",
+      "mode": "api",
+      "provider": "gemini",
+      "model": "gemini-2.5-flash",
+      "timestamp": "2026-09-24T19:09:34.968393+00:00",
+      "execucoes": {
+        "agente_unico": {
+          "doc_id": "psicologia_historia_livro_scielo",
+          "titulo": "História da Psicologia: pesquisa, formação, ensino (livro completo)",
+          "area": "psicologia",
+          "caracteristicas": [
+            "muito_longo",
+            "livro_completo",
+            "nao_e_artigo_de_periodico"
+          ],
+          "mode": "api",
+          "provider": "gemini",
+          "model": "gemini-2.5-flash",
+          "structured_output": true,
+          "cross_review_enabled": true,
+          "single_agent_enabled": true,
+          "timestamp": "2026-09-24T19:06:25.335813+00:00",
+          "run_id": "run_cca4d68bce6f4a1b",
+          "resultado": "sucesso",
+          "decisao_final": 2,
+          "requer_revisao_humana": false,
+          "duracao_total_s": 33.94647269998677,
+          "tokens_totais": 93232,
+          "custo_estimado": 0.0295018,
+          "chamadas_llm": 1,
+          "modelo_usado": "gemini-2.5-flash",
+          "quantidade_tools_chamadas": {
+            "auditar_decisao_final": 1
+          },
+          "quantidade_retries": 0,
+          "quantidade_falhas": 0,
+          "alertas": [],
+          "notas_por_revisor": {
+            "agente_unico": 2
+          },
+          "quantidade_criticas": 7,
+          "quantidade_criticas_bloqueantes": 4,
+          "erro": null
+        },
+        "sem_leitura_cruzada": {
+          "doc_id": "psicologia_historia_livro_scielo",
+          "titulo": "História da Psicologia: pesquisa, formação, ensino (livro completo)",
+          "area": "psicologia",
+          "caracteristicas": [
+            "muito_longo",
+            "livro_completo",
+            "nao_e_artigo_de_periodico"
+          ],
+          "mode": "api",
+          "provider": "gemini",
+          "model": "gemini-2.5-flash",
+          "structured_output": true,
+          "cross_review_enabled": false,
+          "single_agent_enabled": false,
+          "timestamp": "2026-09-24T19:07:02.749660+00:00",
+          "run_id": "run_85c44a8a9c7e4570",
+          "resultado": "sucesso",
+          "decisao_final": 3,
+          "requer_revisao_humana": false,
+          "duracao_total_s": 40.92531419999432,
+          "tokens_totais": 365241,
+          "custo_estimado": 0.1144858,
+          "chamadas_llm": 4,
+          "modelo_usado": "gemini-2.5-flash",
+          "quantidade_tools_chamadas": {
+            "validar_completude": 3,
+            "auditar_decisao_final": 1,
+            "checar_coerencia": 1
+          },
+          "quantidade_retries": 0,
+          "quantidade_falhas": 0,
+          "alertas": [],
+          "notas_por_revisor": {
+            "statistician": 3,
+            "domain_expert": 4,
+            "copyeditor": 3
+          },
+          "quantidade_criticas": 3,
+          "quantidade_criticas_bloqueantes": 0,
+          "erro": null
+        },
+        "completo": {
+          "doc_id": "psicologia_historia_livro_scielo",
+          "titulo": "História da Psicologia: pesquisa, formação, ensino (livro completo)",
+          "area": "psicologia",
+          "caracteristicas": [
+            "muito_longo",
+            "livro_completo",
+            "nao_e_artigo_de_periodico"
+          ],
+          "mode": "api",
+          "provider": "gemini",
+          "model": "gemini-2.5-flash",
+          "structured_output": true,
+          "cross_review_enabled": true,
+          "single_agent_enabled": false,
+          "timestamp": "2026-09-24T19:07:43.724638+00:00",
+          "run_id": "run_6b7de890fb684eb4",
+          "resultado": "sucesso",
+          "decisao_final": 3,
+          "requer_revisao_humana": false,
+          "duracao_total_s": 111.22844539996004,
+          "tokens_totais": 657765,
+          "custo_estimado": 0.204705,
+          "chamadas_llm": 7,
+          "modelo_usado": "gemini-2.5-flash",
+          "quantidade_tools_chamadas": {
+            "validar_completude": 3,
+            "auditar_decisao_final": 1,
+            "checar_coerencia": 1
+          },
+          "quantidade_retries": 0,
+          "quantidade_falhas": 0,
+          "alertas": [],
+          "notas_por_revisor": {
+            "statistician": 3,
+            "domain_expert": 3,
+            "copyeditor": 3
+          },
+          "quantidade_criticas": 6,
+          "quantidade_criticas_bloqueantes": 0,
+          "erro": null
+        }
+      },
+      "comparavel": true,
+      "saltos": {
+        "agente_unico_para_sem_leitura_cruzada": {
+          "duracao_total_s_variacao_pct": 20.55837011899698,
+          "tokens_totais_variacao_pct": 291.754976831989,
+          "custo_estimado_variacao_pct": 288.06377915923775,
+          "chamadas_llm_variacao_pct": 300.0,
+          "comparavel": true,
+          "decisao_mudou": true,
+          "quantidade_criticas_delta": -4,
+          "quantidade_criticas_bloqueantes_delta": -4,
+          "requer_revisao_humana_mudou": false
+        },
+        "sem_leitura_cruzada_para_completo": {
+          "duracao_total_s_variacao_pct": 171.78397423269013,
+          "tokens_totais_variacao_pct": 80.09067985248096,
+          "custo_estimado_variacao_pct": 78.8038341872966,
+          "chamadas_llm_variacao_pct": 75.0,
+          "comparavel": true,
+          "decisao_mudou": false,
+          "quantidade_criticas_delta": 3,
+          "quantidade_criticas_bloqueantes_delta": 0,
+          "requer_revisao_humana_mudou": false,
+          "notas_por_revisor_mudaram": true
+        }
+      },
+      "delta_total": {
+        "duracao_total_s_variacao_pct": 227.65832957956596,
+        "tokens_totais_variacao_pct": 605.5142011326583,
+        "custo_estimado_variacao_pct": 593.8729162288403,
+        "chamadas_llm_variacao_pct": 600.0,
         "comparavel": true,
         "decisao_mudou": true,
+        "quantidade_criticas_delta": -1,
+        "quantidade_criticas_bloqueantes_delta": -4,
+        "requer_revisao_humana_mudou": false
+      }
+    },
+    "quimica_phase_space_arxiv_2608_11448": {
+      "doc_id": "quimica_phase_space_arxiv_2608_11448",
+      "titulo": "A Perspective on Phase Space Electronic Structure Theory: from its surface hopping origins through to its future promise",
+      "mode": "api",
+      "provider": "gemini",
+      "model": "gemini-2.5-flash",
+      "timestamp": "2026-09-24T19:25:07.080081+00:00",
+      "execucoes": {
+        "agente_unico": {
+          "doc_id": "quimica_phase_space_arxiv_2608_11448",
+          "titulo": "A Perspective on Phase Space Electronic Structure Theory: from its surface hopping origins through to its future promise",
+          "area": "quimica",
+          "caracteristicas": [
+            "longo",
+            "formulas_matematicas",
+            "citacoes_extensas",
+            "muitos_autores",
+            "artigo_de_revisao"
+          ],
+          "mode": "api",
+          "provider": "gemini",
+          "model": "gemini-2.5-flash",
+          "structured_output": true,
+          "cross_review_enabled": true,
+          "single_agent_enabled": true,
+          "timestamp": "2026-09-24T19:21:36.463809+00:00",
+          "run_id": "run_cc151176181346ad",
+          "resultado": "sucesso",
+          "decisao_final": 3,
+          "requer_revisao_humana": false,
+          "duracao_total_s": 55.97402969998075,
+          "tokens_totais": 40237,
+          "custo_estimado": 0.0131513,
+          "chamadas_llm": 1,
+          "modelo_usado": "gemini-2.5-flash",
+          "quantidade_tools_chamadas": {
+            "auditar_decisao_final": 1
+          },
+          "quantidade_retries": 0,
+          "quantidade_falhas": 0,
+          "alertas": [],
+          "notas_por_revisor": {
+            "agente_unico": 3
+          },
+          "quantidade_criticas": 14,
+          "quantidade_criticas_bloqueantes": 0,
+          "erro": null
+        },
+        "sem_leitura_cruzada": {
+          "doc_id": "quimica_phase_space_arxiv_2608_11448",
+          "titulo": "A Perspective on Phase Space Electronic Structure Theory: from its surface hopping origins through to its future promise",
+          "area": "quimica",
+          "caracteristicas": [
+            "longo",
+            "formulas_matematicas",
+            "citacoes_extensas",
+            "muitos_autores",
+            "artigo_de_revisao"
+          ],
+          "mode": "api",
+          "provider": "gemini",
+          "model": "gemini-2.5-flash",
+          "structured_output": true,
+          "cross_review_enabled": false,
+          "single_agent_enabled": false,
+          "timestamp": "2026-09-24T19:22:41.092019+00:00",
+          "run_id": "run_91c57e771cd34ccd",
+          "resultado": "sucesso",
+          "decisao_final": 4,
+          "requer_revisao_humana": false,
+          "duracao_total_s": 47.44871589995455,
+          "tokens_totais": 134569,
+          "custo_estimado": 0.0452259,
+          "chamadas_llm": 4,
+          "modelo_usado": "gemini-2.5-flash",
+          "quantidade_tools_chamadas": {
+            "validar_completude": 3,
+            "auditar_decisao_final": 1,
+            "checar_coerencia": 1
+          },
+          "quantidade_retries": 0,
+          "quantidade_falhas": 0,
+          "alertas": [],
+          "notas_por_revisor": {
+            "statistician": 4,
+            "domain_expert": 4,
+            "copyeditor": 4
+          },
+          "quantidade_criticas": 5,
+          "quantidade_criticas_bloqueantes": 0,
+          "erro": null
+        },
+        "completo": {
+          "doc_id": "quimica_phase_space_arxiv_2608_11448",
+          "titulo": "A Perspective on Phase Space Electronic Structure Theory: from its surface hopping origins through to its future promise",
+          "area": "quimica",
+          "caracteristicas": [
+            "longo",
+            "formulas_matematicas",
+            "citacoes_extensas",
+            "muitos_autores",
+            "artigo_de_revisao"
+          ],
+          "mode": "api",
+          "provider": "gemini",
+          "model": "gemini-2.5-flash",
+          "structured_output": true,
+          "cross_review_enabled": true,
+          "single_agent_enabled": false,
+          "timestamp": "2026-09-24T19:23:28.591882+00:00",
+          "run_id": "run_90a2990634f5421e",
+          "resultado": "sucesso",
+          "decisao_final": 3,
+          "requer_revisao_humana": false,
+          "duracao_total_s": 98.43811669998104,
+          "tokens_totais": 250290,
+          "custo_estimado": 0.0860638,
+          "chamadas_llm": 7,
+          "modelo_usado": "gemini-2.5-flash",
+          "quantidade_tools_chamadas": {
+            "validar_completude": 3,
+            "auditar_decisao_final": 1,
+            "checar_coerencia": 1
+          },
+          "quantidade_retries": 0,
+          "quantidade_falhas": 0,
+          "alertas": [],
+          "notas_por_revisor": {
+            "statistician": 3,
+            "domain_expert": 4,
+            "copyeditor": 3
+          },
+          "quantidade_criticas": 15,
+          "quantidade_criticas_bloqueantes": 5,
+          "erro": null
+        }
+      },
+      "comparavel": true,
+      "saltos": {
+        "agente_unico_para_sem_leitura_cruzada": {
+          "duracao_total_s_variacao_pct": -15.230838025637325,
+          "tokens_totais_variacao_pct": 234.4409374456346,
+          "custo_estimado_variacao_pct": 243.88919726566957,
+          "chamadas_llm_variacao_pct": 300.0,
+          "comparavel": true,
+          "decisao_mudou": true,
+          "quantidade_criticas_delta": -9,
+          "quantidade_criticas_bloqueantes_delta": 0,
+          "requer_revisao_humana_mudou": false
+        },
+        "sem_leitura_cruzada_para_completo": {
+          "duracao_total_s_variacao_pct": 107.46213007647553,
+          "tokens_totais_variacao_pct": 85.99380243592506,
+          "custo_estimado_variacao_pct": 90.29759496217874,
+          "chamadas_llm_variacao_pct": 75.0,
+          "comparavel": true,
+          "decisao_mudou": true,
+          "quantidade_criticas_delta": 10,
+          "quantidade_criticas_bloqueantes_delta": 5,
+          "requer_revisao_humana_mudou": false,
+          "notas_por_revisor_mudaram": true
+        }
+      },
+      "delta_total": {
+        "duracao_total_s_variacao_pct": 75.86390907999053,
+        "tokens_totais_variacao_pct": 522.0394164574894,
+        "custo_estimado_variacao_pct": 554.4128717313117,
+        "chamadas_llm_variacao_pct": 600.0,
+        "comparavel": true,
+        "decisao_mudou": false,
         "quantidade_criticas_delta": 1,
-        "quantidade_criticas_bloqueantes_delta": 0,
+        "quantidade_criticas_bloqueantes_delta": 5,
         "requer_revisao_humana_mudou": false
       }
     }
