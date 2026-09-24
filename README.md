@@ -1283,8 +1283,11 @@ python main.py mock --single-agent   # baseline offline, sem chave de API
 python main.py api --single-agent    # baseline real (mesmo provedor/modelo do LLM_PROVIDER)
 ```
 
-`comparar_topologia.py` roda o par (multiagente + agente único) para os
-mesmos documentos, no mesmo padrão de `ablacao_cross_review.py`:
+`comparar_topologia.py` roda três configurações para os mesmos documentos —
+C0 (agente único), C1 (multiagente sem leitura cruzada, a mesma variante de
+`ablacao_cross_review.py`) e C2 (multiagente completo) — e calcula dois
+saltos: Salto 1 (C0 → C1) e Salto 2 (C1 → C2), mais o total (C0 → C2). Cada
+documento roda três vezes (o triplo do custo em modo api):
 
 ```bash
 .venv/bin/python -m src.benchmark.comparar_topologia --mode mock --docs exemplo_mock

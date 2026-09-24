@@ -46,24 +46,29 @@ exigiria avaliação humana ou um LLM-juiz, fora do escopo aqui (ver §5).
 
 ### 3.1. Variável independente: topologia
 
-Configurada por `pipeline.run_demo(single_agent=...)` (também exposta em
-`main.py --single-agent` e `src/benchmark/executar.py --single-agent`):
+Configurada por `pipeline.run_demo(single_agent=..., cross_review=...)`
+(também exposta em `main.py --single-agent`/`--no-cross-review` e em
+`src/benchmark/executar.py`). O comparativo (`comparar_topologia.py`) roda as
+três combinações abaixo para cada documento:
 
-| Valor | Topologia | Fases de LLM | Chamadas LLM |
-|---|---|---|---|
-| `single_agent=False` (default) | `multiagente` | Revisão independente + leitura cruzada + editor-chefe (`build_peer_review_pipeline`) | 7 (3 revisores + 3 leituras cruzadas + 1 editor) |
-| `single_agent=True` | `agente_unico` | Fase única (`build_single_agent_pipeline`, `src/single_agent_baseline.py`) | 1 |
+| Config | Flags | Topologia | Fases de LLM | Chamadas LLM |
+|---|---|---|---|---|
+| C0 | `single_agent=True` | `agente_unico` | Fase única (`build_single_agent_pipeline`, `src/single_agent_baseline.py`) | 1 |
+| C1 | `single_agent=False`, `cross_review=False` | `multiagente` sem leitura cruzada | Revisão independente + editor-chefe (mesma variante de `ablacao_cross_review.py`) | 4 (3 revisores + 1 editor) |
+| C2 | `single_agent=False`, `cross_review=True` (default) | `multiagente` completo | Revisão independente + leitura cruzada + editor-chefe (`build_peer_review_pipeline`) | 7 (3 revisores + 3 leituras cruzadas + 1 editor) |
 
-As duas topologias produzem a mesma saída oficial (`EditorVerdictSchema`),
-para que relatório final e métricas comparem o mesmo contrato — ver §4.
+As três topologias produzem a mesma saída oficial (`EditorVerdictSchema`),
+para que relatório final e métricas comparem o mesmo contrato — ver §4. O
+comparativo calcula dois saltos entre elas — **Salto 1** (C0 → C1) e
+**Salto 2** (C1 → C2) — mais o total (C0 → C2).
 
-### 3.2. Variáveis controladas (mantidas fixas entre as duas execuções do par)
+### 3.2. Variáveis controladas (mantidas fixas entre as três execuções de cada documento)
 
-- **Documento:** o mesmo artigo/PDF nas duas execuções.
+- **Documento:** o mesmo artigo/PDF nas três execuções.
 - **Modo:** `api` (execução real) ou `mock` (smoke test, sem chamada LLM —
   ver §5.2).
 - **Provedor/modelo:** o mesmo `LLM_PROVIDER`/`LLM_MODEL` (`model_provider.py`)
-  nas duas execuções. A baseline de agente único aceita sobrescrita própria
+  nas três execuções. A baseline de agente único aceita sobrescrita própria
   (`LLM_PROVIDER_SINGLE_AGENT`/`LLM_MODEL_SINGLE_AGENT`) — para este
   experimento ela **não** é usada, exatamente para isolar o efeito da
   topologia do efeito de trocar de modelo.
@@ -79,14 +84,16 @@ Vêm de `metrics/resumo.py` (`ResumoExecucao`) e do veredito
 | `duracao_total_s` | resumo | Custo em tempo. |
 | `tokens_totais` | resumo | Custo em tokens. |
 | `custo_estimado` | resumo (requer preço configurado — ver `docs/metricas_reference.md`) | Custo em USD. |
-| `decisao_final` (escala 1-4) | veredito | Sinal principal de H2 — é a única grandeza diretamente comparável entre as duas topologias (mesma escala nas duas). |
+| `decisao_final` (escala 1-4) | veredito | Sinal principal de H2 — é a única grandeza diretamente comparável entre as três topologias (mesma escala nas três). |
 | `quantidade_criticas` / `quantidade_criticas_bloqueantes` | veredito | Sinal secundário de H2 — quantas críticas cada topologia levanta. |
-| `requer_revisao_humana` | auditoria do veredito | Se a auditoria (`tools/auditar_decisao_final.py`) muda de recomendação entre as duas topologias. |
+| `requer_revisao_humana` | auditoria do veredito | Se a auditoria (`tools/auditar_decisao_final.py`) muda de recomendação entre topologias. |
+| `notas_por_revisor` | veredito | Só no Salto 2 (C1 → C2) — se as notas dos três revisores mudam com a leitura cruzada. |
 
-`notas_por_revisor` **não** entra na comparação: na topologia `multiagente`
-é um mapa com 3 chaves (uma por revisor especializado); na `agente_unico` é
-um mapa com 1 chave sintética (`agente_unico`). Comparar os dois diretamente
-não teria significado — ver `AGENTE_UNICO_ID` em `src/single_agent_baseline.py`.
+`notas_por_revisor` só é comparável entre C1 e C2, que têm os mesmos 3
+revisores especializados. Na `agente_unico` (C0) ela é um mapa com 1 chave
+sintética (`agente_unico`), então fica de fora do Salto 1 e do total —
+comparar esses formatos não teria significado (ver `AGENTE_UNICO_ID` em
+`src/single_agent_baseline.py`).
 
 ## 4. Mecanismo de configuração
 
@@ -99,12 +106,13 @@ mecanismo fácil de usar em testes pontuais:
 - `src/benchmark/executar.py --single-agent` — lote do corpus (registra sob a
   chave `<doc_id>__agente_unico` em `resultados/execucoes.json`, para não
   sobrescrever o registro multiagente do mesmo documento).
-- `src/benchmark/comparar_topologia.py` — roda o par (multiagente +
-  agente_unico) para os mesmos documentos e gera o comparativo (ver §6).
+- `src/benchmark/comparar_topologia.py` — roda as três configurações (C0,
+  C1 e C2, ver §3.1) para os mesmos documentos e gera o comparativo (ver §6).
 
 A flag `single_agent` é independente de `cross_review`: este último só se
 aplica DENTRO da topologia multiagente (liga/desliga a Fase 2); a topologia
-`agente_unico` nunca tem Fase 2, com ou sem essa flag.
+`agente_unico` nunca tem Fase 2, com ou sem essa flag. É a combinação das
+duas flags que gera as três configurações do comparativo.
 
 ## 5. Limitações
 
@@ -121,7 +129,7 @@ são mais pertinentes ou mais bem fundamentadas que as do agente único.
 Em modo `mock`, nenhuma chamada LLM acontece — os pareceres/veredito vêm de
 `src/mocks/peer_review_mock.json` (chaves `phase1_reviews`/`phase2_cross_reviews`/
 `phase3_verdict` para a topologia multiagente, `single_agent_verdict` para a
-baseline). Serve só para provar que as duas topologias rodam de ponta a ponta
+baseline). Serve só para provar que as três topologias rodam de ponta a ponta
 sem gastar API; não entra em nenhuma média do comparativo (ver
 `comparar_topologia.separar_por_modo`).
 
@@ -140,15 +148,15 @@ generalização da conclusão depende de quantos documentos entraram nela.
    ```bash
    python -m src.benchmark.comparar_topologia --mode mock --docs exemplo_mock
    ```
-   Confirma que as duas topologias rodam de ponta a ponta e que o script de
+   Confirma que as três topologias rodam de ponta a ponta e que o script de
    comparação produz `resultados/comparativo_topologia.{json,md}`.
 
 2. **Execução real, documento a documento ou em lote:**
    ```bash
    python -m src.benchmark.comparar_topologia --mode api --docs doc_1,doc_2,...
    ```
-   Cada documento roda DUAS vezes (multiagente + agente único) — o dobro do
-   custo de `executar.py` para a mesma lista. Sequencial (nunca em paralelo),
+   Cada documento roda TRÊS vezes (C0, C1 e C2) — o triplo do custo de
+   `executar.py` para a mesma lista. Sequencial (nunca em paralelo),
    mesmo motivo de `executar.py`/`ablacao_cross_review.py`: não estourar rate
    limit e manter o custo previsível.
 
@@ -157,26 +165,34 @@ generalização da conclusão depende de quantos documentos entraram nela.
    ```bash
    python -m src.benchmark.comparar_topologia --regerar
    ```
+   Pares gravados no formato antigo (pareado, C0 vs. C2, de antes do
+   comparativo virar três vias) não entram no comparativo: são movidos para
+   `resultados/comparativo_topologia_legado.json`, sem perder o dado, e
+   precisam ser rodados de novo com `--docs` para ganhar a execução C1.
 
 4. **Leitura dos resultados:** `resultados/comparativo_topologia.md` traz a
-   conclusão calculada (não redigida à mão) + a tabela pareada por documento;
-   o `.json` irmão traz os registros completos de cada execução (mesmo
-   formato de `executar.processar_documento`) para quem quiser reprocessar os
-   números com outra agregação.
+   conclusão calculada (não redigida à mão), com Salto 1, Salto 2 e total,
+   + uma tabela com as três topologias lado a lado por documento; o `.json`
+   irmão traz os registros completos de cada execução (mesmo formato de
+   `executar.processar_documento`) e os deltas de cada salto, para quem
+   quiser reprocessar os números com outra agregação.
 
 5. **Conclusão qualitativa (fora do escopo automatizado):** ler o texto das
-   críticas em cada `final_report.md` das execuções pareadas e registrar, à
-   parte, se a topologia multiagente levanta pontos que o agente único não
-   levanta — a ferramenta não faz esse julgamento (ver §5.1).
+   críticas em cada `final_report.md` das três execuções de cada documento e
+   registrar, à parte, o que cada salto de especialização levanta que a
+   configuração anterior não levanta — a ferramenta não faz esse julgamento
+   (ver §5.1).
 
 ## 7. Referências
 
 - `src/single_agent_baseline.py` — agente único (baseline).
 - `src/pipeline.py` — `SingleAgentVerdictPhase`, `SingleAgentReportPhase`,
   `build_single_agent_pipeline`, `run_demo(single_agent=...)`.
-- `src/benchmark/comparar_topologia.py` — comparativo pareado.
-- `src/benchmark/ablacao_cross_review.py` — comparativo pareado equivalente
-  para o eixo "leitura cruzada" (modelo seguido por este protocolo).
+- `src/benchmark/comparar_topologia.py` — comparativo das três topologias
+  (C0, C1, C2).
+- `src/benchmark/ablacao_cross_review.py` — comparativo pareado dedicado só
+  ao eixo "leitura cruzada" (C1 vs. C2); a variante C1 usada aqui é a mesma
+  de lá.
 - `docs/benchmark_reference.md` — corpus e infraestrutura de benchmark
   reaproveitados aqui.
 - `docs/metricas_reference.md` — `ResumoExecucao` e custo estimado.

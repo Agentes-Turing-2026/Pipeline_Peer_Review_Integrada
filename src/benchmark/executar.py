@@ -330,9 +330,10 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--single-agent", dest="single_agent", action="store_true",
         help="Troca a topologia inteira pela baseline experimental de agente "
         "único, sem revisores especializados nem leitura cruzada (ver "
-        "comparar_topologia.py para comparar as duas topologias de forma "
-        "pareada em vez de sobrescrever o registro multiagente já existente "
-        "do mesmo doc_id em execucoes.json). Ignora --cross-review.",
+        "comparar_topologia.py para comparar agente único, sem leitura "
+        "cruzada e completo lado a lado em vez de sobrescrever o registro "
+        "multiagente já existente do mesmo doc_id em execucoes.json). "
+        "Ignora --cross-review.",
     )
     return parser.parse_args(argv)
 
