@@ -109,7 +109,7 @@ def _config_llm(mode: str) -> dict:
     }
 
 
-def _registro_base(doc: DocumentoCorpus, *, mode: str, cross_review: bool) -> dict:
+def _registro_base(doc: DocumentoCorpus, *, mode: str, cross_review: bool, single_agent: bool = False) -> dict:
     return {
         "doc_id": doc.id,
         "titulo": doc.titulo,
@@ -118,6 +118,7 @@ def _registro_base(doc: DocumentoCorpus, *, mode: str, cross_review: bool) -> di
         "mode": mode,
         **_config_llm(mode),
         "cross_review_enabled": cross_review,
+        "single_agent_enabled": single_agent,
         "timestamp": datetime.now(UTC).isoformat(),
     }
 
@@ -174,6 +175,7 @@ def _campos_de_qualidade(verdict: dict | None) -> dict:
 
 def processar_documento(
     doc: DocumentoCorpus, *, mode: str, cache_dir: Path, cross_review: bool = True,
+    single_agent: bool = False,
 ) -> tuple[dict, dict | None]:
     """Roda run_demo para um documento e monta (registro, resumo_para_persistir).
 
@@ -183,17 +185,26 @@ def processar_documento(
     variante; aqui ela só precisa ficar registrada no ``registro`` para não
     misturar resultados de configurações diferentes sob o mesmo ``doc_id``).
 
+    ``single_agent`` (default ``False``) também passa direto para
+    ``pipeline.run_demo`` — ``True`` troca a TOPOLOGIA inteira pela baseline
+    experimental de agente único (ver ``comparar_topologia.py`` para o
+    comparativo dedicado; ``cross_review`` não se aplica quando
+    ``single_agent=True``, pois não há Fase 2 nesta topologia).
+
     ``resumo_para_persistir`` é o dict de ResumoExecucao (completo ou parcial)
     quando existir, ou ``None`` quando não há resumo (entrada bloqueada, ou
     falha sem resumo parcial localizável).
     """
-    base = _registro_base(doc, mode=mode, cross_review=cross_review)
+    base = _registro_base(doc, mode=mode, cross_review=cross_review, single_agent=single_agent)
     caminho_pdf = resolver_pdf_local(doc, cache_dir)
 
     buffer = io.StringIO()
     try:
         with contextlib.redirect_stdout(buffer):
-            report = run_demo(mode=mode, pdf_path=caminho_pdf, cross_review=cross_review)
+            report = run_demo(
+                mode=mode, pdf_path=caminho_pdf, cross_review=cross_review,
+                single_agent=single_agent,
+            )
     except EntradaInvalidaError as exc:
         print(buffer.getvalue(), end="")
         registro = {
@@ -315,6 +326,14 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "comparar as duas de forma pareada em vez de sobrescrever o registro "
         "'on' já existente do mesmo doc_id em execucoes.json).",
     )
+    parser.add_argument(
+        "--single-agent", dest="single_agent", action="store_true",
+        help="Troca a topologia inteira pela baseline experimental de agente "
+        "único, sem revisores especializados nem leitura cruzada (ver "
+        "comparar_topologia.py para comparar as duas topologias de forma "
+        "pareada em vez de sobrescrever o registro multiagente já existente "
+        "do mesmo doc_id em execucoes.json). Ignora --cross-review.",
+    )
     return parser.parse_args(argv)
 
 
@@ -336,22 +355,29 @@ def main(argv: list[str] | None = None) -> None:
         )
 
     cross_review = args.cross_review == "on"
+    single_agent = args.single_agent
     execucoes = _carregar_execucoes_existentes(EXECUCOES_PATH)
 
     for doc_id in ids_solicitados:
         doc = mapa[doc_id]
         registro, resumo = processar_documento(
             doc, mode=args.mode, cache_dir=cache_dir, cross_review=cross_review,
+            single_agent=single_agent,
         )
         imprimir_diagnostico(registro)
         _persistir_resumo(resumo, registro, EXECUCOES_DIR)
         # execucoes.json guarda o resultado MAIS RECENTE por doc_id (upsert) —
-        # rodar a variante 'off' sob a mesma chave apagaria silenciosamente o
-        # registro 'on' do mesmo documento (e vice-versa). A chave só ganha o
-        # sufixo quando a variante não é a default, para não mudar o formato
-        # dos registros 'on' já commitados (comparar.py e o histórico atual
-        # continuam lendo doc_id puro para eles).
-        chave = doc_id if cross_review else f"{doc_id}__sem_cross_review"
+        # rodar uma variante diferente sob a mesma chave apagaria
+        # silenciosamente o registro default do mesmo documento. A chave só
+        # ganha sufixo quando a variante não é a default, para não mudar o
+        # formato dos registros default já commitados (comparar.py e o
+        # histórico atual continuam lendo doc_id puro para eles).
+        if single_agent:
+            chave = f"{doc_id}__agente_unico"
+        elif not cross_review:
+            chave = f"{doc_id}__sem_cross_review"
+        else:
+            chave = doc_id
         execucoes[chave] = registro
 
     _salvar_execucoes(EXECUCOES_PATH, execucoes)

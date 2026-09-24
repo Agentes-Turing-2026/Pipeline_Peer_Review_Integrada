@@ -25,7 +25,7 @@ interpreta cada um de um jeito específico:
 | `"validacao"` | Uma verificação de schema (`validar_com_tentativas`) foi realizada — independente de ter passado de primeira ou não. | Incrementa `quantidade_validacoes`. |
 | `"retry"` | Uma tentativa de retry ocorreu após falha recuperável. | Incrementa `quantidade_retries`. |
 | `"falha"` | Duas situações distintas, separadas pelo `status` do evento: (a) `status="falha"` — todas as tentativas se esgotaram e a saída foi bloqueada (falha definitiva); (b) `status="aviso"` — uma FASE foi interrompida por exceção, registrado por `_fase_medida()` em `pipeline.py`. O caso (b) pode ser recuperado por uma retomada e ainda assim permanece no histórico. Ver a nota abaixo da tabela. | Incrementa `quantidade_falhas` nos dois casos; só marca `status_final = "falha"` quando `evento.status == "falha"`. Com `status="aviso"`, vira uma linha em `alertas` e leva `status_final` a `"sucesso_com_alertas"`. |
-| `"decisao_final"` | A decisão editorial foi consolidada (Fase 4). | Lê `detalhes["decisao"]` e preenche `resumo.decisao_final`. |
+| `"decisao_final"` | A decisão editorial foi consolidada (Fase 4). | Lê `detalhes["decisao"]` e preenche `resumo.decisao_final`; opcionalmente `detalhes["quantidade_criticas"]`/`detalhes["quantidade_criticas_bloqueantes"]` preenchem os campos homônimos do resumo. |
 | `"chamada_llm"` | Uma chamada LLM real, registrada por `metrics/adk_usage.py` a partir do `usage_metadata` dos `Event` do ADK (Fases 1-3). | Conta em `chamadas_llm` e agrega os tokens de `detalhes` em `tokens_execucao`, `tokens_totais`, `tokens_por_agente[agente]` e `tokens_por_fase[fase]`; `detalhes["modelo"]` alimenta `modelo_usado`. Ver §5. |
 | `"fallback_llm"` | O modelo principal falhou por motivo TEMPORÁRIO e o pipeline trocou para a opção reserva (`llm_fallback.py`, `LLM_FALLBACK_*`). | `detalhes["evento"]` (`"acionado"`\|`"respondeu"`\|`"esgotado"`) incrementa o contador `quantidade_fallbacks_*` correspondente e vira uma linha em `fallbacks_llm`. Ver §6. |
 
@@ -127,8 +127,11 @@ Snapshot agregado de uma lista de `ExecutionEvent`, produzido por
 | `quantidade_fallbacks_respondidos` | `int` | Total de trocas em que a reserva respondeu com sucesso (`"respondeu"`). |
 | `quantidade_fallbacks_esgotados` | `int` | Total de trocas em que principal E reserva falharam (`"esgotado"`) — cada uma também marca `status_final = "falha"` (o evento tem `status="falha"`, mesma regra genérica de qualquer tipo). |
 | `fallbacks_llm` | `list[dict]` | Uma entrada por evento `fallback_llm`, na ordem em que ocorreram: `fase`, `papel`, `evento`, `status`, `timestamp`, `provedor_inicial`, `motivo_falha` (só em `"acionado"`), `opcao_fallback` e `modelo_que_respondeu` (só em `"respondeu"`). Ver §6. |
+| `topologia` | `str` | `"multiagente"` \| `"agente_unico"` \| `"desconhecida"` — **inferida** das fases presentes em `duracao_por_fase_s` (`fase_1_revisao_independente` → multiagente; `fase_unica_agente_unico` → agente_unico), nunca recebida por parâmetro. Existe para comparar execuções de topologias diferentes (Grupo 3 — ver `docs/protocolo_experimento_topologia.md`) sem precisar reabrir `final_report.json`. |
+| `quantidade_criticas` | `int \| None` | Total de `EditorCriticism` no veredito final, lido de `detalhes["quantidade_criticas"]` do evento `tipo="decisao_final"`. `None` em execuções antigas (anteriores a este campo) que não informaram essa contagem. |
+| `quantidade_criticas_bloqueantes` | `int \| None` | Subconjunto de `quantidade_criticas` com `tipo="critica"` (bloqueante). Mesma regra de `None`. |
 
-Método `to_dict()` serializa as 23 chaves acima num dict JSON-pronto (é o que
+Método `to_dict()` serializa as 26 chaves acima num dict JSON-pronto (é o que
 vira `final_report.json["resumo_execucao"]` e `resumo_execucao.json`).
 
 `gerar_resumo([])` **levanta `ValueError`** se `run_id` não for informado

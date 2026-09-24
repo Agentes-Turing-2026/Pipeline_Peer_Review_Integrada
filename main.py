@@ -12,6 +12,7 @@ Uso:
     python main.py mock --pdf artigo.pdf    # extração real do PDF + fases com respostas mock
     python main.py --resume run_abc123      # retoma uma execução interrompida (pula fases já concluídas)
     python main.py --resume run_abc123 --force  # refaz do zero uma execução já concluída (mesmo run_id)
+    python main.py mock --single-agent      # baseline experimental: 1 agente único, sem revisores/leitura cruzada
 
 O modo também pode ser definido pela variável de ambiente ``PIPELINE_MODE``; a
 flag de linha de comando tem precedência sobre ela.
@@ -82,6 +83,18 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "e refaz TUDO sob o mesmo run_id, regravando os artefatos. É o jeito "
         "explícito de refazer uma execução já concluída.",
     )
+    parser.add_argument(
+        "--single-agent",
+        dest="single_agent",
+        action="store_true",
+        default=None,
+        help="Troca a topologia inteira pela baseline EXPERIMENTAL de agente "
+        "único: um só agente lê o artigo e produz o veredito final "
+        "diretamente, sem revisores especializados nem leitura cruzada "
+        "(ver src/single_agent_baseline.py e "
+        "docs/protocolo_experimento_topologia.md). Por padrão roda o "
+        "pipeline multiagente de peer review.",
+    )
     args = parser.parse_args(argv)
     if args.force and not args.resume:
         parser.error("--force só faz sentido junto com --resume <RUN_ID>.")
@@ -97,6 +110,7 @@ def main() -> None:
             pdf_path=args.pdf,
             run_id=args.resume,
             cross_review=args.cross_review,
+            single_agent=args.single_agent,
             forcar=args.force,
         )
     except EntradaInvalidaError as exc:

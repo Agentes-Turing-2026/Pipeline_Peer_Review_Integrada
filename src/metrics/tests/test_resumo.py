@@ -202,7 +202,7 @@ def test_status_final_falha_tem_prioridade_sobre_aviso():
     assert resumo.status_final == "falha"
 
 
-def test_to_dict_tem_exatamente_as_vinte_e_tres_chaves_esperadas():
+def test_to_dict_tem_exatamente_as_vinte_e_seis_chaves_esperadas():
     resumo = gerar_resumo([], run_id="run-dict")
     dado = resumo.to_dict()
     assert set(dado.keys()) == {
@@ -213,9 +213,10 @@ def test_to_dict_tem_exatamente_as_vinte_e_tres_chaves_esperadas():
         "modelo_usado", "chamadas_llm", "tokens_execucao", "tokens_por_agente",
         "tokens_por_fase", "quantidade_fallbacks_acionados",
         "quantidade_fallbacks_respondidos", "quantidade_fallbacks_esgotados",
-        "fallbacks_llm",
+        "fallbacks_llm", "topologia", "quantidade_criticas",
+        "quantidade_criticas_bloqueantes",
     }
-    assert len(dado) == 23
+    assert len(dado) == 26
     # Sem chamadas LLM registradas, tokens ficam indisponíveis — nunca 0.
     assert dado["tokens_totais"] is None
     assert dado["custo_estimado"] is None
@@ -224,3 +225,65 @@ def test_to_dict_tem_exatamente_as_vinte_e_tres_chaves_esperadas():
     assert dado["tokens_execucao"] is None
     assert dado["tokens_por_agente"] == {}
     assert dado["tokens_por_fase"] == {}
+
+
+# ---------------------------------------------------------------------------
+# topologia: inferida das fases presentes, para comparar execuções de
+# topologias diferentes sem reabrir final_report.json
+# ---------------------------------------------------------------------------
+
+def test_topologia_desconhecida_sem_nenhuma_fase_marcadora():
+    resumo = gerar_resumo([], run_id="run-sem-fases")
+    assert resumo.topologia == "desconhecida"
+
+
+def test_topologia_multiagente_quando_fase_1_revisao_independente_presente():
+    eventos = [
+        _evento(tipo="fase", nome="fase_1_revisao_independente", duracao_s=1.0),
+    ]
+    resumo = gerar_resumo(eventos)
+    assert resumo.topologia == "multiagente"
+
+
+def test_topologia_agente_unico_quando_fase_unica_presente():
+    eventos = [
+        _evento(
+            fase="fase_unica_agente_unico", tipo="fase", nome="fase_unica_agente_unico",
+            duracao_s=1.0,
+        ),
+    ]
+    resumo = gerar_resumo(eventos)
+    assert resumo.topologia == "agente_unico"
+
+
+# ---------------------------------------------------------------------------
+# quantidade_criticas / quantidade_criticas_bloqueantes: lidas do evento
+# decisao_final, quando presentes
+# ---------------------------------------------------------------------------
+
+def test_quantidade_criticas_ausente_quando_evento_nao_informa():
+    eventos = [
+        _evento(
+            fase="fase_4_relatorio_final", tipo="decisao_final", nome="veredito_final",
+            detalhes={"decisao": 3},
+        ),
+    ]
+    resumo = gerar_resumo(eventos)
+    assert resumo.decisao_final == 3
+    assert resumo.quantidade_criticas is None
+    assert resumo.quantidade_criticas_bloqueantes is None
+
+
+def test_quantidade_criticas_lida_do_evento_decisao_final():
+    eventos = [
+        _evento(
+            fase="fase_4_relatorio_final", tipo="decisao_final", nome="veredito_final",
+            detalhes={
+                "decisao": 3, "quantidade_criticas": 4, "quantidade_criticas_bloqueantes": 1,
+            },
+        ),
+    ]
+    resumo = gerar_resumo(eventos)
+    assert resumo.quantidade_criticas == 4
+    assert resumo.quantidade_criticas_bloqueantes == 1
+
