@@ -41,6 +41,20 @@ def test_flag_aparece_no_relatorio_estruturado(execucao_agente_unico, execucao_m
     assert "topology" not in execucao_multiagente.data
 
 
+def test_resumo_se_autodescreve_por_topologia(execucao_agente_unico, execucao_multiagente):
+    """resumo_execucao.json diz sozinho de qual topologia veio — sem cruzar com final_report.json."""
+    resumo_unico = execucao_agente_unico.data["resumo_execucao"]
+    resumo_multi = execucao_multiagente.data["resumo_execucao"]
+    assert resumo_unico["topologia"] == "agente_unico"
+    assert resumo_multi["topologia"] == "multiagente"
+    # A mesma comparacao (quantidade de criticas) fica disponível nos dois
+    # resumos, no MESMO campo, independente da topologia que os gerou.
+    assert resumo_unico["quantidade_criticas"] == 3
+    assert resumo_unico["quantidade_criticas_bloqueantes"] == 0
+    assert resumo_multi["quantidade_criticas"] == 5
+    assert resumo_multi["quantidade_criticas_bloqueantes"] == 1
+
+
 def test_agente_unico_nao_roda_fases_multiagente(execucao_agente_unico):
     resumo = execucao_agente_unico.data["resumo_execucao"]
     duracao_por_fase = resumo["duracao_por_fase_s"]

@@ -15,7 +15,11 @@ pipeline.py):
                              recuperável.
   - tipo="falha"          -> todas as tentativas se esgotaram e a saída foi
                              bloqueada (falha definitiva, não recuperável).
-  - tipo="decisao_final"  -> deve trazer detalhes={"decisao": <valor>}.
+  - tipo="decisao_final"  -> deve trazer detalhes={"decisao": <valor>}. Opcionalmente
+                             traz também "quantidade_criticas"/"quantidade_criticas_bloqueantes"
+                             (contagem de EditorCriticism no veredito) — usadas
+                             para comparar topologias sem precisar reabrir o
+                             final_report.json (ver §"topologia" abaixo).
   - tipo="chamada_llm"    -> uma chamada LLM real (registrada por
                              metrics/adk_usage.py a partir do usage_metadata do
                              ADK); detalhes carrega tokens_entrada/resposta/
@@ -49,6 +53,15 @@ informação de auditoria útil, não ruído, e é por isso que os dois campos
 convivem em vez de um substituir o outro. Quando gerar_resumo() não recebe
 o tempo de parede real, duracao_total_s cai para duracao_soma_fases_s como
 aproximação, e um alerta registra essa aproximação em `alertas`.
+
+``topologia`` ("multiagente" | "agente_unico" | "desconhecida") é INFERIDA a
+partir de quais fases aparecem em ``duracao_por_fase_s`` — nunca recebida por
+parâmetro, para o resumo continuar agnóstico de quem o chama (mesmo
+princípio de ``duracao_por_fase_s``, genérico a qualquer conjunto de fases).
+Existe para que um único ``resumo_execucao.json`` já diga de qual topologia
+ele veio, sem precisar cruzar com ``final_report.json`` — antes disso,
+comparar dois resumos lado a lado exigia abrir também o relatório final só
+para saber qual pipeline gerou qual arquivo.
 """
 
 from __future__ import annotations
@@ -119,6 +132,16 @@ class ResumoExecucao:
     """Uma entrada por evento fallback_llm, na ordem em que ocorreram: fase,
     papel, o desfecho (evento), provedor_inicial, motivo_falha,
     opcao_fallback e modelo_que_respondeu (quando aplicável)."""
+    topologia: str = "desconhecida"
+    """"multiagente" | "agente_unico" | "desconhecida" — inferida das fases
+    presentes em duracao_por_fase_s (ver docstring do módulo). Existe para
+    comparar execuções de topologias diferentes sem reabrir final_report.json."""
+    quantidade_criticas: int | None = None
+    """Total de EditorCriticism no veredito final (lido do evento
+    decisao_final); None se o evento não informou essa contagem (execuções
+    antigas, anteriores a este campo)."""
+    quantidade_criticas_bloqueantes: int | None = None
+    """Subconjunto de quantidade_criticas com tipo="critica" (bloqueante)."""
 
     def to_dict(self) -> dict[str, Any]:
         """Serializa o resumo em um dict simples, pronto para JSON."""
@@ -146,6 +169,9 @@ class ResumoExecucao:
             "quantidade_fallbacks_respondidos": self.quantidade_fallbacks_respondidos,
             "quantidade_fallbacks_esgotados": self.quantidade_fallbacks_esgotados,
             "fallbacks_llm": self.fallbacks_llm,
+            "topologia": self.topologia,
+            "quantidade_criticas": self.quantidade_criticas,
+            "quantidade_criticas_bloqueantes": self.quantidade_criticas_bloqueantes,
         }
 
 
@@ -271,6 +297,8 @@ def gerar_resumo(
     quantidade_fallbacks_respondidos = 0
     quantidade_fallbacks_esgotados = 0
     fallbacks_llm: list[dict[str, Any]] = []
+    quantidade_criticas: int | None = None
+    quantidade_criticas_bloqueantes: int | None = None
 
     for evento in eventos:
         if evento.tipo == "fase" and evento.duracao_s is not None:
@@ -308,6 +336,10 @@ def gerar_resumo(
             requer_revisao_humana = True
         if evento.tipo == "decisao_final" and "decisao" in evento.detalhes:
             decisao_final = evento.detalhes["decisao"]
+            if "quantidade_criticas" in evento.detalhes:
+                quantidade_criticas = evento.detalhes["quantidade_criticas"]
+            if "quantidade_criticas_bloqueantes" in evento.detalhes:
+                quantidade_criticas_bloqueantes = evento.detalhes["quantidade_criticas_bloqueantes"]
         if evento.status == "falha":
             houve_falha = True
         if evento.status == "aviso":
@@ -369,6 +401,18 @@ def gerar_resumo(
     else:
         status_final = "sucesso"
 
+    # Inferida das fases presentes, nunca recebida por parâmetro — ver
+    # docstring do módulo ("topologia"). Checa a mais específica primeiro:
+    # nenhum pipeline real tem as duas fases ao mesmo tempo, mas a ordem
+    # protege contra um cenário artificial (ex.: eventos concatenados à mão
+    # em teste) que tenha as duas.
+    if "fase_unica_agente_unico" in duracao_por_fase_s:
+        topologia = "agente_unico"
+    elif "fase_1_revisao_independente" in duracao_por_fase_s:
+        topologia = "multiagente"
+    else:
+        topologia = "desconhecida"
+
     return ResumoExecucao(
         run_id=resolved_run_id,
         duracao_total_s=duracao_total_s,
@@ -393,4 +437,7 @@ def gerar_resumo(
         quantidade_fallbacks_respondidos=quantidade_fallbacks_respondidos,
         quantidade_fallbacks_esgotados=quantidade_fallbacks_esgotados,
         fallbacks_llm=fallbacks_llm,
+        topologia=topologia,
+        quantidade_criticas=quantidade_criticas,
+        quantidade_criticas_bloqueantes=quantidade_criticas_bloqueantes,
     )

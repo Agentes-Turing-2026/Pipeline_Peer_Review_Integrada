@@ -869,6 +869,10 @@ class FinalReportPhase(PipelinePhase[EditorVerdictSchema, FinalReport]):
                         "requer_revisao_humana": bool(
                             auditoria_veredito and auditoria_veredito.get("requer_revisao_humana")
                         ),
+                        "quantidade_criticas": len(verdict.criticas),
+                        "quantidade_criticas_bloqueantes": sum(
+                            1 for c in verdict.criticas if c.tipo == "critica"
+                        ),
                     },
                 )
 
@@ -1020,6 +1024,10 @@ class SingleAgentReportPhase(PipelinePhase[EditorVerdictSchema, FinalReport]):
                         "decisao": verdict.decisao,
                         "requer_revisao_humana": bool(
                             auditoria_veredito and auditoria_veredito.get("requer_revisao_humana")
+                        ),
+                        "quantidade_criticas": len(verdict.criticas),
+                        "quantidade_criticas_bloqueantes": sum(
+                            1 for c in verdict.criticas if c.tipo == "critica"
                         ),
                     },
                 )
