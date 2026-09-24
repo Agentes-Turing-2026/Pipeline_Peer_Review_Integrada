@@ -200,6 +200,17 @@ def test_gerar_conclusao_relata_saltos_separados():
     assert "Decisão final mudou em 0/1" in texto
 
 
+def test_gerar_conclusao_nota_estrutural_do_total_tem_o_mesmo_sinal_da_variacao():
+    """A base é C0: de 1 para 7 chamadas a variação é +600%, e a nota precisa dizer o mesmo."""
+    c0 = _registro(chamadas_llm=1)
+    c1 = _registro(chamadas_llm=4)
+    c2 = _registro(chamadas_llm=7)
+    texto = gerar_conclusao({"doc_x": _trio(c0, c1, c2)})
+
+    bloco_total = texto[texto.index("### Total"):]
+    assert "Chamadas LLM: +600.0% em média. (esperado +600% estrutural" in bloco_total
+
+
 def test_gerar_conclusao_mostra_notas_por_revisor_so_no_salto_2():
     c0 = _registro(notas_por_revisor={"agente_unico": 3}, chamadas_llm=1)
     c1 = _registro(notas_por_revisor={"statistician": 2, "domain_expert": 3, "copyeditor": 3}, chamadas_llm=4)

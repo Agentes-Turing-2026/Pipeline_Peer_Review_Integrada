@@ -63,17 +63,6 @@ SAIDA_MD = RESULTADOS_DIR / "comparativo_topologia.md"
 #: Campos numéricos comparados par a par entre duas execuções quaisquer.
 CAMPOS_DELTA_NUMERICO = ("duracao_total_s", "tokens_totais", "custo_estimado", "chamadas_llm")
 
-#: As três topologias, na ordem C0 → C1 → C2 (menor → maior especialização).
-#: Cada chave é o nome usado em ``pares[doc_id]["execucoes"]``.
-CONFIGURACOES = ("agente_unico", "sem_leitura_cruzada", "completo")
-
-#: Os dois saltos testados pela hipótese do plano da Atividade_7 — cada um é
-#: (chave_origem, chave_destino, rótulo legível, chave em `pares[doc_id]["saltos"]`).
-SALTOS = (
-    ("agente_unico", "sem_leitura_cruzada", "Salto 1", "agente_unico_para_sem_leitura_cruzada"),
-    ("sem_leitura_cruzada", "completo", "Salto 2", "sem_leitura_cruzada_para_completo"),
-)
-
 #: Ressalva obrigatória em toda conclusão gerada. Ver docstring do módulo.
 LIMITE_QUALIDADE = (
     "LIMITE DESTA AVALIAÇÃO: 'qualidade' aqui é medida por indicadores "
@@ -157,8 +146,8 @@ def _todas_sucesso(execucoes: dict) -> bool:
 def rodar_trio(doc, *, mode: str, cache_dir: Path) -> dict:
     """Roda o mesmo documento nas três topologias e monta o registro comparável.
 
-    Ordem C0 → C1 → C2, a mesma de ``CONFIGURACOES``. A execução C1
-    (``cross_review=False``) usa a MESMA chamada já validada em
+    Ordem C0 → C1 → C2. A execução C1 (``cross_review=False``) usa a MESMA
+    chamada já validada em
     ``ablacao_cross_review.py`` — não é lógica nova, só reaproveitada aqui
     como o degrau do meio.
     """
@@ -349,7 +338,7 @@ def gerar_conclusao(pares: dict) -> str:
     linhas += _resumir_bloco(
         {k: v["delta_total"] for k, v in comparaveis.items()},
         titulo="Total — agente único → completo (C0→C2)",
-        nota_chamadas=f" (esperado -{6 / 7 * 100:.0f}% estrutural: 1 chamada em vez de 7.)",
+        nota_chamadas=" (esperado +600% estrutural: 7 chamadas em vez de 1.)",
     )
     linhas.append("")
 
